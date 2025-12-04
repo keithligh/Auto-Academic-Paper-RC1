@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-12-04
+### Added
+- **Latest AI Models (Dec 2025)**: Updated default configurations to support the latest models:
+    - **Poe**: Claude-Sonnet-4.5 (Writer/Strategist), Gemini-2.5-Pro (Librarian).
+    - **OpenAI**: GPT-5.1, o3-pro.
+    - **Anthropic**: Claude Opus 4.5.
+    - **xAI**: Grok 4.1.
+- **Markdown Support**: Added full support for uploading and processing `.md` files.
+- **Upload Folder Access**: Added a "Folder" icon button to the header to instantly open the local uploads directory in the system file explorer.
+- **Database Logging**: Enabled Drizzle ORM query logging for deeper debugging visibility.
+
+### Changed
+- **Logging System**: Removed 80-character truncation limit on API logs to ensure full error transparency.
+- **Cleanup**: Removed obsolete test scripts and debug files (`test_poe_whitelist.ts`, `debug_preview_*.html`, etc.) to maintain a clean codebase.
+
 ## [0.2.0] - 2025-12-02 (Stable Release)
 
 ### Added

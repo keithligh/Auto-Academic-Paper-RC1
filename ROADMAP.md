@@ -1,6 +1,6 @@
 # Project Roadmap
 
-**STATUS: STABLE / ACTIVE**
+**STATUS: STABLE / ACTIVE (v1.1.0)**
 
 The core "5-Phase Pipeline" and "BYOK Architecture" have been successfully implemented and stabilized. The project is a **Local-First, Single-User, BYOK (Bring Your Own Key)** application.
 
@@ -11,6 +11,8 @@ The core "5-Phase Pipeline" and "BYOK Architecture" have been successfully imple
 -   [x] **Streaming Updates:** Granular, real-time progress logs for all phases.
 -   [x] **Robustness:** Timeouts, retries, and error handling for AI calls.
 -   [x] **UI Overhaul:** "Digital Typesetter" aesthetic and intuitive configuration.
+-   [x] **Markdown Support:** Full support for `.md` file uploads.
+-   [x] **Local File Access:** "Open Uploads Folder" button for quick access.
 
 ## 🚀 Future: Local Enhancements
 
@@ -21,7 +23,7 @@ The focus is on improving the local user experience and expanding local capabili
 -   [ ] **Local Embeddings:** Use local embedding models for document analysis instead of API calls.
 
 ### 2. File Management
--   [ ] **Local File System:** Better integration with the user's local file system (drag-and-drop folders).
+-   [ ] **Drag-and-Drop Folders:** Better integration with the user's local file system.
 -   [ ] **Export Options:** Direct export to DOCX or Markdown alongside PDF.
 
 ### 3. User Experience
