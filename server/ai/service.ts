@@ -149,15 +149,15 @@ export class AIService {
     
     CORE RESPONSIBILITIES:
     1. **IDENTIFY SUBJECT & STRUCTURE**: Analyze the document structure, identify the main subject and key sections.
-    2. **ANALYZE THE SOURCE**: Read the input text deeply. Understand its core arguments, themes, and nuances.
+    2. **ANALYZE THE SOURCE**: Read the SOURCE MATERIAL deeply. Understand its core arguments, themes, and nuances.
     3. **IDENTIFY THE ACADEMIC ANGLE**: Find the scholarly potential in the text and frame it through the appropriate disciplinary lens.
     3. **STRUCTURE LOGICALLY**: Organize the content into a standard academic format (Introduction, Background, Analysis, Discussion, Conclusion).
     4. **ELEVATE THE TONE**: Rewrite informal language into precise, objective academic prose.
     5. **ENHANCE**: Propose diagrams, tables, or formalisms that clarify the complex ideas.
 
     PROCESS:
-    1. **Read** the Input Text provided below.
-    2. **Plan** the sections based on the Input Text's content.
+    1. **Read** the SOURCE MATERIAL provided below.
+    2. **Plan** the sections based on the SOURCE MATERIAL's content.
     3. **Draft** the content in LaTeX format (but WITHOUT citations for now).
     4. **Create** enhancements (diagrams/tables) to support the arguments.
 
@@ -178,13 +178,13 @@ export class AIService {
     - GENERATE ENHANCEMENTS: Add scholarly elements (diagrams, formulas, theorems, etc.) as appropriate.
     - ENHANCEMENT LEVEL: ${enhancementLevel} - adjust density accordingly.
     - FOCUS ON IDEAS: Write clear, well-argued content expressing academic ideas.
-    - REMOVE INPUT BIBLIOGRAPHY: If the INPUT TEXT contains a bibliography, REMOVE IT completely.
+    - REMOVE INPUT BIBLIOGRAPHY: If the SOURCE MATERIAL contains a bibliography, REMOVE IT completely.
     - NO NESTED SECTIONS: Do NOT use \\section commands inside the "content" field.
     - **NO SECTION NUMBERING:** Do NOT include numbers in section titles (e.g., use "Introduction", NOT "1. Introduction").
     - **NO TRAILING NEWLINES:** Do NOT output excessive newlines (\\n\\n\\n) at the end of sections. Be concise.
     - **NO HALLUCINATIONS:** Do NOT generate repetitive or looping text. Stick to the input context.
     - **NO COLORS:** Do NOT use \\textcolor, \\color, or any color commands. Academic papers must be black and white.
-    - **SUBJECT MATTER ADHERENCE:** You MUST write about the TOPIC of the INPUT TEXT. Do NOT write a generic paper about "how to write a paper" or "text transformation". If the input is about "Love", write about "Love".
+    - **SUBJECT MATTER ADHERENCE:** You MUST write about the TOPIC of the SOURCE MATERIAL. Do NOT write a generic paper about "how to write a paper" or "text transformation". If the input is about "Love", write about "Love".
     - Output valid JSON matching the schema.
 `;
 
