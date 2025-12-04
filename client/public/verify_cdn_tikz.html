@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify CDN TikZJax</title>
+    <link rel="stylesheet" href="/tikzjax/fonts.css">
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        .test-container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-top: 20px;
+        }
+    </style>
+    <script>
+        // Capture console logs to display them on screen for easier verification
+        const originalLog = console.log;
+        const originalError = console.error;
+
+        window.capturedLogs = [];
+
+        function logToScreen(msg, type = 'log') {
+            const el = document.getElementById('console-output');
+            if (el) {
+                const line = document.createElement('div');
+                line.textContent = `[${type.toUpperCase()}] ${msg}`;
+                line.style.color = type === 'error' ? 'red' : 'black';
+                el.appendChild(line);
+            }
+            window.capturedLogs.push({ type, msg });
+        }
+
+        console.log = (...args) => {
+            originalLog(...args);
+            logToScreen(args.join(' '), 'log');
+        };
+
+        console.error = (...args) => {
+            originalError(...args);
+            logToScreen(args.join(' '), 'error');
+        };
+    </script>
+</head>
+
+<body>
+    <h1>Verify CDN TikZJax</h1>
+    <p>This test verifies that TikZJax loads from the CDN and renders correctly.</p>
+
+    <div class="test-container">
+        <h3>TikZ Diagram:</h3>
+        <script type="text/tikz">
+            \begin{tikzpicture}
+                \draw[red, thick] (0,0) circle (1cm);
+                \draw[blue, thick] (-1,-1) -- (1,1);
+                \draw[blue, thick] (-1,1) -- (1,-1);
+                \node at (0,-1.5) {CDN TikZJax Works!};
+            \end{tikzpicture}
+        </script>
+    </div>
+
+    <div id="console-output"
+        style="background: #f0f0f0; padding: 10px; border: 1px solid #999; margin-top: 20px; height: 300px; overflow: auto; font-family: monospace;">
+    </div>
+
+    <!-- Load TikZJax from CDN -->
+    <script src="https://tikzjax.com/v1/tikzjax.js"></script>
+
+</body>
+
+</html>

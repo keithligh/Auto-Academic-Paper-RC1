@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>TikZJax Integration Debug</title>
+    <link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css">
+    <script src="https://cdn.jsdelivr.net/npm/latex.js/dist/latex.js"></script>
+    <style>
+        /* CSS from LatexPreview.tsx */
+        .latex-preview {
+            font-family: 'Lora', 'Times New Roman', serif !important;
+            line-height: 1.8 !important;
+            color: #000 !important;
+            width: 210mm;
+            max-width: 100%;
+            margin: 0 auto;
+            padding: 25mm 25mm;
+            background-color: white !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root" class="latex-preview"></div>
+
+    <script>
+        // Mocking the sanitize function from LatexPreview.tsx
+        function sanitizeLatexForBrowser(latex) {
+            const blocks = {};
+            let blockCount = 0;
+
+            const replaceWithTikzBlock = (match, code) => {
+                const id = `LATEXPREVIEWTIKZBLOCK${blockCount++}`;
+                blocks[id] = `<script type="text/tikz">${code}<\/script>`;
+                return `\n\n${id}\n\n`;
+            };
+
+            let content = latex;
+            content = content.replace(/\\usepackage(\[[^\]]*\])?\{[^}]*\}/g, '');
+
+            // Updated Regex from LatexPreview.tsx
+            content = content.replace(/\\begin\s*\{\s*tikzpicture\s*\}([\s\S]*?)\\end\s*\{\s*tikzpicture\s*\}/g, (match, body) => {
+                console.log('Found TikZ!');
+                return replaceWithTikzBlock(match, `\\begin{tikzpicture}${body}\\end{tikzpicture}`);
+            });
+
+            return { sanitized: content, blocks };
+        }
+
+        const userLatex = `\\documentclass{article}
+\\usepackage{tikz}
+\\begin{document}
+Hello World.
+\\begin{tikzpicture}
+  \\draw[red, thick] (0,0) circle (1cm);
+  \\node at (0,0) {Dynamic TikZ};
+\\end{tikzpicture}
+End of document.
+\\end{document}`;
+
+        // Render Logic mimicking LatexPreview.tsx
+        const { sanitized, blocks } = sanitizeLatexForBrowser(userLatex);
+        const generator = new latexjs.HtmlGenerator({ hyphenate: false });
+        latexjs.parse(sanitized, { generator: generator });
+
+        const fragment = generator.domFragment();
+        document.getElementById('root').appendChild(fragment);
+
+        // Post-process
+        const walker = document.createTreeWalker(document.getElementById('root'), NodeFilter.SHOW_TEXT, null);
+        const nodesToReplace = [];
+        let currentNode = walker.nextNode();
+        while (currentNode) {
+            const text = currentNode.textContent || '';
+            for (const id in blocks) {
+                if (text.includes(id)) {
+                    nodesToReplace.push({ node: currentNode, id });
+                    break;
+                }
+            }
+            currentNode = walker.nextNode();
+        }
+
+        nodesToReplace.forEach(({ node, id }) => {
+            const htmlContent = blocks[id];
+            const span = document.createElement('span');
+            span.innerHTML = htmlContent;
+            node.parentNode.replaceChild(span, node);
+        });
+
+        console.log('Render complete. Injecting TikZJax...');
+
+        // === DYNAMIC LOADING LOGIC ===
+        const script = document.createElement('script');
+        script.src = "https://tikzjax.com/v1/tikzjax.js";
+        script.async = true;
+        script.onload = () => console.log('TikZJax loaded and should render now');
+        document.head.appendChild(script);
+
+    </script>
+</body>
+
+</html>

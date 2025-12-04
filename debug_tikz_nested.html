@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>TikZJax Nested Debug</title>
+    <link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css">
+    <script src="https://tikzjax.com/v1/tikzjax.js"></script>
+    <style>
+        /* Mimic the CSS from LatexPreview.tsx */
+        body {
+            background-color: #f0f0f0;
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 1. The Outer Scroll Area (SplitPreview's ScrollArea) */
+        .scroll-area-viewport {
+            width: 100%;
+            height: 600px;
+            border: 2px solid blue;
+            overflow: auto;
+            /* Simulating ScrollArea viewport */
+            position: relative;
+        }
+
+        /* 2. The Inner Scroll Container (LatexPreview's .preview-viewer) */
+        .preview-viewer {
+            background-color: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            border: 2px solid red;
+            overflow: auto;
+            /* The second scrollbar */
+            height: 800px;
+            /* Fixed height inside the outer scroll */
+            width: 800px;
+            margin: 20px auto;
+        }
+
+        /* The Content Container (latex-preview) */
+        .latex-preview {
+            font-family: 'Lora', 'Times New Roman', serif !important;
+            line-height: 1.8 !important;
+            color: #000 !important;
+            width: 210mm;
+            max-width: 100%;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 25mm 25mm;
+            background-color: white !important;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>TikZJax Double Nested Scroll Test</h1>
+    <p>Blue Border = Outer ScrollArea (SplitPreview)</p>
+    <p>Red Border = Inner Preview Viewer (LatexPreview)</p>
+
+    <!-- Level 1: Outer Scroll -->
+    <div class="scroll-area-viewport">
+
+        <!-- Level 2: Inner Scroll -->
+        <div class="preview-viewer">
+            <div class="latex-preview">
+                <h2>Diagram Below</h2>
+                <p>Here is a TikZ diagram:</p>
+
+                <script type="text/tikz">
+                    \begin{tikzpicture}
+                        \draw[fill=green!20] (0,0) circle (1cm);
+                        \node at (0,0) {Double Nested};
+                        \draw[->, thick] (1.5,0) -- (3,0);
+                        \node[draw, rectangle] at (4,0) {Works?};
+                    \end{tikzpicture}
+                </script>
+
+                <p>End of diagram.</p>
+
+                <!-- Spacer to force inner scroll -->
+                <div style="height: 1000px; background: linear-gradient(to bottom, #fff, #eee);">
+                    Inner Spacer...
+                </div>
+            </div>
+        </div>
+
+        <!-- Spacer to force outer scroll -->
+        <div style="height: 1000px; background: #ddd;">
+            Outer Spacer...
+        </div>
+    </div>
+</body>
+
+</html>

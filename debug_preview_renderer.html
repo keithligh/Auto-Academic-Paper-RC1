@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>LaTeX Preview Debugger</title>
+    <!-- Load latex.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/latex.js/dist/latex.js"></script>
+    <!-- Load KaTeX from CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&display=swap');
+
+        /* Paragraphs - Web Style (Spacing instead of Indent) */
+        .latex-preview .paragraph,
+        .latex-preview p {
+            margin-bottom: 1.5em !important;
+            margin-top: 0 !important;
+            text-indent: 0 !important;
+            text-align: justify;
+        }
+
+        /* Abstract */
+        .latex-preview .abstract {
+            margin: 2em 4em !important;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+
+        .latex-preview .abstract .abstract-title {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 1em;
+            display: block;
+        }
+
+        /* Lists */
+        .latex-preview ul,
+        .latex-preview ol {
+            margin-bottom: 1.5em;
+            padding-left: 2em;
+        }
+
+        .latex-preview li {
+            margin-bottom: 0.5em;
+        }
+
+        /* Document Container - The "Page" */
+        .latex-preview {
+            font-family: 'Lora', 'Times New Roman', serif !important;
+            line-height: 1.8 !important;
+            color: #000 !important;
+            width: 210mm;
+            max-width: 100%;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 25mm 25mm;
+            background-color: white !important;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        /* Robust Vertical Spacing */
+        .latex-preview>*+* {
+            margin-top: 1.5em;
+        }
+
+        /* Fix for equations inside paragraphs */
+        .latex-preview .katex-display {
+            display: block !important;
+            margin-top: 1.5em !important;
+            margin-bottom: 1.5em !important;
+        }
+
+        .latex-preview p>div {
+            margin-top: 1.5em !important;
+            margin-bottom: 1.5em !important;
+        }
+
+        /* Reset for internal elements */
+        .latex-preview img,
+        .latex-preview table {
+            max-width: 100%;
+        }
+
+        .latex-preview * {
+            box-sizing: border-box;
+        }
+
+        /* Title Area */
+        .latex-preview .title,
+        .latex-preview h1.title {
+            text-align: center;
+            font-size: 24pt;
+            font-weight: bold;
+            margin-bottom: 1em;
+            line-height: 1.2;
+            color: #000;
+            display: block;
+        }
+
+        .latex-preview .author {
+            text-align: center;
+            font-size: 14pt;
+            margin-bottom: 2em;
+            display: block;
+        }
+
+        .latex-preview .date {
+            text-align: center;
+            font-size: 12pt;
+            margin-bottom: 3em;
+            display: block;
+        }
+
+        /* Headings */
+        .latex-preview h2.section-title {
+            font-size: 18pt;
+            font-weight: bold;
+            margin-top: 2em;
+            margin-bottom: 1em;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 0.5em;
+        }
+
+        .latex-preview h3 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+        }
+    </style>
+</head>
+
+<body style="background: #f0f0f0; padding: 20px;">
+
+    <div id="preview-container" class="latex-preview"></div>
+
+    <script>
+        // --- SANITIZATION LOGIC FROM LatexPreview.tsx ---
+        function sanitizeLatexForBrowser(latex) {
+            const blocks = {};
+            let blockCount = 0;
+
+            const createPlaceholder = (html) => {
+                const id = `LATEXPREVIEWBLOCK${blockCount++}`;
+                blocks[id] = html;
+                return `\n\n${id}\n\n`;
+            };
+
+            const replaceWithMathBlock = (match, math) => {
+                const id = `LATEXPREVIEWMATHBLOCK${blockCount++}`;
+                blocks[id] = math;
+                return `\n\n${id}\n\n`;
+            };
+
+            const parseLatexFormatting = (text) => {
+                let parsed = text
+                    .replace(/\\([%#$_{}])/g, '$1')
+                    .replace(/\\&/g, '&')
+                    .replace(/\\textbackslash/g, '\\');
+                parsed = parsed
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                parsed = parsed.replace(/\\textbf\{([^{}]+)\}/g, '<strong>$1</strong>');
+                parsed = parsed.replace(/\\textit\{([^{}]+)\}/g, '<em>$1</em>');
+                parsed = parsed.replace(/\\texttt\{([^{}]+)\}/g, '<code>$1</code>');
+                parsed = parsed.replace(/\\underline\{([^{}]+)\}/g, '<u>$1</u>');
+                return parsed;
+            };
+
+            let content = latex
+                .replace(/^```latex\s*/i, '')
+                .replace(/^```\s*/i, '')
+                .replace(/```\s*$/, '')
+                .trim();
+
+            // === ROBUSTNESS FIXES (Step 1: Normalize) ===
+            content = content
+                .replace(/\\documentclass(?:\[[^\]]*\])?\s*\{\s*([^}]+?)\s*\}/g, '\\documentclass{$1}')
+                .replace(/\\usepackage(?:\[[^\]]*\])?\s*\{\s*([^}]+?)\s*\}/g, '\\usepackage{$1}')
+                .replace(/\\begin\s*\{\s*([^}]+?)\s*\}/g, '\\begin{$1}')
+            \\newenvironment{ lemma } { \\noindent\\textbf{ Lemma.} \\itshape } { \\par }
+            \\newenvironment{ proposition } { \\noindent\\textbf{ Proposition.} \\itshape } { \\par }
+            \\newenvironment{ corollary } { \\noindent\\textbf{ Corollary.} \\itshape } { \\par }
+            \\newenvironment{ definition } { \\noindent\\textbf{ Definition.} } { \\par }
+            \\newenvironment{ remark } { \\noindent\\textbf{ Remark.} } { \\par }
+            \\newenvironment{ proof } { \\noindent\\textit{ Proof.} } { \\hfill $\\square$\\par }
+            `;
+            // Insert definitions after documentclass
+            content = content.replace(/(\\documentclass(?:\[[^\]]*\])?\{[^}]*\})/, '$1\n' + definitions);
+
+            // === BIBLIOGRAPHY & CITATIONS ===
+            const citationMap = {};
+            let bibliographyHtml = '';
+
+            content = content.replace(/\\begin\s*\{\s*thebibliography\s*\}(?:\{[^}]*\})?([\s\S]*?)\\end\s*\{\s*thebibliography\s*\}/g, (match, body) => {
+                const items = [];
+                let counter = 1;
+                const itemRegex = /\\bibitem\s*(?:\[(.*?)\])?\s*\{([^}]*)\}([\s\S]*?)(?=\\bibitem|$)/g;
+                let itemMatch;
+
+                while ((itemMatch = itemRegex.exec(body)) !== null) {
+                    const label = itemMatch[1] ? itemMatch[1] : `${ counter++ } `;
+                    const key = itemMatch[2].trim();
+                    const text = itemMatch[3].trim();
+                    citationMap[key] = label;
+                    const cleanText = parseLatexFormatting(text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' '));
+                    items.push(`< li id = "ref-${key}" style = "margin-bottom: 0.5em;" >
+                <span style="font-weight: bold; margin-right: 0.5em;">[${label}]</span>
+                        ${ cleanText }
+                    </li > `);
+                }
+
+                if (items.length > 0) {
+                    bibliographyHtml = `< div class="bibliography" ><h2 class="section-title">References</h2><ul style="list-style: none; padding: 0;">${items.join('')}</ul></div > `;
+                }
+                return '';
+            });
+
+            const replaceCitation = (match, keys) => {
+                return keys.split(',').map(k => {
+                    const key = k.trim();
+                    let label = citationMap[key];
+                    if (!label) {
+                        const lowerKey = key.toLowerCase();
+                        const matchedKey = Object.keys(citationMap).find(k => k.toLowerCase() === lowerKey);
+                        if (matchedKey) label = citationMap[matchedKey];
+                    }
+                    return label ? `[${ label }]` : `[?]`;
+                }).join(', ');
+            };
+
+            content = content
+                .replace(/\\cite\{([^}]*)\}/g, replaceCitation)
+                .replace(/\\citep\{([^}]*)\}/g, replaceCitation)
+                .replace(/\\citet\{([^}]*)\}/g, replaceCitation)
+                .replace(/\\bibitem\{[^}]*\}/g, '');
+
+            if (bibliographyHtml) {
+                const bibId = createPlaceholder(bibliographyHtml);
+                content += bibId;
+            }
+
+            // === EQUATION ENVIRONMENTS ===
+            content = content
+                .replace(/\\begin\{equation\*?\}([\s\S]*?)\\end\{equation\*?\}/g, replaceWithMathBlock)
+                .replace(/\\\[([\s\S]*?)\\\]/g, replaceWithMathBlock)
+                .replace(/\$\$([\s\S]*?)\$\$/g, replaceWithMathBlock);
+
+            return { sanitized: content, blocks };
+        }
+
+        const latexContent = `\\documentclass{ article }
+            \\usepackage{ amsmath }
+            \\usepackage{ CJKutf8 }
+            \\newtheorem{ theorem } { Theorem }
+
+            \\title{Debug Test Document }
+            \\author{Test Author }
+            \\date{ \\today }
+
+            \\begin{ document }
+            \\maketitle
+
+            \\begin{ abstract }
+            \\begin{ CJK } { UTF8 } { gbsn }
+        The advent of neural machine translation has fundamentally transformed the landscape of cross - linguistic communication.However, a gap persists between NMT capabilities and professional translation practice.This paper proposes a new framework.
+            \\end{ CJK }
+            \\end{ abstract }
+
+            \\section{ Introduction }
+        The advent of neural machine translation has fundamentally transformed the landscape of cross - linguistic communication, enabling instantaneous translation across hundreds of language pairs at unprecedented scale[1].
+
+            \\begin{ theorem }
+        This is a theorem.
+            \\end{ theorem }
+
+            \\end{ document } `;
+
+        const container = document.getElementById('preview-container');
+
+        try {
+            const { sanitized, blocks } = sanitizeLatexForBrowser(latexContent);
+            console.log("Sanitized Content:", sanitized);
+
+            const generator = new latexjs.HtmlGenerator({ hyphenate: false });
+            const parsed = latexjs.parse(sanitized, { generator: generator });
+
+            // Apply styles
+            const styles = generator.stylesAndScripts("");
+            // In a real app we append to head, here we just assume they work or we inspect them
+
+            const fragment = generator.domFragment();
+            container.appendChild(fragment);
+
+            // Post-process
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+            const nodesToReplace = [];
+            let currentNode = walker.nextNode();
+            while (currentNode) {
+                const text = currentNode.textContent || '';
+                for (const id in blocks) {
+                    if (text.includes(id)) {
+                        nodesToReplace.push({ node: currentNode, id });
+                        break;
+                    }
+                }
+                currentNode = walker.nextNode();
+            }
+
+            nodesToReplace.forEach(({ node, id }) => {
+                let htmlContent = '';
+                if (id.startsWith('LATEXPREVIEWMATHBLOCK')) {
+                    const math = blocks[id];
+                    htmlContent = katex.renderToString(math, { displayMode: true, throwOnError: false });
+                    htmlContent = `< div class="katex-display-wrapper" style = "display: block; margin: 1.5em 0; text-align: center;" > ${ htmlContent }</div > `;
+                } else {
+                    htmlContent = blocks[id];
+                }
+
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = htmlContent;
+                const parent = node.parentNode;
+                if (parent && parent.textContent.trim() === id) {
+                    while (tempDiv.firstChild) parent.parentNode.insertBefore(tempDiv.firstChild, parent);
+                    parent.parentNode.removeChild(parent);
+                } else {
+                    const span = document.createElement('span');
+                    span.innerHTML = htmlContent;
+                    parent.replaceChild(span, node);
+                }
+            });
+
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = `< div style = "color:red" > Error: ${ e.message }</div >`;
+        }
+    </script>
+</body>
+
+</html>

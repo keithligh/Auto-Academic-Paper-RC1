@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>TikZJax Reload Debug</title>
+    <link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css">
+    <!-- We do NOT load TikZJax here initially, or we load it and try to reload -->
+    <script src="https://tikzjax.com/v1/tikzjax.js"></script>
+</head>
+
+<body>
+    <h1>TikZJax Reload Debug</h1>
+    <div id="container"></div>
+    <button id="injectBtn">Inject TikZ</button>
+    <button id="reloadBtn">Reload TikZJax</button>
+
+    <script>
+        document.getElementById('injectBtn').addEventListener('click', () => {
+            const container = document.getElementById('container');
+            // Inject a TikZ script dynamically
+            const script = document.createElement('script');
+            script.type = 'text/tikz';
+            script.textContent = '\\begin{tikzpicture} \\draw (0,0) circle (1in); \\end{tikzpicture}';
+            container.appendChild(script);
+            console.log('Injected TikZ script');
+        });
+
+        document.getElementById('reloadBtn').addEventListener('click', () => {
+            // Remove existing TikZJax script if any
+            const existingScript = document.querySelector('script[src*="tikzjax.js"]');
+            if (existingScript) {
+                existingScript.remove();
+            }
+
+            // Re-inject TikZJax
+            const newScript = document.createElement('script');
+            newScript.src = 'https://tikzjax.com/v1/tikzjax.js';
+            newScript.onload = () => console.log('TikZJax reloaded');
+            document.head.appendChild(newScript);
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TikZJax Debug</title>
+    <link rel="stylesheet" type="text/css" href="https://tikzjax.com/v1/fonts.css">
+    <script src="https://tikzjax.com/v1/tikzjax.js"></script>
+</head>
+
+<body>
+    <h1>TikZJax Test</h1>
+
+    <h2>1. Simple TikZ</h2>
+    <script type="text/tikz">
+        \begin{tikzpicture}
+            \draw (0,0) circle (1in);
+            \draw (0,0) rectangle (2,2);
+        \end{tikzpicture}
+    </script>
+
+    <h2>2. Flowchart (Nodes & Arrows)</h2>
+    <script type="text/tikz">
+        \begin{tikzpicture}[node distance=2cm]
+            \node (start) [draw, rectangle] {Start};
+            \node (process) [draw, rectangle, below of=start] {Process};
+            \draw[->] (start) -- (process);
+        \end{tikzpicture}
+    </script>
+
+    <h2>3. Forest (Tree) - MIGHT FAIL if package not supported</h2>
+    <!-- TikZJax usually only supports core TikZ. Forest is a separate package. -->
+    <script type="text/tikz">
+        % \usepackage{forest} is implied if supported, but usually it's not.
+        % Let's try standard TikZ tree instead which is supported.
+        \begin{tikzpicture}
+            \node {root}
+                child {node {left}}
+                child {node {right}
+                    child {node {child}}
+                    child {node {child}}
+                };
+        \end{tikzpicture}
+    </script>
+</body>
+
+</html>
