@@ -148,8 +148,9 @@ export class AIService {
     Take the raw INPUT TEXT and elevate it into a rigorous, well-structured academic paper. 
     
     CORE RESPONSIBILITIES:
-    1. **ANALYZE THE SOURCE**: Read the input text deeply. Understand its core arguments, themes, and nuances.
-    2. **IDENTIFY THE ACADEMIC ANGLE**: Find the scholarly potential in the text and frame it through the appropriate disciplinary lens.
+    1. **IDENTIFY SUBJECT & STRUCTURE**: Analyze the document structure, identify the main subject and key sections.
+    2. **ANALYZE THE SOURCE**: Read the input text deeply. Understand its core arguments, themes, and nuances.
+    3. **IDENTIFY THE ACADEMIC ANGLE**: Find the scholarly potential in the text and frame it through the appropriate disciplinary lens.
     3. **STRUCTURE LOGICALLY**: Organize the content into a standard academic format (Introduction, Background, Analysis, Discussion, Conclusion).
     4. **ELEVATE THE TONE**: Rewrite informal language into precise, objective academic prose.
     5. **ENHANCE**: Propose diagrams, tables, or formalisms that clarify the complex ideas.
