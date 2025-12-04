@@ -17,8 +17,36 @@ import { enhancementLevels } from "@shared/schema";
 import { useAIConfig } from "@/context/AIConfigContext";
 
 // Generate a unique ID for file uploads
-function generateUploadId() {
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+// Generate a sanitized unique ID for file uploads
+function generateUploadId(originalName: string) {
+    const timestamp = Date.now();
+
+    // Split name and extension
+    const lastDotIndex = originalName.lastIndexOf('.');
+    let name = originalName;
+    let ext = '';
+
+    if (lastDotIndex !== -1) {
+        name = originalName.substring(0, lastDotIndex);
+        ext = originalName.substring(lastDotIndex);
+    }
+
+    // Sanitize name:
+    // 1. Replace spaces with underscores
+    // 2. Remove Windows reserved chars (< > : " / \ | ? *)
+    // 3. Remove control characters
+    // 4. Trim
+    const sanitizedName = name
+        .replace(/\s+/g, '_')
+        .replace(/[<>:"/\\|?*]/g, '')
+        .replace(/[\x00-\x1F]/g, '')
+        .trim();
+
+    // Fallback if name becomes empty
+    const finalName = sanitizedName || 'upload';
+
+    // Combine: timestamp-name.ext
+    return `${timestamp}-${finalName}${ext}`;
 }
 
 export default function LandingPage() {
@@ -103,7 +131,7 @@ export default function LandingPage() {
             setStagedFile(file);
 
             // Generate upload ID locally
-            const id = generateUploadId();
+            const id = generateUploadId(file.name);
             setUploadID(id);
         }
     }, []);
