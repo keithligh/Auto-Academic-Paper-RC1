@@ -27,21 +27,23 @@ The **Auto Academic Paper** system uses a **human-like 5-phase research workflow
 
 ### Phase 4: THE EDITOR (Synthesis & Sanitization)
 **Agent:** Writer Agent
-**Purpose:** Insert the verified citations into the original draft and sanitize output.
+**Purpose:** Synthesize the verified citations into the original draft and sanitize output.
 **Behavior:** 
-1.  **INSERT ONLY:** Strictly preserves the original text and appends citation keys `(ref_X)` to sentences. Does NOT rewrite.
-2.  **SERVER-SIDE SANITIZATION:** Runs `sanitizeLatexOutput` to strip dangerous characters (e.g., invalid unicode in math mode) and enforce safety before JSON parsing.
+1.  **SYNTHESIS:** Rewrites sentences to flow naturally with the new evidence.
+2.  **FORMAL CITATIONS:** Uses `\cite{ref_X}` syntax for in-text citations.
+3.  **SERVER-SIDE SANITIZATION:** Runs `sanitizeLatexOutput` to strip dangerous characters (e.g., invalid unicode in math mode) and enforce safety before JSON parsing.
 **Output:** Sanitized, cited draft.
 
 ### Phase 5: THE COMPILER (Formatting & Preview)
 **Agent:** System (Internal)
 **Purpose:** Generate the final LaTeX document and provide a robust browser preview.
 **Behavior:** 
-1.  **LaTeX Generation:** Deterministic formatting. No AI hallucination allowed here.
-2.  **Browser Preview:** Uses `LatexPreview.tsx` with a **Robust Sanitization Layer**:
+1.  **LaTeX Generation:** Deterministic formatting. Generates a standard `\begin{thebibliography}` section from the research data.
+2.  **Browser Preview:** Uses `LatexPreview.tsx` with a **Fragment Rendering Strategy**:
+    *   **Stripped Preamble:** Removes `\documentclass` and `\begin{document}` to prevent parser crashes.
+    *   **Manual Header:** Extracts and renders Title/Author as HTML.
+    *   **Blockquotes:** Converts text-only equations to styled HTML blockquotes.
     *   **TikZ:** Rendered via isolated iframes (TikZJax).
-    *   **Math:** Rendered via KaTeX (display mode) or LaTeX.js (inline).
-    *   **Unsupported Features:** (e.g., `tabularx`, `forest`) are displayed as "Raw Code Blocks" to preserve transparency.
 **Output:** Final PDF/LaTeX and Interactive Preview.
 
 ---
@@ -86,7 +88,7 @@ graph TD
     Citations --> P4
     Draft --> P4
     subgraph "Phase 4: The Editor"
-    P4[Writer Agent] -->|Inserts Citations + Sanitizes| FinalText
+    P4[Writer Agent] -->|Synthesizes Citations + Sanitizes| FinalText
     end
     FinalText --> P5
     subgraph "Phase 5: The Compiler"
@@ -128,9 +130,9 @@ Research is driven by **what we want to say**, not by pre-gathered resources. We
     -   **Throttling:** Log updates are throttled to prevent CPU spikes.
 -   **Sanitization:**
     -   **Server:** `sanitizeLatexOutput` in `server/ai/utils.ts`.
-    -   **Client:** `sanitizeLatexForBrowser` in `client/src/components/LatexPreview.tsx`.
+    -   **Client:** `sanitizeLatexForBrowser` in `client/src/components/LatexPreview.tsx` (Fragment Rendering).
 
 ---
 
-*Last Updated: 2025-12-02*
-*Version: 3.1 (Stable - Sanitization & Safety Protocols)*
+*Last Updated: 2025-12-04*
+*Version: 3.2 (Stable - Formal Citations & Fragment Rendering)*
