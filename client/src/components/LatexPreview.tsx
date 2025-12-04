@@ -605,7 +605,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     .replace(/(^|\n)\s*\[/g, '$1{[}')
     // Also replace \\ with \newline to avoid \\[ ambiguity
     // CRITICAL FIX: Add space to prevent \newlinebegin (concatenation with next command)
-    .replace(/\\\\/g, ' \\newline ');
+    .replace(/\\\\/g, ' \\newline ')
+    // FIX: Escape [ after \newline to prevent it being interpreted as an optional argument
+    .replace(/(\\newline)\s*\[/g, '$1{[}');
 
   // Robustly handle \parbox{width}{content} -> <div style="width:...">content</div>
   const processParboxes = (latex: string): string => {
