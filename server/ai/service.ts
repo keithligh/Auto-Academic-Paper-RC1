@@ -156,10 +156,14 @@ export class AIService {
     5. **ENHANCE**: Propose diagrams, tables, or formalisms that clarify the complex ideas.
 
     PROCESS:
-    1. **Read** the SOURCE MATERIAL provided in the conversation history.
+    1. **Read** the SOURCE MATERIAL provided below.
     2. **Plan** the sections based on the SOURCE MATERIAL's content.
     3. **Draft** the content in LaTeX format (but WITHOUT citations for now).
     4. **Create** enhancements (diagrams/tables) to support the arguments.
+
+    === SOURCE MATERIAL START ===
+    ${content}
+    === SOURCE MATERIAL END ===
 
     TECHNICAL CONSTRAINTS (WEB PREVIEW COMPATIBILITY):
     - The output will be rendered in a lightweight web-based LaTeX previewer (tikzjax in iframe).
@@ -184,13 +188,7 @@ export class AIService {
     - Output valid JSON matching the schema.
 `;
 
-        // 2-Step Prompting Strategy (Simulated via History)
-        const history = [
-            { role: "user", content: `<source_material>\n${content}\n</source_material>` },
-            { role: "assistant", content: "I have read the source material and am ready for instructions." }
-        ];
-
-        const userPrompt = `Transform the SOURCE MATERIAL provided in the conversation history into a ${paperType} (${enhancementLevel} enhancements).
+        const userPrompt = `Transform the SOURCE MATERIAL provided above into a ${paperType} (${enhancementLevel} enhancements).
 
 OUTPUT SCHEMA:
 {
@@ -265,8 +263,7 @@ SPECIAL INSTRUCTION FOR CONTENT:
                             lastSectionName = sectionName;
                         }
                     }
-                },
-                history // Pass the history here
+                }
             );
 
             const result: any = await Promise.race([completionPromise, timeoutPromise]);

@@ -23,7 +23,6 @@ export function UploadZone({ onFileSelect, isProcessing }: UploadZoneProps) {
     onDrop,
     accept: {
       'application/pdf': ['.pdf'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
       'text/plain': ['.txt'],
     },
     maxFiles: 1,
@@ -38,29 +37,28 @@ export function UploadZone({ onFileSelect, isProcessing }: UploadZoneProps) {
         className={`
           min-h-96 rounded-lg border-2 border-dashed transition-all duration-200
           flex flex-col items-center justify-center p-12 cursor-pointer
-          ${
-            isDragActive
-              ? "border-primary bg-primary/5 scale-[1.02]"
-              : "border-border hover:border-primary/50 hover:bg-accent/30"
+          ${isDragActive
+            ? "border-primary bg-primary/5 scale-[1.02]"
+            : "border-border hover:border-primary/50 hover:bg-accent/30"
           }
           ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}
         `}
         data-testid="dropzone-upload"
       >
         <input {...getInputProps()} data-testid="input-file" />
-        
+
         <DocumentArrowUpIcon className="w-20 h-20 text-muted-foreground mb-6 scale-125" />
-        
+
         <h3 className="text-2xl font-semibold text-foreground mb-3">
           {isDragActive ? "Drop your document here" : "Drop your document here"}
         </h3>
-        
+
         <p className="text-base text-muted-foreground mb-6 text-center max-w-md">
-          or click to browse • PDF, DOCX, TXT • Max 50MB
+          or click to browse • PDF, TXT • Max 50MB
         </p>
 
-        <Button 
-          type="button" 
+        <Button
+          type="button"
           size="lg"
           className="mt-2"
           disabled={isProcessing}
