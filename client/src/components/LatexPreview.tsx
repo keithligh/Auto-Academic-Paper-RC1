@@ -597,7 +597,14 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     .replace(/"/g, "``")
     .replace(/"/g, "''")
     // Handle \textcircled{x} -> (x)
-    .replace(/\\textcircled\{([^{}]+)\}/g, '($1)');
+    .replace(/\\textcircled\{([^{}]+)\}/g, '($1)')
+
+    // === FIX: BRACKET AMBIGUITY ===
+    // latex.js crashes if a line starts with [ (interpreted as optional arg to previous command)
+    // We wrap [ in {} to force it as text: {[}
+    .replace(/(^|\n)\s*\[/g, '$1{[}')
+    // Also replace \\ with \newline to avoid \\[ ambiguity
+    .replace(/\\\\/g, '\\newline');
 
   // Robustly handle \parbox{width}{content} -> <div style="width:...">content</div>
   const processParboxes = (latex: string): string => {
