@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Full Repro (Iframe)</title>
+    <style>
+        /* Copied from LatexPreview.tsx */
+        @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&display=swap');
+
+        body {
+            background-color: #f0f0f0;
+            padding: 20px;
+        }
+
+        .preview-viewer {
+            background-color: rgba(243, 244, 246, 0.5);
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb;
+            overflow: auto;
+            height: 800px;
+        }
+
+        .latex-preview {
+            font-family: 'Lora', 'Times New Roman', serif !important;
+            line-height: 1.8 !important;
+            color: #000 !important;
+            width: 210mm;
+            max-width: 100%;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 25mm 25mm;
+            background-color: white !important;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .latex-preview>*+* {
+            margin-top: 1.5em;
+        }
+
+        .latex-preview p {
+            margin-bottom: 1.5em;
+            text-align: justify;
+            text-justify: inter-word;
+            font-size: 11pt;
+            text-indent: 0;
+            line-height: 1.8;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="preview-viewer">
+        <div class="latex-preview" id="latex-preview-container">
+            <h1>Test Document (Iframe Strategy)</h1>
+            <p>Here is some text before the diagram.</p>
+
+            <!-- Simulate the injected TikZ iframe -->
+            <iframe srcdoc="
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <link rel='stylesheet' href='https://tikzjax.com/v1/fonts.css'>
+                    <script src='https://tikzjax.com/v1/tikzjax.js'></script>
+                    <style>
+                        body { margin: 0; padding: 0; overflow: hidden; display: flex; justify-content: center; }
+                        svg { overflow: visible; }
+                    </style>
+                </head>
+                <body>
+                    <script type='text/tikz'>
+                        \begin{tikzpicture}
+                            \draw[red, thick] (0,0) circle (1cm);
+                            \draw[blue, thick] (-1,-1) -- (1,1);
+                            \node at (0,-1.5) {TikZ in Iframe Repro};
+                        \end{tikzpicture}
+                    </script>
+                    <script>
+                        // Auto-resize iframe based on SVG content
+                        const observer = new MutationObserver(() => {
+                          const svg = document.querySelector('svg');
+                          if (svg) {
+                            const rect = svg.getBoundingClientRect();
+                            // Send new height to parent
+                            window.frameElement.style.height = (rect.height + 20) + 'px';
+                            window.frameElement.style.width = (rect.width + 20) + 'px';
+                          }
+                        });
+                        observer.observe(document.body, { childList: true, subtree: true });
+                    </script>
+                </body>
+                </html>
+            " class="tikz-iframe"
+                style="width: 100%; min-height: 100px; border: none; margin: 1em 0; overflow: hidden;"></iframe>
+
+            <p>Here is some text after the diagram.</p>
+        </div>
+    </div>
+
+</body>
+
+</html>

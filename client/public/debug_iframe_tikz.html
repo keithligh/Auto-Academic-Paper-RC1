@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Debug Iframe TikZ</title>
+</head>
+
+<body>
+    <h1>Debug Iframe TikZ</h1>
+    <p>Testing if TikZJax works when isolated in an iframe (srcdoc).</p>
+
+    <div id="container"></div>
+
+    <script>
+        const container = document.getElementById('container');
+        const iframe = document.createElement('iframe');
+        iframe.style.width = "300px";
+        iframe.style.height = "300px";
+        iframe.style.border = "1px solid blue";
+
+        const tikzCode = '\\begin{tikzpicture} \\draw[green, thick] (0,0) circle (1cm); \\node at (0,-1.5) {Iframe Works!}; \\end{tikzpicture}';
+
+        const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <link rel="stylesheet" href="https://tikzjax.com/v1/fonts.css">
+                <script src="https://tikzjax.com/v1/tikzjax.js"><\/script>
+            </head>
+            <body>
+                <script type="text/tikz">
+                    ${tikzCode}
+                <\/script>
+            </body>
+            </html>
+        `;
+
+        iframe.srcdoc = html;
+        container.appendChild(iframe);
+    </script>
+</body>
+
+</html>

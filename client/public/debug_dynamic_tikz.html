@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Dynamic TikZ Injection</title>
+    <link rel="stylesheet" href="https://tikzjax.com/v1/fonts.css">
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        #container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-top: 20px;
+            min-height: 200px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Debug Dynamic TikZ Injection (createElement)</h1>
+    <p>This test checks if TikZJax works when script tags are created via document.createElement.</p>
+
+    <div id="container"></div>
+    <div id="console-output"
+        style="background: #f0f0f0; padding: 10px; border: 1px solid #999; margin-top: 20px; height: 300px; overflow: auto; font-family: monospace;">
+    </div>
+
+    <script>
+        // Capture logs
+        const originalLog = console.log;
+        const originalError = console.error;
+        function logToScreen(msg, type = 'log') {
+            const el = document.getElementById('console-output');
+            if (el) {
+                const line = document.createElement('div');
+                line.textContent = `[${type.toUpperCase()}] ${msg}`;
+                line.style.color = type === 'error' ? 'red' : 'black';
+                el.appendChild(line);
+            }
+        }
+        console.log = (...args) => { originalLog(...args); logToScreen(args.join(' '), 'log'); };
+        console.error = (...args) => { originalError(...args); logToScreen(args.join(' '), 'error'); };
+
+        // 1. Inject the script tag via createElement
+        console.log('Injecting TikZ tag via createElement...');
+        const container = document.getElementById('container');
+        const tikzCode = '\\begin{tikzpicture} \\draw[red, thick] (0,0) circle (1cm); \\node at (0,-1.5) {createElement Injection Works!}; \\end{tikzpicture}';
+
+        const scriptTag = document.createElement('script');
+        scriptTag.type = 'text/tikz';
+        scriptTag.textContent = tikzCode;
+        container.appendChild(scriptTag);
+
+        console.log('TikZ tag injected. Checking DOM...');
+        const scripts = document.querySelectorAll('script[type="text/tikz"]');
+        console.log(`Found ${scripts.length} TikZ script tags in DOM.`);
+
+        // 2. Inject TikZJax library dynamically (debounced)
+        setTimeout(() => {
+            console.log('Loading TikZJax library...');
+            const script = document.createElement('script');
+            script.src = "https://tikzjax.com/v1/tikzjax.js";
+            script.async = true;
+            script.onload = () => console.log('TikZJax loaded.');
+            script.onerror = (e) => console.error('TikZJax failed to load:', e);
+            document.head.appendChild(script);
+        }, 1000);
+    </script>
+</body>
+
+</html>
