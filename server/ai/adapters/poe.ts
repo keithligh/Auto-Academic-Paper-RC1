@@ -61,15 +61,22 @@ export class PoeProvider implements AIProvider {
         return fullText;
     }
 
-    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void): Promise<any> {
+    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void, history?: { role: string, content: string }[]): Promise<any> {
         const enhancedSystemPrompt = `${systemPrompt}\n\nIMPORTANT: Output valid JSON only. Do not include markdown formatting like \`\`\`json.`;
+
+        const messages: any[] = [
+            { role: "system", content: enhancedSystemPrompt },
+        ];
+
+        if (history && history.length > 0) {
+            messages.push(...history);
+        }
+
+        messages.push({ role: "user", content: prompt });
 
         const stream = await this.client.chat.completions.create({
             model: this.config.model,
-            messages: [
-                { role: "system", content: enhancedSystemPrompt },
-                { role: "user", content: prompt },
-            ],
+            messages: messages,
             temperature: 0.3,
             stream: true,
         });

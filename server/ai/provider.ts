@@ -17,8 +17,9 @@ export interface AIProvider {
 
     /**
      * Structured JSON completion
+     * @param history Optional conversation history (for multi-turn simulation)
      */
-    jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void): Promise<any>;
+    jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void, history?: { role: string, content: string }[]): Promise<any>;
 
     /**
      * Whether this provider supports online research
