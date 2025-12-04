@@ -9,8 +9,12 @@ Grok (xAI) provides an OpenAI-compatible API for standard chat, but uses a **spe
 - **Standard Chat**: `/chat/completions` (OpenAI compatible)
 - **Agentic Search**: `/responses` (Custom endpoint)
 
+## Recommended Models (Dec 2025)
+*   **Grok-4.1**: Latest flagship.
+*   **Grok-4.1-Fast**: High-performance with 2M context.
+
 ## Agentic Search (Research Agent)
-To use Grok as a Research Agent, we must use the `/responses` endpoint with the `grok-4-fast` model and server-side tools.
+To use Grok as a Research Agent, we must use the `/responses` endpoint with the `grok-4.1-fast` model and server-side tools.
 
 ### Endpoint
 `POST https://api.x.ai/v1/responses`
@@ -20,7 +24,7 @@ Unlike the standard OpenAI `messages` array, this endpoint uses `input`.
 
 ```json
 {
-  "model": "grok-4-fast",
+  "model": "grok-4.1-fast",
   "input": [
     {
       "role": "user",
@@ -53,7 +57,7 @@ const response = await fetch("https://api.x.ai/v1/responses", {
     "Authorization": `Bearer ${apiKey}`
   },
   body: JSON.stringify({
-    model: "grok-4-fast",
+    model: "grok-4.1-fast",
     input: [{ role: "user", content: "Latest fusion energy breakthroughs" }],
     tools: [{ type: "web_search" }]
   })
@@ -61,6 +65,6 @@ const response = await fetch("https://api.x.ai/v1/responses", {
 ```
 
 ## Important Notes
-- **Model**: Use `grok-4-fast` for best search performance.
+- **Model**: Use `grok-4.1-fast` for best search performance.
 - **Citations**: Returned in the response object (if needed, though we primarily want the text).
 - **Rate Limits**: Check headers or console.

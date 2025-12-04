@@ -12,7 +12,7 @@ import { extractTextFromFile, validateFileSize, validateFileType } from "./docum
 import { generateLatex } from "./latexGenerator";
 import { AIService } from "./ai/service";
 import { AIConfig } from "./ai/provider";
-import { maxFileSize, documentAnalysisSchema, type DocumentAnalysis, type Enhancement, type AiResponse } from "@shared/schema";
+import { maxFileSize, documentAnalysisSchema, type DocumentAnalysis, type Enhancement, type AiResponse, type JobProgress } from "@shared/schema";
 
 // Reference: javascript_object_storage blueprint
 // Configure multer for file uploads (temporary storage)
@@ -394,10 +394,17 @@ async function processDocumentFromStorage(
 const logQueues: Record<string, Promise<void>> = {};
 
 // Helper to append logs to the job (Serialized)
-async function logJobProgress(jobId: string, message: string) {
+// UPDATED: Now supports structured progress updates and optimized terminal output
+async function logJobProgress(jobId: string, message: string, progress?: JobProgress) {
   const timestamp = new Date().toLocaleTimeString("en-US", { hour12: false });
   const logEntry = `[${timestamp}] ${message}`;
-  console.log(`[Job ${jobId}] ${message}`);
+
+  // OPTIMIZED TERMINAL LOGGING: Truncate long messages
+  let terminalMessage = message;
+  if (terminalMessage.length > 200) {
+    terminalMessage = terminalMessage.substring(0, 200) + "... (truncated)";
+  }
+  console.log(`[Job ${jobId}] ${terminalMessage}`);
 
   // Initialize queue for this job if not exists
   if (!logQueues[jobId]) {
@@ -411,10 +418,18 @@ async function logJobProgress(jobId: string, message: string) {
       const job = await storage.getConversionJob(jobId);
       const currentLogs = (job?.logs as string[]) || [];
 
-      // Append new log
-      await storage.updateConversionJob(jobId, {
+      // Update object
+      const updates: any = {
         logs: [...currentLogs, logEntry]
-      });
+      };
+
+      // If progress is provided, update it (Micro-Checkpoint)
+      if (progress) {
+        updates.progress = progress;
+      }
+
+      // Append new log and update progress
+      await storage.updateConversionJob(jobId, updates);
     } catch (e) {
       console.error(`Failed to write log for job ${jobId}:`, e);
     }
@@ -438,19 +453,20 @@ async function processDocumentFile(
   try {
     // Update status to processing
     await storage.updateConversionJob(jobId, { status: "processing" });
-    await logJobProgress(jobId, "Initializing processing environment...");
+    await logJobProgress(jobId, "Initializing processing environment...", { phase: "Initialization", step: "Setup", progress: 0 });
 
     // Step 1: Extract text
-    await logJobProgress(jobId, "Step 1: Extracting text from document...");
+    await logJobProgress(jobId, "Step 1: Extracting text from document...", { phase: "Phase 1: Extraction", step: "Extracting Text", progress: 5 });
     const text = await extractTextFromFile(filePath, mimeType);
     await storage.updateConversionJob(jobId, { originalContent: text });
-    await logJobProgress(jobId, `Text extraction complete. Length: ${text.length} chars.`);
+    await logJobProgress(jobId, `Text extraction complete. Length: ${text.length} chars.`, { phase: "Phase 1: Extraction", step: "Complete", progress: 10 });
 
     // Step 2: Analyze document AND generate enhancements
-    await logJobProgress(jobId, "Step 2: Starting AI Analysis & Research...");
+    await logJobProgress(jobId, "Step 2: Starting AI Analysis & Research...", { phase: "Phase 2: Analysis", step: "Starting AI", progress: 15 });
 
     // Define a logger callback to pass to the AI function
-    const logger = async (msg: string) => await logJobProgress(jobId, msg);
+    // UPDATED: Accepts optional progress object
+    const logger = async (msg: string, progress?: JobProgress) => await logJobProgress(jobId, msg, progress);
 
     // analyzeDocument now returns a typed AiResponse object (DocumentAnalysis + enhancements)
     const aiService = new AIService(aiConfig, logger);
@@ -459,7 +475,6 @@ async function processDocumentFile(
       paperType,
       enhancementLevel,
       {
-        // Default advanced options for now, could be passed from frontend later
         formula: true,
         diagram: true,
         logical_structure: true
@@ -480,10 +495,10 @@ async function processDocumentFile(
       analysis: analysisData,
       enhancements: enhancements
     });
-    await logJobProgress(jobId, "AI Analysis complete. Structure and enhancements generated.");
+    await logJobProgress(jobId, "AI Analysis complete. Structure and enhancements generated.", { phase: "Phase 4: Synthesis", step: "Enhancements Generated", progress: 80 });
 
     // Step 3: Generate LaTeX with integrated enhancements
-    await logJobProgress(jobId, "Step 3: Generating LaTeX code...");
+    await logJobProgress(jobId, "Step 3: Generating LaTeX code...", { phase: "Phase 5: Compilation", step: "Generating LaTeX", progress: 85 });
     let latex;
     let latexError = null;
 
@@ -495,14 +510,14 @@ async function processDocumentFile(
         authorName,
         authorAffiliation
       );
-      await logJobProgress(jobId, "LaTeX generation successful.");
+      await logJobProgress(jobId, "LaTeX generation successful.", { phase: "Phase 5: Compilation", step: "LaTeX Generated", progress: 90 });
     } catch (latexError: any) {
       console.error('[LaTeX Generation] Failed to generate LaTeX:', latexError);
       throw new Error(`LaTeX generation failed: ${latexError.message}. Please check your enhancements or re-process the document.`);
     }
 
     // Step 4: Validate LaTeX syntax (optional)
-    await logJobProgress(jobId, "Step 4: Validating LaTeX syntax...");
+    await logJobProgress(jobId, "Step 4: Validating LaTeX syntax...", { phase: "Phase 5: Compilation", step: "Validating LaTeX", progress: 95 });
     let validationWarnings: string[] = [];
     try {
       const { validateLatexSyntax } = await import('./latexValidator');
@@ -511,9 +526,9 @@ async function processDocumentFile(
       if (!validation.valid) {
         console.warn('[LaTeX Validation] Errors detected:', validation.errors);
         validationWarnings = validation.errors;
-        await logJobProgress(jobId, `Validation Errors: ${validation.errors.length} found.`);
+        await logJobProgress(jobId, `Validation Errors: ${validation.errors.length} found.`, { phase: "Phase 5: Compilation", step: "Validation Failed", progress: 98, details: "Errors found" });
       } else {
-        await logJobProgress(jobId, "LaTeX syntax is valid.");
+        await logJobProgress(jobId, "LaTeX syntax is valid.", { phase: "Phase 5: Compilation", step: "Validation Passed", progress: 98 });
       }
 
       if (validation.warnings.length > 0) {
@@ -534,11 +549,11 @@ async function processDocumentFile(
         error: [latexError, `LaTeX validation warnings: ${validationWarnings.join('; ')}`].filter(Boolean).join(' | ')
       } : {})
     });
-    await logJobProgress(jobId, "Processing complete. Ready for review.");
+    await logJobProgress(jobId, "Processing complete. Ready for review.", { phase: "Complete", step: "Done", progress: 100 });
 
   } catch (error: any) {
     console.error("Processing error:", error);
-    await logJobProgress(jobId, `CRITICAL ERROR: ${error.message}`);
+    await logJobProgress(jobId, `CRITICAL ERROR: ${error.message}`, { phase: "Error", step: "Failed", progress: 0, details: error.message });
     await storage.updateConversionJob(jobId, {
       status: "failed",
       error: error.message,

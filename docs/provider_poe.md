@@ -15,20 +15,28 @@ The **Librarian Agent** requires a model capable of browsing the internet to ver
 ### Whitelisted Research Models
 The system explicitly whitelists the following bots for the Librarian phase. If a user selects a non-whitelisted bot, the research phase will fail or warn.
 
-*   **Gemini-2.5-Pro**: High-reasoning, search-capable model.
+*   **Gemini-2.5-Pro**: High-reasoning, search-capable model (Recommended).
 *   **Gemini-2.5-Flash**: Faster, search-capable model.
+*   **Gemini-3.0-Pro**: Latest flagship model.
 
 > **Note**: `Gemini-2.0-Flash` was previously supported but has been removed from the whitelist.
 
 ### Implementation Strategy
 We do **not** use special flags like `--web_search true` in the prompt. Instead, we select a bot that has search enabled by default (like the Gemini bots on Poe) and prompt it to "search for X".
 
+## Supported Writer/Strategist Models (Dec 2025)
+For the Writer and Strategist agents, we recommend the following high-intelligence models available on Poe:
+
+*   **Claude-Sonnet-4.5**: Anthropic's latest agentic model (1M context).
+*   **Claude-Opus-4.5**: Maximum intelligence model.
+*   **GPT-5.1**: OpenAI's latest flagship.
+
 ## Code Example (Adapter)
 
 ```typescript
 // server/ai/adapters/poe.ts
 
-const poeSearchModels = ["Gemini-2.5-Pro", "Gemini-2.5-Flash"];
+const poeSearchModels = ["Gemini-2.5-Pro", "Gemini-2.5-Flash", "Gemini-3.0-Pro"];
 
 if (!poeSearchModels.includes(config.model)) {
     throw new Error(`Model ${config.model} is not whitelisted for research on Poe.`);

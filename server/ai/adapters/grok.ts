@@ -6,10 +6,12 @@ export class GrokProvider implements AIProvider {
     private client: OpenAI;
     private config: ProviderConfig;
     public id: string = "grok";
+    public model: string;
     public supportsResearch: boolean = true;
 
     constructor(config: ProviderConfig) {
         this.config = config;
+        this.model = config.model;
         this.client = new OpenAI({
             apiKey: config.apiKey,
             baseURL: "https://api.x.ai/v1",

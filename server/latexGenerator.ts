@@ -183,6 +183,21 @@ ${abstract}
             }
         }
 
+        // --- BIBLIOGRAPHY ---
+        if (analysis.references && analysis.references.length > 0) {
+            latex += `\n\\begin{thebibliography}{99}\n`;
+            for (const ref of analysis.references) {
+                // Escape fields just in case
+                const author = escapeLatex(ref.author);
+                const title = escapeLatex(ref.title);
+                const venue = escapeLatex(ref.venue);
+                const year = ref.year;
+
+                latex += `\\bibitem{${ref.key}} ${author}. \\textit{${title}}. ${venue}, ${year}.\n`;
+            }
+            latex += `\\end{thebibliography}\n`;
+        }
+
         latex += `\\end{document}\n`;
 
         return latex;

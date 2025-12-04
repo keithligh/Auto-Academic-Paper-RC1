@@ -7,6 +7,7 @@ export { AIConfig, ProviderConfig };
 
 export interface AIProvider {
     id: string;
+    model: string;
 
     /**
      * Standard text completion

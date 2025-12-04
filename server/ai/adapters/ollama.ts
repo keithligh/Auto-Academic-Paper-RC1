@@ -6,10 +6,12 @@ export class OllamaProvider implements AIProvider {
     private client: OpenAI;
     private config: ProviderConfig;
     public id: string = "ollama";
+    public model: string;
     public supportsResearch: boolean = false;
 
     constructor(config: ProviderConfig) {
         this.config = config;
+        this.model = config.model;
         this.client = new OpenAI({
             apiKey: "ollama", // Ollama doesn't require an API key
             baseURL: "http://localhost:11434/v1",

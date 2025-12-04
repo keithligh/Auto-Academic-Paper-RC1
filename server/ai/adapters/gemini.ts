@@ -6,10 +6,12 @@ export class GeminiProvider implements AIProvider {
     private client: GoogleGenerativeAI;
     private config: ProviderConfig;
     public id: string = "gemini";
+    public model: string;
     public supportsResearch: boolean = false;
 
     constructor(config: ProviderConfig) {
         this.config = config;
+        this.model = config.model;
         this.client = new GoogleGenerativeAI(config.apiKey);
     }
 

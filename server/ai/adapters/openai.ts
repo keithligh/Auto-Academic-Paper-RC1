@@ -6,11 +6,13 @@ export class OpenAICompatibleProvider implements AIProvider {
     private client: OpenAI;
     private config: ProviderConfig;
     public id: string;
+    public model: string;
     public supportsResearch: boolean;
 
     constructor(config: ProviderConfig) {
         this.config = config;
         this.id = config.provider;
+        this.model = config.model;
 
         // Configure Base URL based on provider if not explicitly set
         // Configure Base URL based on provider if not explicitly set

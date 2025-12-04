@@ -292,8 +292,52 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       return createPlaceholder(`<pre class="code-block whitespace-pre-wrap break-words font-mono text-sm bg-muted/30 p-4 rounded-md"><strong>Algorithm:</strong>\n${clean}</pre>`);
     });
 
-  // === DOCUMENT STRUCTURE ===
-  // PRESERVE \documentclass, \begin{document}, \end{document}, \maketitle
+  // === DOCUMENT STRUCTURE & METADATA ===
+  // Extract metadata before stripping preamble
+  const titleMatch = content.match(/\\title\{((?:[^{}]|\{[^{}]*\})*)\}/);
+  const authorMatch = content.match(/\\author\{((?:[^{}]|\{[^{}]*\})*)\}/);
+  const dateMatch = content.match(/\\date\{((?:[^{}]|\{[^{}]*\})*)\}/);
+
+  const title = titleMatch ? parseLatexFormatting(titleMatch[1]) : '';
+  const author = authorMatch ? parseLatexFormatting(authorMatch[1]) : '';
+  const date = dateMatch ? parseLatexFormatting(dateMatch[1]) : '';
+
+  // Extract BODY content (between \begin{document} and \end{document})
+  const bodyMatch = content.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
+  if (bodyMatch) {
+    content = bodyMatch[1];
+  } else {
+    // Fallback: just strip preamble commands if no document env found
+    content = content.replace(/\\documentclass\[.*?\]\{.*?\}/, '');
+  }
+
+  // Strip \maketitle (we will render it manually)
+  content = content.replace(/\\maketitle/g, '');
+
+  // Convert abstract environment to a section
+  content = content.replace(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/g, (match, absContent) => {
+    return `\\section*{Abstract}\n${absContent}`;
+  });
+
+  // Prepend Manual Header
+  let headerHtml = '';
+  if (title) {
+    headerHtml += `<div class="latex-title" style="font-size: 2em; font-weight: bold; text-align: center; margin-bottom: 0.5em;">${title}</div>`;
+  }
+  if (author) {
+    headerHtml += `<div class="latex-author" style="font-size: 1.2em; text-align: center; margin-bottom: 0.2em;">${author}</div>`;
+  }
+  if (date && !date.includes('\\today')) { // Skip \today as it might not parse
+    headerHtml += `<div class="latex-date" style="font-size: 1em; text-align: center; margin-bottom: 2em; color: #666;">${date}</div>`;
+  } else if (title || author) {
+    headerHtml += `<div style="margin-bottom: 2em;"></div>`;
+  }
+
+  if (headerHtml) {
+    const id = `LATEXPREVIEWHEADER${blockCount++}`;
+    blocks[id] = headerHtml;
+    content = `\n\n${id}\n\n` + content;
+  }
 
   // === BIBLIOGRAPHY & CITATIONS ===
   const citationMap: Record<string, string> = {};
@@ -371,7 +415,18 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     .replace(/\\ensuremath/g, '') // Catch-all: Remove stray \ensuremath if arguments failed to match
     //.replace(/\\textcolor\{[^}]+\}\{([^}]*)\}/g, '$1') // REMOVED: Handled in parseLatexFormatting
     .replace(/\\checkmark/g, '✓') // Replace \checkmark with unicode
-    .replace(/\\smalltriangleup/g, '\\triangle'); // Replace \smalltriangleup with standard LaTeX
+    .replace(/\\checkmark/g, '✓')
+    .replace(/\\smalltriangleup/g, '\\triangle');
+
+  // === FIX: UNWRAP TEXT-ONLY EQUATIONS ===
+  // The AI sometimes wraps long text sentences in \begin{equation*} \text{...} \end{equation*}.
+  // This causes them to render as a single non-breaking line in latex.js, getting cut off.
+  // We detect this pattern and unwrap it to normal text (or a blockquote).
+  content = content.replace(/\\begin\{equation\*?\}\s*\\text\{((?:[^{}]|\{[^{}]*\})*)\}\s*\\end\{equation\*?\}/g, (match, textContent) => {
+    // Recursively parse formatting inside the text
+    const html = `<blockquote style="border-left: 4px solid #ccc; margin: 1.5em 10px; padding: 0.5em 10px; color: #555; font-style: italic;">${parseLatexFormatting(textContent)}</blockquote>`;
+    return createPlaceholder(html);
+  });
 
   // === EQUATION ENVIRONMENTS ===
   // We manually handle display math to ensure perfect spacing.
@@ -386,6 +441,11 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     .replace(/\\begin\{multline\*?\}([\s\S]*?)\\end\{multline\*?\}/g, (match, body) => replaceWithMathBlock(match, `\\begin{multline}${body}\\end{multline}`))
     .replace(/\\\[([\s\S]*?)\\\]/g, replaceWithMathBlock)
     .replace(/\$\$([\s\S]*?)\$\$/g, replaceWithMathBlock);
+
+  // === FIX: ESCAPE UNDERSCORES IN CITATION KEYS ===
+  // latex.js crashes on underscores in text mode (e.g. "ref_1").
+  // Since we have already extracted math blocks, it is safe to escape these specific patterns.
+  content = content.replace(/ref_(\d+)/g, 'ref\\_$1');
 
   // === GRAPHICS & DIAGRAMS ===
   // Extract TikZ environments before other graphics processing
@@ -692,10 +752,11 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
 
         // Safety check: Ensure \end{document} exists
         let finalLatex = sanitized;
-        if (!/(^|[^\\])\\end\{document\}/.test(finalLatex)) {
-          console.warn('[LaTeX Preview] Valid \\end{document} missing. Appending it.');
-          finalLatex += '\n\\end{document}';
-        }
+        // REMOVED: We now strip the document environment, so we don't need to enforce \end{document}
+        // if (!/(^|[^\\])\\end\{document\}/.test(finalLatex)) {
+        //   console.warn('[LaTeX Preview] Valid \\end{document} missing. Appending it.');
+        //   finalLatex += '\n\\end{document}';
+        // }
 
         // Create generator and parse
         const generator = new latexjs.HtmlGenerator({

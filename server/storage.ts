@@ -32,6 +32,7 @@ export class SQLiteStorage implements IStorage {
       latexContent: insertJob.latexContent || null,
       enhancements: insertJob.enhancements || null,
       logs: null,
+      progress: null, // Initialize progress as null
       error: insertJob.error || null,
       id,
       createdAt: now,
@@ -45,7 +46,7 @@ export class SQLiteStorage implements IStorage {
   }
 
   async updateConversionJob(id: string, updates: Partial<ConversionJob>): Promise<ConversionJob | undefined> {
-    console.log(`[Storage] Updating job ${id} with keys: ${Object.keys(updates).join(', ')}`);
+    // console.log(`[Storage] Updating job ${id} with keys: ${Object.keys(updates).join(', ')}`); // Reduced verbosity
     await db.update(conversionJobs)
       .set(updates)
       .where(eq(conversionJobs.id, id));

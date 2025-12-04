@@ -6,10 +6,12 @@ export class OpenRouterProvider implements AIProvider {
     private client: OpenAI;
     private config: ProviderConfig;
     public id: string = "openrouter";
+    public model: string;
     public supportsResearch: boolean = true;
 
     constructor(config: ProviderConfig) {
         this.config = config;
+        this.model = config.model;
         this.client = new OpenAI({
             apiKey: config.apiKey,
             baseURL: "https://openrouter.ai/api/v1",

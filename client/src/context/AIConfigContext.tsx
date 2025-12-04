@@ -1,17 +1,21 @@
-/*
- * GOSPEL RULE: NEVER USE replace_file_content OR multi_replace_file_content.
- * ALWAYS USE write_to_file.
- * REASON: THESE TOOLS ARE BROKEN AND WILL CORRUPT FILES. THIS IS A PLATFORM BUG.
- */
-import React, { createContext, useState, useEffect, ReactNode } from "react";
-import { AIConfig, ProviderConfig, SearchConfig } from "@shared/schema";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { AIConfig, ProviderConfig, SearchConfig, defaultAIConfig } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
-const STORAGE_KEY = "ai_config_v1";
+interface AIConfigContextType {
+    config: AIConfig;
+    updateConfig: (newConfig: Partial<AIConfig>) => void;
+    updateProviderConfig: (type: keyof AIConfig, updates: Partial<ProviderConfig>) => void;
+    resetConfig: () => void;
+    verifyConnection: (scope?: string) => Promise<boolean>;
+    isVerifying: boolean;
+}
 
 const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
     provider: "poe",
     apiKey: "",
-    model: "Claude-3.5-Sonnet",
+    model: "Claude-Sonnet-4.5",
     isVerified: false
 };
 
@@ -22,156 +26,136 @@ const DEFAULT_SEARCH_CONFIG: SearchConfig = {
 
 const DEFAULT_CONFIG: AIConfig = {
     writer: { ...DEFAULT_PROVIDER_CONFIG },
-    librarian: { ...DEFAULT_PROVIDER_CONFIG, model: "Gemini-2.5-Pro" },
+    librarian: { ...DEFAULT_PROVIDER_CONFIG, model: "Gemini-3.0-Pro" },
     strategist: { ...DEFAULT_PROVIDER_CONFIG },
     search: { ...DEFAULT_SEARCH_CONFIG }
 };
 
-interface AIConfigContextType {
-    config: AIConfig;
-    updateWriter: (updates: Partial<ProviderConfig>) => void;
-    updateLibrarian: (updates: Partial<ProviderConfig>) => void;
-    updateStrategist: (updates: Partial<ProviderConfig>) => void;
-    updateSearch: (updates: Partial<SearchConfig>) => void;
-    setAgentVerified: (agent: 'writer' | 'librarian' | 'strategist', isVerified: boolean) => void;
-    resetConfig: () => void;
-    getHeaders: () => { "X-AI-Config": string };
-}
+const AIConfigContext = createContext<AIConfigContextType | undefined>(undefined);
 
-export const AIConfigContext = createContext<AIConfigContextType>(null!);
-
-export function AIConfigProvider({ children }: { children: ReactNode }) {
+export function AIConfigProvider({ children }: { children: React.ReactNode }) {
+    // Initialize from localStorage or defaults
     const [config, setConfig] = useState<AIConfig>(() => {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
+        const saved = localStorage.getItem("ai_config");
+        if (saved) {
             try {
-                let parsed = JSON.parse(stored);
-
-                // Safety check: Ensure parsed is a non-null object
-                if (!parsed || typeof parsed !== 'object') {
-                    return DEFAULT_CONFIG;
-                }
-
-                // Migration: Handle old global isVerified flag
-                const oldGlobalVerified = parsed.isVerified;
-
-                // Migration: If 'writer' is missing, use default
-                if (!parsed.writer) {
-                    parsed.writer = { ...DEFAULT_CONFIG.writer };
-                }
-                // Ensure writer has isVerified field
-                if (typeof parsed.writer.isVerified === 'undefined') {
-                    parsed.writer.isVerified = oldGlobalVerified || false;
-                }
-
-                // Migration: 'researcher' -> 'librarian'
-                if (parsed.researcher && !parsed.librarian) {
-                    parsed.librarian = parsed.researcher;
-                    delete parsed.researcher;
-                }
-                // If 'librarian' is still missing, use default
-                if (!parsed.librarian) {
-                    parsed.librarian = { ...DEFAULT_CONFIG.librarian };
-                }
-                // Ensure librarian has isVerified field
-                if (typeof parsed.librarian.isVerified === 'undefined') {
-                    parsed.librarian.isVerified = oldGlobalVerified || false;
-                }
-
-                // Migration: 'editor' -> 'strategist'
-                if (parsed.editor && !parsed.strategist) {
-                    parsed.strategist = parsed.editor;
-                    delete parsed.editor;
-                }
-                // If 'strategist' is still missing (old 2-agent config), copy 'writer' or use default
-                if (!parsed.strategist) {
-                    parsed.strategist = parsed.writer ? { ...parsed.writer } : { ...DEFAULT_CONFIG.strategist };
-                }
-                // Ensure strategist has isVerified field
-                if (typeof parsed.strategist.isVerified === 'undefined') {
-                    parsed.strategist.isVerified = oldGlobalVerified || false;
-                }
-
-                // Migration: If 'search' is missing, use default
-                if (!parsed.search) {
-                    parsed.search = { ...DEFAULT_CONFIG.search };
-                }
-
-                // Remove old global isVerified if it exists
-                delete parsed.isVerified;
-
-                return parsed as AIConfig;
+                const parsed = JSON.parse(saved);
+                // Merge with defaults to ensure structure
+                return { ...DEFAULT_CONFIG, ...parsed };
             } catch (e) {
-                console.error("Failed to parse AI Config", e);
-                // Fallback to default config on error
+                console.error("Failed to parse saved config", e);
                 return DEFAULT_CONFIG;
             }
         }
         return DEFAULT_CONFIG;
     });
 
+    const [isVerifying, setIsVerifying] = useState(false);
+    const { toast } = useToast();
+
+    // Persist to localStorage whenever config changes
     useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+        localStorage.setItem("ai_config", JSON.stringify(config));
     }, [config]);
 
-    const updateWriter = (updates: Partial<ProviderConfig>) => {
-        setConfig(prev => ({
-            ...prev,
-            writer: { ...prev.writer, ...updates, isVerified: false }
-        }));
+    const updateConfig = (newConfig: Partial<AIConfig>) => {
+        setConfig(prev => ({ ...prev, ...newConfig }));
     };
 
-    const updateLibrarian = (updates: Partial<ProviderConfig>) => {
-        setConfig(prev => ({
-            ...prev,
-            librarian: { ...prev.librarian, ...updates, isVerified: false }
-        }));
-    };
+    const updateProviderConfig = (type: keyof AIConfig, updates: Partial<ProviderConfig>) => {
+        setConfig(prev => {
+            const current = prev[type] as ProviderConfig;
+            // If critical fields change, reset verification status
+            const needsReverification = updates.provider !== undefined || updates.apiKey !== undefined || updates.model !== undefined;
 
-    const updateStrategist = (updates: Partial<ProviderConfig>) => {
-        setConfig(prev => ({
-            ...prev,
-            strategist: { ...prev.strategist, ...updates, isVerified: false }
-        }));
-    };
-
-    const updateSearch = (updates: Partial<SearchConfig>) => {
-        setConfig(prev => ({
-            ...prev,
-            search: { ...(prev.search || DEFAULT_SEARCH_CONFIG), ...updates }
-        }));
-    };
-
-    const setAgentVerified = (agent: 'writer' | 'librarian' | 'strategist', isVerified: boolean) => {
-        setConfig(prev => ({
-            ...prev,
-            [agent]: { ...prev[agent], isVerified }
-        }));
+            return {
+                ...prev,
+                [type]: {
+                    ...current,
+                    ...updates,
+                    isVerified: needsReverification ? false : current.isVerified
+                }
+            };
+        });
     };
 
     const resetConfig = () => {
         setConfig(DEFAULT_CONFIG);
-        localStorage.removeItem(STORAGE_KEY);
+        toast({
+            title: "Configuration Reset",
+            description: "AI settings have been restored to defaults.",
+        });
     };
 
-    const getHeaders = () => {
-        return {
-            "X-AI-Config": JSON.stringify(config)
-        };
+    const verifyConnection = async (scope?: string): Promise<boolean> => {
+        setIsVerifying(true);
+        try {
+            // Send current config to backend for verification
+            // FIX: Spread config into body so backend receives { writer, librarian, ... } at top level
+            const res = await apiRequest("POST", "/api/verify-ai-config", {
+                ...config,
+                scope
+            });
+
+            const data = await res.json();
+
+            if (data.status === "ok" || data.success) {
+                // Mark verified providers
+                setConfig(prev => {
+                    const next = { ...prev };
+                    if (scope) {
+                        // Update specific provider
+                        if (scope === 'writer' || scope === 'librarian' || scope === 'strategist') {
+                            (next[scope] as ProviderConfig).isVerified = true;
+                        }
+                    } else {
+                        // Update all
+                        (next.writer as ProviderConfig).isVerified = true;
+                        (next.librarian as ProviderConfig).isVerified = true;
+                        (next.strategist as ProviderConfig).isVerified = true;
+                    }
+                    return next;
+                });
+
+                toast({
+                    title: "Connection Verified",
+                    description: scope ? `${scope} connected successfully.` : "All AI services connected successfully.",
+                    variant: "default" // Success
+                });
+                return true;
+            } else {
+                throw new Error(data.error || "Verification failed");
+            }
+        } catch (error: any) {
+            toast({
+                title: "Connection Failed",
+                description: error.message,
+                variant: "destructive"
+            });
+            return false;
+        } finally {
+            setIsVerifying(false);
+        }
     };
 
     return (
         <AIConfigContext.Provider value={{
             config,
-            updateWriter,
-            updateLibrarian,
-            updateStrategist,
-            updateSearch,
-            setAgentVerified,
+            updateConfig,
+            updateProviderConfig,
             resetConfig,
-            getHeaders
+            verifyConnection,
+            isVerifying
         }}>
             {children}
         </AIConfigContext.Provider>
     );
+}
+
+export function useAIConfig() {
+    const context = useContext(AIConfigContext);
+    if (context === undefined) {
+        throw new Error("useAIConfig must be used within an AIConfigProvider");
+    }
+    return context;
 }

@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2025-12-04
+### Added
+- **Formal Academic Citations**: Enforced standard `\cite{ref_X}` syntax and automatic `\begin{thebibliography}` generation.
+- **Robust Previewer**: Implemented "Fragment Rendering" strategy in `LatexPreview.tsx` to bypass `latex.js` limitations with complex document structures.
+- **Blockquote Support**: Added automatic conversion of text-only equations to styled HTML blockquotes to prevent rendering issues.
+
+### Fixed
+- **Database Migration**: Added missing `progress` column to `conversion_jobs` table.
+- **Preview Crash**: Resolved `SyntaxError: 2 levels of balancing remaining` by stripping `\documentclass` and `\begin{document}` wrappers.
+- **Underscore Crash**: Fixed `SyntaxError: "_" found` by automatically escaping underscores in citation keys (`ref_1` -> `ref\_1`).
+- **Cut-off Text**: Fixed issue where long sentences wrapped in `\begin{equation*}` were rendered as single non-breaking lines.
+
 ## [1.1.0] - 2025-12-04
 ### Added
 - **Latest AI Models (Dec 2025)**: Updated default configurations to support the latest models:

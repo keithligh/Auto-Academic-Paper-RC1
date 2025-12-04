@@ -102,6 +102,16 @@ export const enhancementSchema = z.object({
 
 export type Enhancement = z.infer<typeof enhancementSchema>;
 
+// Job Progress Schema for Micro-Checkpoints
+export const jobProgressSchema = z.object({
+  phase: z.string(),       // e.g., "Phase 1: Drafting"
+  step: z.string(),        // e.g., "Drafting section: Introduction"
+  progress: z.number(),    // 0-100 percentage
+  details: z.string().optional() // Granular detail e.g. "Researching claim 4/6"
+});
+
+export type JobProgress = z.infer<typeof jobProgressSchema>;
+
 // Conversion Job represents a document conversion request
 export const conversionJobs = sqliteTable("conversion_jobs", {
   id: text("id").primaryKey(), // UUID generated in application
@@ -119,6 +129,7 @@ export const conversionJobs = sqliteTable("conversion_jobs", {
   latexContent: text("latex_content"), // Generated LaTeX
   enhancements: text("enhancements", { mode: "json" }).$type<Enhancement[]>(), // Array of enhancement objects
   logs: text("logs", { mode: "json" }).$type<string[]>(), // Real-time processing logs
+  progress: text("progress", { mode: "json" }).$type<JobProgress>(), // Micro-checkpoint progress
   error: text("error"), // Error message if failed
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   completedAt: integer("completed_at", { mode: "timestamp" }),
@@ -130,7 +141,8 @@ export const insertConversionJobSchema = createInsertSchema(conversionJobs).omit
   completedAt: true,
 }).extend({
   analysis: documentAnalysisSchema.optional().nullable(),
-  enhancements: z.array(enhancementSchema).optional().nullable()
+  enhancements: z.array(enhancementSchema).optional().nullable(),
+  progress: jobProgressSchema.optional().nullable()
 });
 
 export type InsertConversionJob = z.infer<typeof insertConversionJobSchema>;
@@ -199,19 +211,19 @@ export const defaultAIConfig: AIConfig = {
   writer: {
     provider: "poe",
     apiKey: "",
-    model: "Claude-3.5-Sonnet",
+    model: "Claude-Sonnet-4.5",
     isVerified: false
   },
   librarian: {
     provider: "poe",
     apiKey: "",
-    model: "Gemini-2.5-Pro",
+    model: "Gemini-3.0-Pro",
     isVerified: false
   },
   strategist: {
     provider: "poe",
     apiKey: "",
-    model: "Claude-3.5-Sonnet", // Defaults to Writer-like model
+    model: "Claude-Sonnet-4.5", // Defaults to Writer-like model
     isVerified: false
   }
 };

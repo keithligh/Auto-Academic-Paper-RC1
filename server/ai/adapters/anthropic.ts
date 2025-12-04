@@ -6,10 +6,12 @@ export class AnthropicProvider implements AIProvider {
     private client: Anthropic;
     private config: ProviderConfig;
     public id: string = "anthropic";
+    public model: string;
     public supportsResearch: boolean = false;
 
     constructor(config: ProviderConfig) {
         this.config = config;
+        this.model = config.model;
         this.client = new Anthropic({
             apiKey: config.apiKey,
         });

@@ -11,10 +11,12 @@ export class PoeProvider implements AIProvider {
     private client: OpenAI;
     private config: ProviderConfig;
     public id: string = "poe";
+    public model: string;
     public supportsResearch: boolean = true;
 
     constructor(config: ProviderConfig) {
         this.config = { ...config, model: config.model.trim() }; // Ensure model is trimmed
+        this.model = this.config.model;
 
         this.client = new OpenAI({
             apiKey: config.apiKey,

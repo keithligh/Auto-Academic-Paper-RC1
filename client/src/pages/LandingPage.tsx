@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { enhancementLevels } from "@shared/schema";
-import { useAIConfig } from "@/hooks/useAIConfig";
+import { useAIConfig } from "@/context/AIConfigContext";
 
 // Generate a unique ID for file uploads
 function generateUploadId() {

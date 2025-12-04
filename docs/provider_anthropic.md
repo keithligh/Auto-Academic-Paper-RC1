@@ -1,7 +1,7 @@
 # Anthropic API Integration Guide
 
 ## Overview
-Anthropic provides the Claude family of models (e.g., Claude 3.5 Sonnet) via the Messages API. It **does NOT support native web search** via the API.
+Anthropic provides the Claude family of models via the Messages API. It **does NOT support native web search** via the API.
 
 > **CRITICAL WARNING**: Claude models cannot be used for the **Research Agent** because they lack online search capabilities. They are strictly for the **Writer** and **Editor** agents.
 
@@ -9,6 +9,10 @@ Anthropic provides the Claude family of models (e.g., Claude 3.5 Sonnet) via the
 - **Base URL**: `https://api.anthropic.com/v1`
 - **Authentication**: `x-api-key` header
 - **Library**: `@anthropic-ai/sdk` (Node.js) or standard HTTP requests
+
+## Recommended Models (Dec 2025)
+*   **Claude-Sonnet-4.5**: Best balance of speed and intelligence. Excellent for coding and agentic tasks.
+*   **Claude-Opus-4.5**: Maximum reasoning capability. Best for complex "Thinker" tasks.
 
 ## API Usage (Messages API)
 
@@ -22,7 +26,7 @@ const anthropic = new Anthropic({
 });
 
 const msg = await anthropic.messages.create({
-  model: "claude-3-5-sonnet-20241022",
+  model: "claude-sonnet-4.5", // Updated model ID
   max_tokens: 1000,
   messages: [
     { role: "user", content: "Write a summary of..." }
