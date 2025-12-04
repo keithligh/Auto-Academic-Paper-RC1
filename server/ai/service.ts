@@ -156,10 +156,14 @@ export class AIService {
     5. **ENHANCE**: Propose diagrams, tables, or formalisms that clarify the complex ideas.
 
     PROCESS:
-    1. **Read** the Input Text.
+    1. **Read** the Input Text provided below.
     2. **Plan** the sections based on the Input Text's content.
     3. **Draft** the content in LaTeX format (but WITHOUT citations for now).
     4. **Create** enhancements (diagrams/tables) to support the arguments.
+
+    === SOURCE MATERIAL START ===
+    ${content}
+    === SOURCE MATERIAL END ===
 
     TECHNICAL CONSTRAINTS (WEB PREVIEW COMPATIBILITY):
     - The output will be rendered in a lightweight web-based LaTeX previewer (tikzjax in iframe).
@@ -184,10 +188,7 @@ export class AIService {
     - Output valid JSON matching the schema.
 `;
 
-        const userPrompt = `Transform this text into a ${paperType} (${enhancementLevel} enhancements).
-
-INPUT TEXT:
-${content}
+        const userPrompt = `Transform the SOURCE MATERIAL provided above into a ${paperType} (${enhancementLevel} enhancements).
 
 OUTPUT SCHEMA:
 {
