@@ -16,9 +16,13 @@ async function checkLatestJob() {
         console.log("=== LATEST JOB STATUS ===");
         console.log(`ID: ${job.id}`);
         console.log(`Status: ${job.status}`);
+        console.log(`File Name: ${job.originalFileName}`);
+        console.log(`File Type: ${job.fileType}`);
         console.log(`Created At: ${job.createdAt}`);
         console.log(`Completed At: ${job.completedAt}`);
         console.log(`Error: ${job.error}`);
+        console.log(`Original Content Length: ${job.originalContent ? job.originalContent.length : 'NULL'}`);
+        console.log(`LaTeX Content Length: ${job.latexContent ? job.latexContent.length : 'NULL'}`);
 
         console.log("\n=== LOGS ===");
         if (job.logs && Array.isArray(job.logs)) {

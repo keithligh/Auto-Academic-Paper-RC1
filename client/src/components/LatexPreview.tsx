@@ -416,7 +416,13 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     //.replace(/\\textcolor\{[^}]+\}\{([^}]*)\}/g, '$1') // REMOVED: Handled in parseLatexFormatting
     .replace(/\\checkmark/g, '✓') // Replace \checkmark with unicode
     .replace(/\\checkmark/g, '✓')
-    .replace(/\\smalltriangleup/g, '\\triangle');
+    .replace(/\\smalltriangleup/g, '\\triangle')
+    // FIX: latex.js does not support \hfill.
+    // We handle the common QED case (right-aligned box) and strip others.
+    .replace(/\\hfill\s*\\(\$|\\\(|\\\[)?(square|Box|square)(\$|\\\)|\\])?/gi, (match) => {
+      return createPlaceholder('<span style="float:right; font-size: 1.2em;">&#9633;</span>');
+    })
+    .replace(/\\hfill/g, ' '); // Replace remaining \hfill with space to prevent crash
 
   // === FIX: UNWRAP TEXT-ONLY EQUATIONS ===
   // The AI sometimes wraps long text sentences in \begin{equation*} \text{...} \end{equation*}.
