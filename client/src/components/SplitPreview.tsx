@@ -14,8 +14,8 @@ interface SplitPreviewProps {
 }
 
 export function SplitPreview({ originalContent, latexContent, fileName }: SplitPreviewProps) {
-  // Default to "split" view as requested, but with a 30:70 ratio favoring preview
-  const [activeView, setActiveView] = useState<"split" | "original" | "latex">("split");
+  // Default to "latex" view as requested
+  const [activeView, setActiveView] = useState<"original" | "latex">("latex");
   const [latexViewMode, setLatexViewMode] = useState<"code" | "preview">("preview");
   const { toast } = useToast();
 
@@ -42,14 +42,6 @@ export function SplitPreview({ originalContent, latexContent, fileName }: SplitP
         <h3 className="text-lg font-semibold text-foreground">Document Preview</h3>
         <div className="flex gap-2">
           <Button
-            variant={activeView === "split" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setActiveView("split")}
-            data-testid="button-view-split"
-          >
-            Split View
-          </Button>
-          <Button
             variant={activeView === "original" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("original")}
@@ -70,85 +62,6 @@ export function SplitPreview({ originalContent, latexContent, fileName }: SplitP
 
       {/* Desktop View */}
       <div className="hidden md:flex flex-1 gap-4">
-        {/* Split View: Show Both Panels with 30:70 Ratio */}
-        {activeView === "split" && (
-          <>
-            {/* Left Panel: 30% Width */}
-            <div className="w-[30%] min-w-[300px] flex-shrink-0">
-              <Card className="h-full flex flex-col">
-                <div className="p-4 border-b border-card-border flex items-center gap-2">
-                  <DocumentTextIcon className="w-5 h-5 text-muted-foreground" />
-                  <h4 className="text-sm font-medium text-foreground">Original Content</h4>
-                </div>
-                <ScrollArea className="flex-1 p-6">
-                  <pre className="whitespace-pre-wrap break-words font-sans text-sm text-foreground leading-relaxed bg-transparent">
-                    {originalContent}
-                  </pre>
-                </ScrollArea>
-              </Card>
-            </div>
-
-            <div className="w-px bg-border flex-shrink-0" />
-
-            {/* Right Panel: Remaining Width (approx 70%) */}
-            <div className="flex-1 min-w-0">
-              <Card className="flex flex-col shadow-md border-primary/20">
-                <div className="p-4 border-b border-card-border flex items-center justify-between bg-gray-50/50">
-                  <div className="flex items-center gap-2">
-                    <EyeIcon className="w-5 h-5 text-primary" />
-                    <h4 className="text-sm font-medium text-foreground">Live Preview</h4>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCopyLatex}
-                      className="h-8 px-3"
-                      title="Copy LaTeX Code"
-                    >
-                      <ClipboardDocumentIcon className="w-4 h-4 mr-1" />
-                      Copy
-                    </Button>
-                    <Button
-                      variant={latexViewMode === "code" ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setLatexViewMode("code")}
-                      data-testid="button-latex-code"
-                      className="h-8 px-3"
-                    >
-                      <CodeBracketIcon className="w-4 h-4 mr-1" />
-                      Code
-                    </Button>
-                    <Button
-                      variant={latexViewMode === "preview" ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setLatexViewMode("preview")}
-                      data-testid="button-latex-preview"
-                      className="h-8 px-3"
-                    >
-                      <EyeIcon className="w-4 h-4 mr-1" />
-                      Preview
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex-1 bg-gray-100/50">
-                  {latexViewMode === "code" ? (
-                    <div className="p-6 bg-muted/30">
-                      <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground leading-relaxed bg-transparent">
-                        {latexContent}
-                      </pre>
-                    </div>
-                  ) : (
-                    <div className="flex justify-center p-4">
-                      <LatexPreview latexContent={latexContent} className="w-full shadow-sm bg-white" />
-                    </div>
-                  )}
-                </div>
-              </Card>
-            </div>
-          </>
-        )}
-
         {/* Single View: Original Only */}
         {activeView === "original" && (
           <div className="flex-1">

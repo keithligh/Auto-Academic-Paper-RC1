@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2025-12-04
+### Changed
+- **UI Simplification**: Removed "Split View" mode. The interface now defaults to the "LaTeX Preview" for a cleaner, focused experience.
+- **Preview Stability**: Added support for `\hfill` and Q.E.D. symbols (`\hfill$\square$`) in the LaTeX previewer, preventing crashes in mathematical proofs.
+
 ## [1.1.1] - 2025-12-04
 ### Added
 - **Formal Academic Citations**: Enforced standard `\cite{ref_X}` syntax and automatic `\begin{thebibliography}` generation.
