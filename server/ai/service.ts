@@ -168,6 +168,7 @@ CRITICAL INSTRUCTIONS:
 - **NO TRAILING NEWLINES:** Do NOT output excessive newlines (\\n\\n\\n) at the end of sections. Be concise.
 - **NO HALLUCINATIONS:** Do NOT generate repetitive or looping text. Stick to the input context.
 - **NO COLORS:** Do NOT use \\textcolor, \\color, or any color commands. Academic papers must be black and white.
+- **SUBJECT MATTER ADHERENCE:** You MUST write about the TOPIC of the INPUT TEXT. Do NOT write a generic paper about "how to write a paper" or "text transformation". If the input is about "Love", write about "Love".
 - Output valid JSON matching the schema.
 `;
 
