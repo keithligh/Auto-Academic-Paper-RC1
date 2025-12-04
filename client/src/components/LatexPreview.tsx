@@ -604,7 +604,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     // We wrap [ in {} to force it as text: {[}
     .replace(/(^|\n)\s*\[/g, '$1{[}')
     // Also replace \\ with \newline to avoid \\[ ambiguity
-    .replace(/\\\\/g, '\\newline');
+    // CRITICAL FIX: Add space to prevent \newlinebegin (concatenation with next command)
+    .replace(/\\\\/g, ' \\newline ');
 
   // Robustly handle \parbox{width}{content} -> <div style="width:...">content</div>
   const processParboxes = (latex: string): string => {
