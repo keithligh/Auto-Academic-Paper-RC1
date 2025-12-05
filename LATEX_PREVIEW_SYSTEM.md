@@ -54,6 +54,8 @@ Professional LaTeX preambles are full of packages that crash browser parsers. We
 \begin{document}
 ```
 
+**Critically**, we do **NOT** include `\usepackage{amsmath}` or other standard packages in this fake preamble, because `latex.js` attempts to load them via `require()` calls that fail in the browser environment. We rely on KaTeX (for math) and our custom logic to handle those features.
+
 ### 2. Math Rendering (KaTeX)
 
 `latex.js` has poor math support. We use **KaTeX**, which is the gold standard for web-based math.
@@ -69,9 +71,12 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 
 - **Extraction**: Regex finds `\begin{tikzpicture}` environments.
 - **Placeholder**: Replaced with `LATEXPREVIEWTIKZBLOCK{N}`.
-- **Rendering**: We construct a blob or srcdoc containing a complete HTML page that loads **TikZJax**.
-- **Isolation**: This page is loaded into an `<iframe>`. This isolates the heavy processing and CSS conflicts.
-- **Unsupported Diagrams**: We explicitly **DELETE** `forest` environments and `\includegraphics` commands, replacing them with `[Diagram]` or `[Image]` placeholders, as these heavily rely on external packages or files.
+- **Rendering**: We construct a complete HTML page that loads **TikZJax** and inject it into an `<iframe>`.
+- **Environment Wrapping**: We explicitly wrap the extracted TikZ code in `\begin{tikzpicture} ... \end{tikzpicture}` inside the iframe script tag. This ensures TikZJax has the correct context.
+- **ASCII Sanitization**: We strip non-ASCII characters from the TikZ code before injection to prevent `btoa` errors in the TikZJax library.
+- **No Typography Normalization**: We explicitly **DO NOT** apply global typography normalization (like converting `--` to `–`) to TikZ blocks. TikZ relies on `--` for path definitions, and converting it to an en-dash breaks the syntax.
+- **Isolation**: The `<iframe>` isolates the heavy processing and CSS conflicts.
+- **Unsupported Diagrams**: We explicitly **DELETE** `forest` environments and `\includegraphics` commands, replacing them with `[Diagram]` or `[Image]` placeholders.
 
 ### 4. Table Rendering (Manual Parsing & Nuking)
 
@@ -202,7 +207,7 @@ AI models often hallucinate a "References" section header *before* the bibliogra
 
 If the AI fails to generate a `\begin{document}`, the system doesn't crash.
 
-- **The Safety Net**: It detects the absence of the tag and automatically wraps the entire content in a standard `article` template with `amsmath`, `amssymb`, and `graphicx` packages pre-loaded.
+- **The Safety Net**: It detects the absence of the tag and automatically wraps the entire content in a standard `article`.
 
 ### TikZ Iframe "Silence"
 
@@ -252,7 +257,7 @@ When we inject a block element (like a `<div>` for a chart) into the DOM, `latex
 
 ## 14. The Latex.js Strict Containment Protocol
 
-latex.js` as the "Single Source of Failure." To mitigate this, we enforce a strict containment protocol.
+`latex.js` is the "Single Source of Failure." To mitigate this, we enforce a strict containment protocol.
 
 ### What `latex.js` is ALLOWED to Parse (The Safe Zone)
 
@@ -408,13 +413,13 @@ Users often paste AI output that includes markdown code fences.
 
 These details ensure a polished user experience by handling edge cases.
 
-### Unicode & Typography Normalization
+### Unicode & Typography
 
-We pre-process common typographic inputs to ensure they render correctly in HTML:
+We pre-process specific unicode characters, **BUT WE DO NOT APPLY GLOBAL TYPOGRAPHY NORMALIZATION**.
 
-- **Dashes**: Em-dashes (`—`) and En-dashes (`–`) are converted to TeX ligatures (`---`, `--`) to ensure correct font handling.
-- **Quotes**: Smart quotes (`“`, `”`) are converted to TeX-style quotes (`` `` ``, `''`) to prevent encoding issues.
-- **Circled Text**: `\textcircled{x}` is simplified to `(x)` as `latex.js` does not support specific circled glyphs.
+- **Why**: Applying global replacement of `--` to `–` (en-dash) **CORRUPTS TIKZ CODE**. TikZ uses `--` to define paths.
+- **The Rule**: Dashes are left as-is. Smart quotes are allowed but not forced.
+- **Circled Text**: `\textcircled{x}` is simplified to `(x)`.
 
 ### Command Stripping (The "No-Op" List)
 
@@ -430,4 +435,4 @@ Certain commands are actively removed to prevent errors or clutter:
 If the renderer encounters a catastrophic failure (e.g., `latex.js` throws an exception):
 
 - **The Guard**: A `try-catch` block wraps the entire render process.
-- **The UI**: An `Alert` component (shadcn/ui) is rendered in place of the document, explaining that "The LaTeX contains features that cannot be rendered in the browser" but reassuring the user that the file is safe for server-side compilation.
+- **The UI**: An `Alert` component (shadcn/ui) is rendered in place of the document.

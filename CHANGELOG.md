@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2025-12-05
+### Fixed
+- **TikZ Coordinate Error**: Removed aggressive typography normalization (`--` to `–`) which was corrupting TikZ path syntax.
+- **TikZ Context**: Explicitly wrapped extracted TikZ code in `\begin{tikzpicture}` environment to prevent "Undefined control sequence" errors.
+- **TikZ Encoding**: Added ASCII sanitization to prevent `btoa` crashes on unicode characters.
+- **Browser Compatibility**: Removed `amsmath` and `graphicx` from the client-side safe preamble to eliminate `require is not defined` errors.
+- **Build Stability**: Fixed duplicate variable declarations in `LatexPreview.tsx` via code cleanup.
+
 ## [1.1.2] - 2025-12-04
 ### Changed
 - **UI Simplification**: Removed "Split View" mode. The interface now defaults to the "LaTeX Preview" for a cleaner, focused experience.

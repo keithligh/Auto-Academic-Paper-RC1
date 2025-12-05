@@ -107,7 +107,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   };
 
   // === HELPER: Create TikZ iframe block ===
-  const createTikzBlock = (tikzCode: string): string => {
+  const createTikzBlock = (tikzCode: string, options: string = ''): string => {
     const id = `LATEXPREVIEWTIKZ${blockCount++}`;
     if (tikzCode.includes('\\begin{axis}') || tikzCode.includes('\\addplot')) {
       blocks[id] = `<div class="latex-placeholder-box warning">⚠️ Complex diagram (pgfplots) - renders in PDF only</div>`;
@@ -119,13 +119,26 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const safeTikz = tikzCode
       .replace(/[^\x00-\x7F]/g, ''); // Nuclear option: remove any remaining non-ASCII
 
+    // DEFAULTS: "Pure Density Reduction" (User's Logic)
+    // 1. REMOVED scale (It zooms content, which is bad).
+    // 2. x=5cm, y=5cm: Massive expansion of the coordinate grid. Points move apart.
+    // 3. node distance=7cm: Relative nodes move far apart.
+    // 4. font=\\small: Text stays small.
+    // DENSITY = Content / Space. We max Space, min Content.
+    const spacingOverrides = 'x=5cm, y=5cm, node distance=7cm, every node/.append style={font=\\small}';
+
+    let finalOptions = `[${spacingOverrides}]`;
+    if (options && options.trim().length > 2) {
+      finalOptions = options.replace(/\]\s*$/, `, ${spacingOverrides}]`);
+    }
+
     const iframeHtml = `<!DOCTYPE html>
 <html>
 <head>
   <link rel="stylesheet" href="https://tikzjax.com/v1/fonts.css">
   <script src="https://tikzjax.com/v1/tikzjax.js"></script>
   <style>
-    body { margin: 0; padding: 10px; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    body { margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; overflow: visible; }
     svg { overflow: visible; }
   </style>
   <script>
@@ -135,7 +148,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 </head>
 <body>
   <script type="text/tikz">
-    \\begin{tikzpicture}
+    \\begin{tikzpicture}${finalOptions}
     ${safeTikz}
     \\end{tikzpicture}
   </script>
@@ -143,9 +156,14 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const observer = new MutationObserver(() => {
       const svg = document.querySelector('svg');
       if (svg && window.frameElement) {
-        const rect = svg.getBoundingClientRect();
-        window.frameElement.style.height = (rect.height + 30) + 'px';
-        window.frameElement.style.width = (rect.width + 30) + 'px';
+        // use scroll dimensions to capture the full extent + padding
+        const w = Math.max(document.body.scrollWidth, svg.getBoundingClientRect().width);
+        const h = Math.max(document.body.scrollHeight, svg.getBoundingClientRect().height);
+        
+        window.frameElement.style.height = (h + 5) + 'px';
+        window.frameElement.style.width = (w + 5) + 'px';
+        
+        console.log('TikZ Resize:', { w, h, setH: h+150 });
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -153,7 +171,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 </body>
 </html>`;
     const srcdoc = iframeHtml.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-    blocks[id] = `<iframe srcdoc="${srcdoc}" style="width: 100%; border: none; min-height: 100px; overflow: hidden;"></iframe>`;
+    // Wrapper Style: removed overflow: hidden, allow auto if needed
+    blocks[id] = `<iframe srcdoc="${srcdoc}" style="width: 100%; border: none; min-height: 100px; overflow: visible;"></iframe>`;
     return `\n\n${id}\n\n`;
   };
 
@@ -261,7 +280,12 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   content = content.replace(/(?<!\\)\$([^$]+)(?<!\\)\$/g, (m, math) => createMathBlock(math, false));
 
   // --- B. TIKZ & IMAGES ---
-  content = content.replace(/\\begin\{tikzpicture\}([\s\S]*?)\\end\{tikzpicture\}/g, (m, body) => createTikzBlock(body));
+  // FIX: Allow whitespace \s* before the options group.
+  content = content.replace(/\\begin\{tikzpicture\}\s*(\[[\s\S]*?\])?([\s\S]*?)\\end\{tikzpicture\}/g, (m, options, body) => {
+    // Debug: Log what we caught to ensure overrides apply
+    console.log('TikZ Match:', { options, bodyLength: body.length });
+    return createTikzBlock(body, options);
+  });
   content = content.replace(/\\begin\{forest\}([\s\S]*?)\\end\{forest\}/g, () => createPlaceholder(`<div class="latex-placeholder-box">[Tree Diagram]</div>`));
   content = content.replace(/\\includegraphics\[.*?\]\{.*?\}/g, () => createPlaceholder(`<div class="latex-placeholder-box image">[Image]</div>`));
 
