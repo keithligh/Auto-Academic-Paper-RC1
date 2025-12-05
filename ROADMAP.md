@@ -14,10 +14,6 @@ The core "5-Phase Pipeline" and "BYOK Architecture" have been successfully imple
 -   [x] **Markdown Support:** Full support for `.md` file uploads.
 -   [x] **Local File Access:** "Open Uploads Folder" button for quick access.
 
-## 🚀 Future Plans
-
-*(Pending User Definition)*
-
 ## ⚠️ Maintenance Mode
 
 -   **No Bandaids:** Fix root causes only.

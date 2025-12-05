@@ -39,11 +39,10 @@ The **Auto Academic Paper** system uses a **human-like 5-phase research workflow
 **Purpose:** Generate the final LaTeX document and provide a robust browser preview.
 **Behavior:** 
 1.  **LaTeX Generation:** Deterministic formatting. Generates a standard `\begin{thebibliography}` section from the research data.
-2.  **Browser Preview:** Uses `LatexPreview.tsx` with a **Fragment Rendering Strategy**:
-    *   **Stripped Preamble:** Removes `\documentclass` and `\begin{document}` to prevent parser crashes.
-    *   **Manual Header:** Extracts and renders Title/Author as HTML.
-    *   **Blockquotes:** Converts text-only equations to styled HTML blockquotes.
-    *   **TikZ:** Rendered via isolated iframes (TikZJax).
+2.  **Browser Preview:** Uses `LatexPreview.tsx` with a **"Trojan Horse" Strategy**:
+    *   **Sanitization (The Shield):** Aggressively strips dangerous preambles and macros that crash browsers.
+    *   **Extraction (The Heist):** Steals complex elements (Math, TikZ, Tables) *before* the renderer sees them.
+    *   **Injection (The Trojan Horse):** Replaces stolen elements with placeholders, then surgically swaps them back with high-fidelity HTML (KaTeX, TikZJax) after the safe text render.
 **Output:** Final PDF/LaTeX and Interactive Preview.
 
 ---
@@ -130,7 +129,7 @@ Research is driven by **what we want to say**, not by pre-gathered resources. We
     -   **Throttling:** Log updates are throttled to prevent CPU spikes.
 -   **Sanitization:**
     -   **Server:** `sanitizeLatexOutput` in `server/ai/utils.ts`.
-    -   **Client:** `sanitizeLatexForBrowser` in `client/src/components/LatexPreview.tsx` (Fragment Rendering).
+    -   **Client:** `sanitizeLatexForBrowser` in `client/src/components/LatexPreview.tsx` (Trojan Horse Architecture).
 
 ---
 
