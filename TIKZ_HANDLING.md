@@ -84,6 +84,45 @@ Since the TikZ diagram size is unknown until render time, the iframe defaults to
 -   **Action**: Once found, it measures the SVG's `getBoundingClientRect()` and sets the `window.frameElement.style.height` and `width` on the parent page.
 -   **Result**: The iframe snaps to the exact size of the diagram.
 
+### Phase 7: The Density Reduction (Pure Coordinate Expansion)
+AI-generated TikZ diagrams often have cramped, overlapping elements because the AI uses tight spacing.
+
+**The Problem: Proportional Scaling Doesn't Work**
+-   Using `scale=X` in TikZ acts like a magnifying glass—it zooms EVERYTHING proportionally.
+-   If text overlaps at `scale=1`, it still overlaps at `scale=2` (just bigger).
+-   `Density = Content Size / Available Space`. Scaling increases both equally.
+
+**The Solution: Decouple Space from Content**
+We inject default options that expand the *coordinate system* while keeping *text compact*:
+
+```latex
+\begin{tikzpicture}[x=5cm, y=5cm, node distance=7cm, every node/.append style={font=\small}]
+```
+
+| Option | Effect | Default | Our Value |
+|--------|--------|---------|-----------|
+| `x=5cm` | Horizontal unit vector | 1cm | 5cm (5x expansion) |
+| `y=5cm` | Vertical unit vector | 1cm | 5cm (5x expansion) |
+| `node distance=7cm` | Spacing for relative positioning | 1cm | 7cm (7x expansion) |
+| `font=\small` | Text size | Normal | Small (reduces content size) |
+
+**Why These Values:**
+-   Default TikZ unit: 1cm
+-   Typical academic node with text: ~2-3cm wide
+-   Safe spacing to prevent overlap: ~2-3x node width
+-   Conservative: `5cm` provides ~2.5x safety margin
+
+**The Iframe Resize Logic:**
+The MutationObserver measures the resulting SVG using `scrollWidth`/`scrollHeight` (to capture full content extent) plus a small buffer:
+```javascript
+const w = Math.max(document.body.scrollWidth, svg.getBoundingClientRect().width);
+const h = Math.max(document.body.scrollHeight, svg.getBoundingClientRect().height);
+window.frameElement.style.height = (h + 5) + 'px';
+window.frameElement.style.width = (w + 5) + 'px';
+```
+
+The iframe has **fixed width** (100% of parent) and **dynamic height** (adapts to content).
+
 ---
 
 ## Summary of Critical Rules
@@ -93,3 +132,6 @@ Since the TikZ diagram size is unknown until render time, the iframe defaults to
 3.  **NEVER** normalize/prettify code inside a TikZ block (keep raw `--`).
 4.  **ALWAYS** wrap the injected code in `\begin{tikzpicture}`.
 5.  **ALWAYS** use an iframe.
+6.  **NEVER** use `scale=X` to fix density (it zooms everything proportionally).
+7.  **ALWAYS** expand the coordinate system (`x=`, `y=`, `node distance=`) to create space.
+8.  **ALWAYS** keep text compact (`font=\small`) to reduce content size.

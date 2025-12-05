@@ -157,6 +157,11 @@ These are the subtle engineering tricks that make the system robust and performa
 
 - **The TreeWalker Injection**: To swap placeholders with complex HTML, we don't use simple `innerHTML` replacement (which would destroy event listeners and re-parse the whole DOM). Instead, we use a `TreeWalker` to surgically locate specific text nodes containing our IDs (`LATEXPREVIEWBLOCK...`, `LATEXPREVIEWMATHBLOCK...`) and replace *only* those nodes (or their parent containers if isolated) with the pre-rendered content.
 - **Iframe Auto-Resizing**: The TikZ iframes contain a `MutationObserver` that watches the generated SVG. As soon as the diagram renders, the observer calculates the exact bounding box and sends a message to the parent window (`window.frameElement.style.height = ...`) to resize the iframe.
+- **TikZ Density Reduction**: AI-generated diagrams are often cramped. We inject default options to expand the coordinate system while keeping text compact:
+  - `x=5cm, y=5cm`: Expands the unit vectors (default 1cm) to 5cm.
+  - `node distance=7cm`: Increases spacing for relative positioning.
+  - `font=\small`: Keeps text compact.
+  - **Critical**: We do NOT use `scale=X` because it zooms everything proportionally (preserving density). See `TIKZ_HANDLING.md` Phase 7 for details.
 - **Heuristic Width Calculation**: For `\parbox`, we implement a heuristic parser that converts LaTeX lengths to CSS. It understands `0.5\textwidth` and converts it to `width: 50%`, ensuring multi-column layouts adapt to the browser window.
 - **Error Suppression**: The TikZJax library sometimes throws "message channel closed" errors in iframes. We inject a specific error handler script into the iframe to suppress these benign errors, keeping the console clean.
 - **Render Deduplication**: `latex.js` sometimes renders text nodes twice (once for measurement, once for display). Our injection logic tracks processed IDs in a `Set` to ensure we don't accidentally inject the same chart or formula twice.

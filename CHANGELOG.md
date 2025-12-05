@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.4] - 2025-12-05
+### Fixed
+- **TikZ Diagram Density**: Implemented "Pure Density Reduction" strategy to eliminate cramped/overlapping diagrams.
+  - Removed proportional `scale=X` option (which zooms everything equally, preserving density).
+  - Implemented coordinate expansion: `x=5cm, y=5cm` (5x grid expansion).
+  - Added relative spacing: `node distance=7cm`.
+  - Added text compaction: `font=\small`.
+  - Fixed iframe resize logic using `scrollWidth`/`scrollHeight` for accurate sizing.
+  - Balanced internal padding (20px + 5px buffer).
+
 ## [1.1.3] - 2025-12-05
 ### Fixed
 - **TikZ Coordinate Error**: Removed aggressive typography normalization (`--` to `–`) which was corrupting TikZ path syntax.
