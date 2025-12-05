@@ -117,12 +117,6 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
     // We reverse the "Typography Normalization" for this block and strip other commons.
     const safeTikz = tikzCode
-      .replace(/—/g, '--')
-      .replace(/–/g, '-')
-      .replace(/“/g, '"')
-      .replace(/”/g, '"')
-      .replace(/‘/g, "'")
-      .replace(/’/g, "'")
       .replace(/[^\x00-\x7F]/g, ''); // Nuclear option: remove any remaining non-ASCII
 
     const iframeHtml = `<!DOCTYPE html>
@@ -140,7 +134,11 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   </script>
 </head>
 <body>
-  <script type="text/tikz">${safeTikz}</script>
+  <script type="text/tikz">
+    \\begin{tikzpicture}
+    ${safeTikz}
+    \\end{tikzpicture}
+  </script>
   <script>
     const observer = new MutationObserver(() => {
       const svg = document.querySelector('svg');
@@ -222,9 +220,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
   // Typography Normalization (Spec compliance)
   let content = latex
-    .replace(/^```latex\s*/i, '').replace(/```$/, '')
-    .replace(/---/g, '—') // Em-dash
-    .replace(/--/g, '–'); // En-dash
+    .replace(/^```latex\s*/i, '').replace(/```$/, '');
   // Smart quotes handled in sanitized text by latex.js generally, but we normalized above for extraction.
 
   // --- 1.1 THE NUCLEAR PREAMBLE REPLACEMENT (Strict Mode) ---
