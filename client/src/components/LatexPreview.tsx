@@ -139,8 +139,14 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
 
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
-    const safeTikz = tikzCode
+    let safeTikz = tikzCode
       .replace(/[^\x00-\x7F]/g, ''); // Remove non-ASCII
+
+    // SANITIZATION: TikZJax has issues with decoration={...} nested syntax
+    // Convert decoration={name,option=value,...} to just decoration=name
+    // The .expanded key error occurs when TikZJax tries to process nested decoration options
+    // Pattern: decoration={word,anything} -> decoration={word}
+    safeTikz = safeTikz.replace(/decoration=\{([a-zA-Z]+),[^}]+\}/g, 'decoration=$1');
 
     // === DYNAMIC DENSITY REDUCTION ===
     // Count complexity indicators

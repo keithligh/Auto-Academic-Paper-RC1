@@ -42,6 +42,11 @@ Raw LaTeX cannot be fed directly to TikZJax strings because of JavaScript encodi
     -   **Critical Failure**: In TikZ, `--` is a functional operator defining a path between coordinates (e.g., `(A) -- (B)`). Converting this to an en-dash `(A) – (B)` breaks the syntax, causing "Cannot parse coordinate" errors.
     -   **Solution**: We explicitly **SKIP** typography normalization for extracted TikZ blocks. We pass the raw `--` exactly as written.
 
+3.  **Decoration Syntax Sanitization (The PGFkeys Fix)**
+    -   **Problem**: TikZJax cannot properly handle nested key-value pairs in decoration options like `decoration={brace,amplitude=5pt}`. When it tries to expand these options, it creates an invalid `/pgf/decoration/.expanded` key, causing a PGFkeys error and emergency stop.
+    -   **Critical Failure**: Any TikZ diagram using `\draw[decorate,decoration={brace,amplitude=5pt}]` for bracket annotations will fail to render with the error "I do not know the key '/pgf/decoration/.expanded'".
+    -   **Solution**: We sanitize the decoration syntax by stripping nested options: `decoration={name,options...}` becomes `decoration=name`. This preserves the decoration type (e.g., brace) while removing incompatible amplitude and other parameters that TikZJax cannot process.
+
 ### Phase 3: The Sandbox (Iframe Isolation)
 We do not render TikZ in the main DOM. We inject it into a dedicated `<iframe>`.
 
@@ -122,7 +127,8 @@ We analyze the AI's *intent* by looking at its chosen `node distance`. This is t
 1.  **NEVER** let `latex.js` see `\begin{tikzpicture}`.
 2.  **NEVER** pass Unicode characters to TikZJax.
 3.  **NEVER** normalize/prettify code inside a TikZ block (keep raw `--`).
-4.  **ALWAYS** wrap the injected code in `\begin{tikzpicture}`.
-5.  **ALWAYS** use an iframe.
-6.  **ALWAYS** extract TikZ BEFORE math (so TikZJax receives raw math, not placeholders).
-7.  **NEVER** force spacing overrides in the renderer (fix via AI prompts instead).
+4.  **ALWAYS** sanitize decoration syntax by removing nested options (e.g., `decoration={brace,amplitude=5pt}` → `decoration=brace`).
+5.  **ALWAYS** wrap the injected code in `\begin{tikzpicture}`.
+6.  **ALWAYS** use an iframe.
+7.  **ALWAYS** extract TikZ BEFORE math (so TikZJax receives raw math, not placeholders).
+8.  **NEVER** force spacing overrides in the renderer (fix via AI prompts instead).
