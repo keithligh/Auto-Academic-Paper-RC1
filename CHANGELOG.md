@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2025-12-06
+### Fixed
+- **Root Cause Remediation**: Replaced fragile hacks with robust, native solutions.
+  - **Headers**: Switched `\paragraph` replacer to inject valid LaTeX (`\vspace`, `\textbf`) instead of HTML tags, removing artifacts.
+  - **Math Scaling**: Reverted to `transform` (calculated width) for stable layout, but removed all interactive CSS (hover/icons) for a clean print look.
+
 ## [1.5.1] - 2025-12-06
 ### Fixed
 - **Audit Remediation (Stability Hardening)**: Addressed 3 critical rendering risks identified by external audit.

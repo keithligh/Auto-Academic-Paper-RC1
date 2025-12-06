@@ -430,6 +430,26 @@ We pre-process specific unicode characters, **BUT WE DO NOT APPLY GLOBAL TYPOGRA
 - **The Rule**: Dashes are left as-is. Smart quotes are allowed but not forced.
 - **Circled Text**: `\textcircled{x}` is simplified to `(x)`.
 
+---
+
+## 20. Final Architectures (v1.5.2 Refinements)
+
+### Math Auto-Scaling (The "Clean Transform" Strategy)
+We abandoned `zoom` (reflow bugs) and `interactive` scaling (visual clutter).
+*   **Mechanism**: If `width > 50em`, apply `transform: scale(0.X)` and `width: (100/0.X)%`.
+*   **UX**: No hover effects. No magnifying glass. Just a correctly scaled equation that fits the page.
+*   **Fallback**: If even 0.55x scale isn't enough, we show a native horizontal scrollbar.
+
+### Header Handling (Valid LaTeX Injection)
+We previously injected HTML `<br>` tags to style `\paragraph`. This leaked into `latex.js`.
+*   **The Fix**: We now replace `\paragraph{Title}` with:
+    ```latex
+    \vspace{1em}
+    \noindent
+    \textbf{Title}
+    ```
+*   **Result**: `latex.js` sees valid LaTeX and renders it perfectly without artifacts.
+
 ### Command Stripping (The "No-Op" List)
 
 Certain commands are actively removed to prevent errors or clutter:
