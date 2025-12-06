@@ -290,8 +290,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       const svg = document.querySelector('svg');
       if (svg && window.frameElement) {
          // Add a small buffer for tooltips/shadows
-         const h = document.body.scrollHeight;
-         window.frameElement.style.height = (h + 5) + 'px';
+         const rect = svg.getBoundingClientRect();
+         window.frameElement.style.height = (rect.height + 5) + 'px';
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
