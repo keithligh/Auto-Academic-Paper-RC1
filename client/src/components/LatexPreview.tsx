@@ -139,41 +139,6 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
 
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
-    let safeTikz = tikzCode
-      .replace(/[^\x00-\x7F]/g, ''); // Remove non-ASCII
-
-    // === GEOMETRIC POLYFILL: Manual Bezier Brace ===
-    // TikZJax does NOT support decoration={brace} (PGFkeys error).
-    // We replace it with distinct Bezier curves to render the brace manually.
-    safeTikz = safeTikz.replace(
-      /\\draw\[decorate,decoration=\{brace[^}]*\}\]\s*\(([^)]+)\)\s*--\s*\(([^)]+)\)\s*node\[([^\]]*)\]\s*\{([^}]*)\};/g,
-      (match, start, end, nodeOpts, label) => {
-        // Parse coordinates
-        const parseCoord = (s: string) => {
-          const parts = s.split(',').map(p => parseFloat(p.trim()));
-          return { x: parts[0] || 0, y: parts[1] || 0 };
-        };
-        const p1 = parseCoord(start); // e.g. (0.5, -0.7)
-        const p2 = parseCoord(end);   // e.g. (5, -0.7)
-
-        // Midpoint
-        const midX = (p1.x + p2.x) / 2;
-        const midY = (p1.y + p2.y) / 2;
-
-        // Brace Control Points (Vertical Offset)
-        // Adjust these magic numbers to change brace curvature
-        const offset = -0.15; // Starting curvature
-        const tip = -0.35;    // The pointy tip of the brace
-
-        // Manual Bezier Path (P1 -> Mid -> P2)
-        // Two curves: P1 to Mid, then Mid to P2
-        return `\\draw[thick] (${p1.x},${p1.y}) .. controls (${p1.x},${p1.y + offset}) and (${midX},${midY + offset}) .. (${midX},${midY + tip}) .. controls (${midX},${midY + offset}) and (${p2.x},${p2.y + offset}) .. (${p2.x},${p2.y});
-        \\node[${nodeOpts}] at (${midX},${midY + tip - 0.4}) {${label}};`;
-      }
-    );
-
-    // === DYNAMIC DENSITY REDUCTION ===
-    // Count complexity indicators
     const nodeMatches = safeTikz.match(/\\node/g) || [];
     const drawMatches = safeTikz.match(/\\draw/g) || [];
     const arrowMatches = safeTikz.match(/->/g) || [];
