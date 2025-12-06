@@ -503,7 +503,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
   // --- B. MATH (KaTeX) ---
   content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, math) => createMathBlock(math, true));
-  content = content.replace(/\\begin\{(equation|align|gather|multline)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, (m, env, math) => createMathBlock(math, true));
+  content = content.replace(/\\begin\{(equation|align|gather|multline)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, (m, env, math) => createMathBlock(m, true));
   content = content.replace(/(?<!\\)\$([^$]+)(?<!\\)\$/g, (m, math) => createMathBlock(math, false));
 
   // --- C. BIBLIOGRAPHY (Two-Pass) ---
@@ -681,7 +681,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         if (!r) return;
         tableHtml += '<tr>';
         r.split('&').forEach(cell => {
-          tableHtml += `<td>${parseLatexFormatting(cell.trim())}</td>`;
+          tableHtml += `<td>${resolvePlaceholders(parseLatexFormatting(cell.trim()))}</td>`;
         });
         tableHtml += '</tr>';
       });
