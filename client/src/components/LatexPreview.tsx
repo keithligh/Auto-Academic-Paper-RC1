@@ -194,7 +194,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     // Legacy metrics for compatibility
     const rawText = safeTikz.replace(/\\[a-zA-Z]+/g, '').replace(/[{}()\[\]]/g, '');
     const textDensityScore = nodeMatches.length > 0 ? (rawText.length / nodeMatches.length) : 0;
-    const isTextHeavy = avgLabelTextPerNode > 40; // Use accurate label-based metric
+    const isTextHeavy = avgLabelTextPerNode > 30; // Use accurate label-based metric
     const baseComplexity = nodeMatches.length + drawMatches.length + (arrowMatches.length / 2);
 
     // REFACTOR (v1.5.5): HYBRID INTENT (Phase 7 + Density Override)
@@ -324,7 +324,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       if (svg && window.frameElement) {
          // Add a small buffer for tooltips/shadows
          const h = document.body.scrollHeight;
-         window.frameElement.style.height = (h + 20) + 'px';
+         window.frameElement.style.height = (h + 5) + 'px';
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
