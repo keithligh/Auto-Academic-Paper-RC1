@@ -216,17 +216,19 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // Mandatory for Large
       if (!options.includes('text width')) extraOpts += ', every node/.append style={align=center}';
 
-      // GOLDILOCKS PROTOCOL: Coordinate Boost for text-heavy diagrams
-      // RECOVERED from Artifacts: x=2.2cm (Resolve Label Overlap), y=1.5cm (Increase Height)
-      if (isTextHeavy && !options.includes('x=')) {
-        extraOpts += ', x=2.2cm, y=1.5cm';
-      }
+
 
     } else {
       // MEDIUM
       const scale = nodeMatches.length >= 6 ? 0.8 : 0.9;
       if (!options.includes('scale=')) extraOpts += `, scale=${scale}`;
       if (!options.includes('node distance')) extraOpts += ', node distance=2.5cm';
+    }
+
+    // GOLDILOCKS PROTOCOL: Coordinate Boost for text-heavy diagrams (Global Scope)
+    // RECOVERED from Artifacts: x=2.2cm (Resolve Label Overlap), y=1.5cm (Increase Height)
+    if (isTextHeavy && !options.includes('x=')) {
+      extraOpts += ', x=2.2cm, y=1.5cm';
     }
 
     // Merge logic
