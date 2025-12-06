@@ -56,6 +56,19 @@ Professional LaTeX preambles are full of packages that crash browser parsers. We
 
 **Critically**, we do **NOT** include `\usepackage{amsmath}` or other standard packages in this fake preamble, because `latex.js` attempts to load them via `require()` calls that fail in the browser environment. We rely on KaTeX (for math) and our custom logic to handle those features.
 
+### Critical: Extraction Order
+
+> **⚠️ IMPORTANT (v1.2.0)**: The order of extraction matters!
+
+TikZ must be extracted **BEFORE** math because TikZJax handles math natively. If we extract math first, TikZ node labels will contain placeholder text like `LATEXPREVIEWMATH10` instead of actual formulas.
+
+**Correct order:**
+1. TikZ & Images
+2. Math (KaTeX)
+3. Tables
+4. Bibliography
+5. Everything else
+
 ### 2. Math Rendering (KaTeX)
 
 `latex.js` has poor math support. We use **KaTeX**, which is the gold standard for web-based math.
@@ -72,21 +85,27 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 - **Extraction**: Regex finds `\begin{tikzpicture}` environments.
 - **Placeholder**: Replaced with `LATEXPREVIEWTIKZBLOCK{N}`.
 - **Rendering**: We construct a complete HTML page that loads **TikZJax** and inject it into an `<iframe>`.
-- **Environment Wrapping**: We explicitly wrap the extracted TikZ code in `\begin{tikzpicture} ... \end{tikzpicture}` inside the iframe script tag. This ensures TikZJax has the correct context.
-- **ASCII Sanitization**: We strip non-ASCII characters from the TikZ code before injection to prevent `btoa` errors in the TikZJax library.
-- **No Typography Normalization**: We explicitly **DO NOT** apply global typography normalization (like converting `--` to `–`) to TikZ blocks. TikZ relies on `--` for path definitions, and converting it to an en-dash breaks the syntax.
+- **Environment Wrapping**: We explicitly wrap the extracted TikZ code in `\begin{tikzpicture} ... \end{tikzpicture}` inside the iframe script tag.
+- **Intent-Based Sizing (v1.3.0)**: Diagrams scale dynamically based on the AI's intended layout (Compact vs Large).
+- **Centering**: Iframes are wrapped in flexbox containers for horizontal centering.
+- **ASCII Sanitization**: We strip non-ASCII characters to prevent `btoa` errors.
+- **No Typography Normalization**: We **DO NOT** convert `--` to `–` inside TikZ (breaks path syntax).
 - **Isolation**: The `<iframe>` isolates the heavy processing and CSS conflicts.
-- **Unsupported Diagrams**: We explicitly **DELETE** `forest` environments and `\includegraphics` commands, replacing them with `[Diagram]` or `[Image]` placeholders.
 
-### 4. Table Rendering (Manual Parsing & Nuking)
-
+### 4. Table Rendering (Manual Parsing & Order of Operations)
+     
 `latex.js` fails on `tabularx`, `booktabs`, and nested formatting in tables.
 
-- **Destructive Safety (The Nuking)**: We explicitly **DELETE** `tabularx` and `longtable` environments, replacing them with placeholders (`[Complex Table]`). Attempts to pass these to `latex.js` would cause immediate crashes.
-- **Extraction**: Regex parses standard `\begin{tabular}` blocks.
+- **Native TabularX Support (v1.3.1)**: We natively support `tabularx` by parsing it like a standard `tabular` environment. We intentionally **ignore the width argument** and let the browser handle the layout (auto-width), which is superior for responsive HTML.
+- **Order of Operations**:
+  1. **Standard Tables (`\begin{table}`)**: Must be processed **FIRST**. This allows us to extract the inner `tabular` or `tabularx` content correctly.
+  2. **Standalone Tabulars**: Use the same parser to handle tables not wrapped in a float.
+  3. **Fallback**: Only after the above are attempted do we "nuke" remaining `tabularx`/`longtable` environments into placeholders.
+- **Extraction**: Regex parses standard `tabular` and `tabularx` blocks.
 - **Transformation**: We manually parse rows (`\\`) and cells (`&`). We apply basic text formatting to cell contents.
 - **Output**: We generate a standard HTML `<table>`.
 - **Injection**: `latex.js` sees a placeholder; we swap it for our HTML table.
+
 
 ### 5. Bibliography Injection
 
@@ -150,21 +169,6 @@ Rendering user-generated LaTeX in the browser presents security risks (XSS).
 - **TikZ Isolation**: TikZ code is rendered inside a sandboxed `<iframe>` using `srcdoc`. This prevents the TikZ rendering script from accessing the main application's DOM or cookies.
 - **HTML Escaping**: All manual text parsing (tables, algorithms) strictly escapes HTML special characters before injection.
 - **No External Resources**: The previewer is configured to block loading of external images or scripts (except the trusted TikZJax CDN).
-
-### 11. Deep Magic & Optimizations
-
-These are the subtle engineering tricks that make the system robust and performant.
-
-- **The TreeWalker Injection**: To swap placeholders with complex HTML, we don't use simple `innerHTML` replacement (which would destroy event listeners and re-parse the whole DOM). Instead, we use a `TreeWalker` to surgically locate specific text nodes containing our IDs (`LATEXPREVIEWBLOCK...`, `LATEXPREVIEWMATHBLOCK...`) and replace *only* those nodes (or their parent containers if isolated) with the pre-rendered content.
-- **Iframe Auto-Resizing**: The TikZ iframes contain a `MutationObserver` that watches the generated SVG. As soon as the diagram renders, the observer calculates the exact bounding box and sends a message to the parent window (`window.frameElement.style.height = ...`) to resize the iframe.
-- **TikZ Density Reduction**: AI-generated diagrams are often cramped. We inject default options to expand the coordinate system while keeping text compact:
-  - `x=5cm, y=5cm`: Expands the unit vectors (default 1cm) to 5cm.
-  - `node distance=7cm`: Increases spacing for relative positioning.
-  - `font=\small`: Keeps text compact.
-  - **Critical**: We do NOT use `scale=X` because it zooms everything proportionally (preserving density). See `TIKZ_HANDLING.md` Phase 7 for details.
-- **Heuristic Width Calculation**: For `\parbox`, we implement a heuristic parser that converts LaTeX lengths to CSS. It understands `0.5\textwidth` and converts it to `width: 50%`, ensuring multi-column layouts adapt to the browser window.
-- **Error Suppression**: The TikZJax library sometimes throws "message channel closed" errors in iframes. We inject a specific error handler script into the iframe to suppress these benign errors, keeping the console clean.
-- **Render Deduplication**: `latex.js` sometimes renders text nodes twice (once for measurement, once for display). Our injection logic tracks processed IDs in a `Set` to ensure we don't accidentally inject the same chart or formula twice.
 
 ---
 
