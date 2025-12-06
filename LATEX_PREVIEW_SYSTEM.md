@@ -105,6 +105,7 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 - **Transformation**: We manually parse rows (`\\`) and cells (`&`). We apply basic text formatting to cell contents.
 - **Output**: We generate a standard HTML `<table>`.
 - **Injection**: `latex.js` sees a placeholder; we swap it for our HTML table.
+- **Math Safety (v1.5.4)**: Inner math `LATEXPREVIEWMATH` placeholders are recursively resolved via `resolvePlaceholders()` during cell parsing to ensure formulas appear correctly inside table cells.
 
 
 ### 5. Bibliography Injection
@@ -479,11 +480,213 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 *   **MEDIUM**: Everything else.
 
 ### 2. The Execution Rules
+3. **Tables**: `tabular`, `tabularx`, `longtable` are all intercepted. `latex.js` sees only placeholders.
+4. **TikZ Diagrams**: `tikzpicture` is intercepted. `latex.js` sees only placeholders.
+5. **Algorithms**: `algorithmic` environments are intercepted. `latex.js` sees only placeholders.
+6. **Complex Envs**: `theorem`, `proof`, `lemma` are flattened to text/bold headers. `latex.js` sees only text.
+7. **Images**: `\includegraphics` is deleted/replaced. `latex.js` sees only placeholders.
+8. **Forest Trees**: `forest` environments are deleted/replaced. `latex.js` sees only placeholders.
+9. **BibTeX**: `bibliography` commands are intercepted or stripped.
+
+**Summary**: If it's not simple text or a heading, `latex.js` is **not allowed to see it**.
+
+---
+
+# Part II: The Visual Rendering Engine
+
+This section documents the **CSS Architecture** and **Layout Engine** that powers the visual preview.
+
+## 15. The CSS Trinity (File Architecture)
+
+The styling is strictly separated into three layers, located in `client/src/styles/`:
+
+### 1. `latex-article.css` (The Skin)
+
+This file is the **User-Facing** style controller. It turns a `<div>` into a "Paper".
+
+- **The Container**: `.latex-preview`
+  - **Dimensions**: Hardcoded to `width: 210mm` (A4 ISO standard) and `min-height: 297mm`.
+  - **Illusion**: Applies `box-shadow: 0 0 15px rgba(0, 0, 0, 0.1)` to make it "pop" from the background.
+  - **Margins**: `padding: 25mm` duplicates standard LaTeX article margins.
+  - **Background**: Forces `background-color: white !important` to override any dark mode app themes.
+  - **Injected Overrides**: `LatexPreview.tsx` injects a `<style>` block that adds `line-height: 1.8 !important` (increased from 1.6) and handles the "Lobotomized Owl" spacing.
+- **Typography**:
+  - **Font Stack**: `'Lora', 'Times New Roman', serif`. This mimics the serif look of academic papers (`Computer Modern` substitute).
+  - **Source**: Fonts are imported via Google Fonts: `https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&display=swap`.
+  - **Overrides**: Uses `!important` extensively to ensure Tailwind's reset styles (`index.css`) do not bleed into the preview.
+
+### 2. `latex-base.css` (The Layout Engine)
+
+This is the **Internal Mechanic**. It emulates the TeX box model using CSS Grid and Flexbox.
+
+- **The Grid System**: The `.page` class defines a grid with named lines:
+  
+  ```css
+  grid-template-columns: [margin-left] var(--marginleftwidth) [body] var(--textwidth) [margin-right] var(--marginrightwidth);
+  ```
+  
+  This allows elements to be placed in the "margin par" or "body" accurately.
+- **TeX Variables**: It defines CSS variables that map 1:1 to LaTeX lengths:
+  - `--parindent`: `1.5em`
+  - `--leftmargini`: `2.5em`
+  - `--fboxsep`: `3pt`
+- **List Logic**: It handles the deep nesting logic of LaTeX lists (`itemize` within `enumerate`) by calculating margins dynamically:
+  
+  ```css
+  .list .list { --leftmargin: var(--leftmarginii); }
+  ```
+  
+
+### 3. `latex-katex.css` (The Math)
+
+A standard, unmodified KaTeX stylesheet. It ensures that math fonts (`KaTeX_Main`, `KaTeX_Math`) are loaded and positioned with pixel-perfect accuracy.
+
+## 16. Integration with Tailwind (The Separation)
+
+The application uses Tailwind CSS (`index.css`) for the UI shell (Sidebar, Buttons), but the Preview is **Style-Isolated**.
+
+- **Strategy**: The preview container `.latex-preview` acts as a "CSS Reset Boundary".
+- **Conflict Resolution**:
+  - `latex-article.css` uses higher specificity and `!important` to win against Tailwind.
+  - The `font-serif` variable in `index.css` is set to `"Merriweather"`, but `.latex-preview` forces `"Lora"`.
+
+## 17. Special Visual Secrets
+
+### The "Parbox" Heuristic
+
+`\parbox{0.5\textwidth}{...}` is not natively understood by browsers.
+
+- **The Solution**: Our TS parser extracts the width argument.
+- **The Conversion**: It converts `\textwidth` to `100%`, `\columnwidth` to `100%`, and calculates fractions (e.g., `0.3\textwidth` -> `width: 30%`).
+- **The Render**: It outputs a `<div class="parbox" style="width: 30%">`.
+
+### The "A4" Responsiveness
+
+While the preview tries to be 210mm wide, it must fit on smaller screens.
+
+- **The Fix**: `max-width: 100%` in `latex-article.css` ensures that if the viewport is narrower than A4, the paper shrinks to fit, while `box-sizing: border-box` ensures padding doesn't break the layout.
+
+### The "Phantom" Elements
+
+To handle LaTeX alignment hacks (like `\phantom{abc}` which takes up space but is invisible), `latex-base.css` defines:
+
+```css
+.phantom { visibility: hidden; }
+```
+
+This is crucial for aligning equations and table columns precisely as the author intended.
+
+---
+
+## 18. Honest Hacks & Known Limitations
+
+In the spirit of the "Lobotomized Owl," we document our brute-force solutions here. We do not pretend these are "parsers" or "architectures"; they are hacks that work.
+
+### 1. Parbox "Parser" is Relative-Only
+
+The `parbox` width calculator is **blind to absolute units**.
+
+- **Reality**: It strictly looks for `\textwidth`, `\linewidth`, or `\columnwidth`.
+- **Limitation**: If a user writes `\parbox{5cm}{...}`, the regex fails to match, and it defaults to `width: 100%`. We do not attempt to convert `cm`, `mm`, or `pt` to pixels.
+
+### 2. Manual Formatting is "Flat"
+
+The `parseLatexFormatting` function used for Tables and Parboxes uses **non-recursive regex**.
+
+- **Reality**: It matches `\textbf{...}` using `[^{}]+`.
+- **Limitation**: It **cannot handle nested formatting** (except for Table Rows, which now use `smartSplitRows` to respect brace nesting).
+  - `\textbf{Bold}` -> **Bold** (Works)
+  - `\textbf{Bold \textit{Italic}}` -> Fails (breaks on the inner brace). The user sees the raw LaTeX commands.
+
+### 3. The Global `any` Dependency
+
+We do not import `latex.js` as a module because the NPM package is unstable.
+
+- **The Hack**: We load it via `<script>` tag in `index.html`.
+- **The Code**: We rely on `declare const latexjs: any;` in `LatexPreview.tsx`. We completely bypass TypeScript's safety features for the core renderer.
+
+### 4. Silent Markdown Stripping
+
+Users often paste AI output that includes markdown code fences.
+
+- **The Fix**: We use a brute-force regex replacement at the very start of the pipeline.
+- **The Hack**: `content.replace(/^```latex\s*/i, '')`. We silently modify the user's input before processing, assuming any leading backticks are garbage.
+
+---
+
+## 19. Minor Normalizations & Optimizations
+
+These details ensure a polished user experience by handling edge cases.
+
+### Unicode & Typography
+
+We pre-process specific unicode characters, **BUT WE DO NOT APPLY GLOBAL TYPOGRAPHY NORMALIZATION**.
+
+- **Why**: Applying global replacement of `--` to `–` (en-dash) **CORRUPTS TIKZ CODE**. TikZ uses `--` to define paths.
+- **The Rule**: Dashes are left as-is. Smart quotes are allowed but not forced.
+- **Circled Text**: `\textcircled{x}` is simplified to `(x)`.
+
+---
+
+## 20. Final Architectures (v1.5.2 Refinements)
+
+### Math Auto-Scaling (The "Clean Transform" Strategy)
+We abandoned `zoom` (reflow bugs) and `interactive` scaling (visual clutter).
+*   **Mechanism**: If `width > 50em`, apply `transform: scale(0.X)` and `width: (100/0.X)%`.
+*   **UX**: No hover effects. No magnifying glass. Just a correctly scaled equation that fits the page.
+*   **Fallback**: If even 0.55x scale isn't enough, we show a native horizontal scrollbar.
+
+### Header Handling (Valid LaTeX Injection)
+We previously injected HTML `<br>` tags to style `\paragraph`. This leaked into `latex.js`.
+*   **The Fix**: We now replace `\paragraph{Title}` with:
+    ```latex
+    \vspace{1em}
+    \noindent
+    \textbf{Title}
+    ```
+*   **Result**: `latex.js` sees valid LaTeX and renders it perfectly without artifacts.
+
+### Command Stripping (The "No-Op" List)
+
+Certain commands are actively removed to prevent errors or clutter:
+
+- **File System Access**: `\input{...}` and `\include{...}` are removed because the browser cannot access the server's file system.
+- **Metadata Lists**: `\tableofcontents`, `\listoffigures`, `\listoftables` are removed as `latex.js` cannot generate them dynamically without a second pass.
+- **Figure Wrappers**: `\begin{figure}` environments are "flattened" (tags removed, content kept) because floating layout logic is handled by CSS, not LaTeX.
+- **Captions/Labels**: `\caption`, `\label`, and `\ref` are currently stripped or replaced with `[?]` placeholders to prevent undefined reference errors.
+
+### Fatal Error Handling
+
+If the renderer encounters a catastrophic failure (e.g., `latex.js` throws an exception):
+
+- **The Guard**: A `try-catch` block wraps the entire render process.
+- **The UI**: An `Alert` component (shadcn/ui) is rendered in place of the document.
+
+---
+
+## 21. The Dynamic TikZ Engine (Intent-Based Phase 7)
+
+We adhere to the strict "Phase 7" logic documented in `TIKZ_HANDLING.md`. This strategy respects the AI's *intent* (expressed via `node distance`) while ensuring fit and readability.
+
+### 1. The Classifier (The Intent)
+We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm if node count > 8).
+*   **COMPACT** (Pipeline): `dist < 2.0cm`.
+*   **LARGE** (Cycle): `dist >= 2.5cm`.
+*   **MEDIUM**: Everything else.
+
+### 2. The Execution Rules
 
 | Intent | Goal | Action |
 | :--- | :--- | :--- |
 | **COMPACT** | **Fit to A4** | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm` |
 | **LARGE** | **Readability** | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
-| **MEDIUM** | **Balance** | `scale=0.9`, `node distance=2.5cm` |
+| **MEDIUM** | Balance | Adjust | `scale` (0.8 if ≥6 nodes, else 0.9) + Moderate Dist (1.2x) |
+
+### 3. The "Hybrid" Density Override (v1.5.5)
+We discovered that `node distance` is not always a perfect predictor. Some "Cycle" diagrams use `node distance=2cm` (Medium) but pack 50+ words of text into nodes.
+
+- **The Fix**: We calculate `avgLabelTextPerNode`.
+- **Rule**: If `avgLabelTextPerNode > 30` (Text Heavy), we **FORCE** the `LARGE` intent rules (Spacing Boost) regardless of the original `node distance`.
+- **Global Hoist**: This ensures that even "Compact" diagrams with paragraphs of text get the `x=2.2cm` breathing room they need.
 
 This ensures that "Cycle" diagrams (Large intent) get the massive spacing they need to avoid overlap, while "Pipelines" (Compact intent) are shrunk proportionally.

@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.5] - 2025-12-06
+### Added
+- **Hybrid Intent Logic**: Refactored TikZ classification (Phase 7) to use a "Hybrid" approach.
+  - **Text Density Override**: Explicitly detects text-heavy diagrams (`>30` chars/node) and forces `LARGE` intent globally.
+  - **Goldilocks Hoist**: "Coordinate Boost" (`x=2.2cm, y=1.5cm`) now applies to ALL dense diagrams, preventing label overlap regardless of original node distance.
+
+## [1.5.4] - 2025-12-06
+### Fixed
+- **Math Rendering**: Resolved critical bug where `align*` environments rendered as red text.
+  - **Fix**: Updated regex to pass the *entire* environment match (including `\begin{align*}`) to KaTeX, rather than just the body.
+- **Table Math**: Resolved `LATEXPREVIEWMATH` placeholders appearing in table cells.
+  - **Fix**: Implemented `resolvePlaceholders()` helper to recursively resolve placeholders inside manually parsed table cells.
+
+## [1.5.3] - 2025-12-06
+### Fixed
+- **TikZ Standardization (Polyfill)**:
+  - **Geometric Polyfill**: Replaced incompatible `decoration={brace}` commands with manual Bezier curve drawing logic. This bypasses the `PGFkeys` error in TikZJax.
+  - **Mirror Support**: Polyfill now looks for `mirror` keyword and flips curvature accordingly.
+  - **Iframe Resizing**: Tightened resize buffer from `20px` to `5px` (calculated via `getBoundingClientRect`) to eliminate whitespace.
+
 ## [1.5.2] - 2025-12-06
 ### Fixed
 - **Root Cause Remediation**: Replaced fragile hacks with robust, native solutions.
