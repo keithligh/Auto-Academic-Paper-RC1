@@ -77,6 +77,11 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
     // 4. Macro Replacement
     protectedText = protectedText
+      .replace(/\\eqref\{([^{}]*)\}/g, '(\\ref{$1})') // Sanitization: eqref -> (\ref)
+      .replace(/\\ref\{([^{}]*)\}/g, '[$1]') // Sanitization: ref -> [key] (Prevent latex.js lookup issues)
+      .replace(/\\label\{([^{}]*)\}/g, '') // Sanitization: Nuke labels (latex.js doesn't need them)
+      .replace(/\\url\{([^{}]*)\}/g, '<code>$1</code>') // Sanitization: url -> monospaced text
+      .replace(/\\footnote\{([^{}]*)\}/g, ' ($1)') // Sanitization: footnote -> inline text
       .replace(/\\textbf\{([^{}]*)\}/g, '<strong>$1</strong>')
       .replace(/\\textit\{([^{}]*)\}/g, '<em>$1</em>')
       .replace(/\\underline\{([^{}]*)\}/g, '<u>$1</u>')
@@ -115,21 +120,152 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
 
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
-    // We reverse the "Typography Normalization" for this block and strip other commons.
     const safeTikz = tikzCode
-      .replace(/[^\x00-\x7F]/g, ''); // Nuclear option: remove any remaining non-ASCII
+      .replace(/[^\x00-\x7F]/g, ''); // Remove non-ASCII
 
-    // DEFAULTS: "Pure Density Reduction" (User's Logic)
-    // 1. REMOVED scale (It zooms content, which is bad).
-    // 2. x=5cm, y=5cm: Massive expansion of the coordinate grid. Points move apart.
-    // 3. node distance=7cm: Relative nodes move far apart.
-    // 4. font=\\small: Text stays small.
-    // DENSITY = Content / Space. We max Space, min Content.
-    const spacingOverrides = 'x=5cm, y=5cm, node distance=7cm, every node/.append style={font=\\small}';
+    // === DYNAMIC DENSITY REDUCTION ===
+    // Count complexity indicators
+    const nodeMatches = safeTikz.match(/\\node/g) || [];
+    const drawMatches = safeTikz.match(/\\draw/g) || [];
+    const arrowMatches = safeTikz.match(/->/g) || [];
 
-    let finalOptions = `[${spacingOverrides}]`;
-    if (options && options.trim().length > 2) {
-      finalOptions = options.replace(/\]\s*$/, `, ${spacingOverrides}]`);
+    // HEURISTIC: Extract ACTUAL node label text (not TikZ options)
+    const nodeLabelMatches = safeTikz.match(/\\node[^;]*\{([^}]*)\}/g) || [];
+    let totalLabelText = 0;
+    nodeLabelMatches.forEach(match => {
+      const labelMatch = match.match(/\{([^}]*)\}$/);
+      if (labelMatch) {
+        // Remove LaTeX formatting commands from label
+        const label = labelMatch[1].replace(/\\[a-zA-Z]+/g, '').replace(/[{}]/g, '');
+        totalLabelText += label.length;
+      }
+    });
+    const avgLabelTextPerNode = nodeMatches.length > 0 ? totalLabelText / nodeMatches.length : 0;
+
+    // Legacy metrics for compatibility
+    const rawText = safeTikz.replace(/\\[a-zA-Z]+/g, '').replace(/[{}()\[\]]/g, '');
+    const textDensityScore = nodeMatches.length > 0 ? (rawText.length / nodeMatches.length) : 0;
+    const isTextHeavy = avgLabelTextPerNode > 40; // Use accurate label-based metric
+    const baseComplexity = nodeMatches.length + drawMatches.length + (arrowMatches.length / 2);
+
+    console.log(`[TikZ Metrics] nodes=${nodeMatches.length}, avgLabel=${avgLabelTextPerNode.toFixed(0)}, complexity=${baseComplexity.toFixed(0)}`);
+
+    // Dynamic spacing - FIX: Reduced y-scale to prevent "massive gap" between title and diagram
+    let xScale = '2.5cm';
+    let yScale = '1.5cm';  // Reduced from 3cm - prevents massive vertical gaps
+    let nodeDistance = '3cm';
+
+    if (isTextHeavy || baseComplexity >= 8) {
+      // HYBRID SPACING: Balanced to fix both "Massive Gap" & "Cramp"
+      xScale = '2.5cm';
+      yScale = '1.2cm';  // Aggressive reduction for text-heavy diagrams
+      nodeDistance = '5cm';
+
+      if (textDensityScore > 30) {
+        xScale = '3cm'; yScale = '1.5cm'; nodeDistance = '6cm';
+      }
+    } else if (baseComplexity >= 4) {
+      xScale = '3cm'; yScale = '1.5cm'; nodeDistance = '4cm';
+    }
+
+    const hasExplicitX = options.includes('x=');
+    const hasExplicitY = options.includes('y=');
+    const hasScale = options.includes('scale=');
+    const hasNodeDistance = options.includes('node distance');
+
+    let densityReduction = '';
+
+    if (hasNodeDistance) {
+      // === TRUE DYNAMIC SCALING ===
+      const nodeCount = nodeMatches.length;
+
+      // Extract original node distance
+      const nodeDistMatch = options.match(/node distance\s*=\s*([\d.]+)(cm|em|pt|mm)?/);
+      const originalDist = nodeDistMatch ? parseFloat(nodeDistMatch[1]) : 2.0;
+      const unit = nodeDistMatch ? (nodeDistMatch[2] || 'cm') : 'cm';
+
+      const isCompactByDistance = originalDist < 2.0;
+      const isLargeDistance = originalDist >= 2.5;
+
+      console.log(`[TikZ Dynamic] nodes=${nodeCount}, avgLabel=${avgLabelTextPerNode.toFixed(0)}, origDist=${originalDist}${unit}, isCompact=${isCompactByDistance}, isLarge=${isLargeDistance}`);
+
+      // === COMPUTE DYNAMIC SCALE FACTOR ===
+      let scaleFactor = 1.0;
+
+      if (isCompactByDistance) {
+        // Type A: COMPACT - scale down AS A WHOLE to fit A4
+        scaleFactor = nodeCount >= 8 ? 0.75 : 0.85;
+        const reducedDist = Math.max(originalDist * scaleFactor, 0.8);
+        console.log(`[TikZ] → COMPACT: dist=${reducedDist.toFixed(1)}${unit}, scale=${scaleFactor} (transform shape)`);
+        densityReduction = `__REPLACE_NODE_DIST__${reducedDist.toFixed(1)}${unit}__SCALE__${scaleFactor}__TRANSFORM_SHAPE__`;
+      } else if (isLargeDistance) {
+        // Type B: LARGE - increase spacing, keep scale at 1.0 for text readability
+        scaleFactor = nodeCount >= 6 ? 0.85 : 1.0;
+        const increaseFactor = originalDist >= 3.0 ? 2.8 : 2.0; // Restored to verified working value
+        const newDist = Math.max(originalDist * increaseFactor, 7.5);
+        console.log(`[TikZ] → LARGE: dist=${newDist.toFixed(1)}${unit}, scale=${scaleFactor}`);
+        densityReduction = `__REPLACE_NODE_DIST__${newDist.toFixed(1)}${unit}__SCALE__${scaleFactor}`;
+      } else {
+        // Type C: Medium - moderate adjustments
+        scaleFactor = nodeCount >= 6 ? 0.8 : 0.9;
+        const newDist = Math.max(originalDist * 1.2, 2.5);
+        console.log(`[TikZ] → MEDIUM: dist=${newDist.toFixed(1)}${unit}, scale=${scaleFactor}`);
+        densityReduction = `__REPLACE_NODE_DIST__${newDist.toFixed(1)}${unit}__SCALE__${scaleFactor}`;
+      }
+    } else if (hasExplicitX || hasExplicitY || hasScale) {
+      // AI already set scaling - only add font
+      if (!options.includes('font=')) {
+        densityReduction = 'font=\\small';
+      }
+    } else {
+      // No positioning info at all - safe to add our defaults for absolute coords
+      densityReduction = `x=${xScale}, y=${yScale}, node distance=${nodeDistance}, font=\\small`;
+    }
+
+    // Merge with existing options
+    let finalOptions = options || '[]';
+    if (densityReduction) {
+      if (densityReduction.includes('__REPLACE_NODE_DIST__')) {
+        // Parse computed values
+        const distMatch = densityReduction.match(/__REPLACE_NODE_DIST__([^_]+)/);
+        const scaleMatch = densityReduction.match(/__SCALE__([^_]+)/);
+
+        if (distMatch) {
+          const newDistValue = distMatch[1];
+          if (finalOptions.includes('node distance')) {
+            finalOptions = finalOptions.replace(
+              /node distance\s*=\s*[\d.]+\s*(cm|em|pt|mm)?/,
+              `node distance=${newDistValue}`
+            );
+          } else {
+            finalOptions = finalOptions.replace(/\]$/, `, node distance=${newDistValue}]`);
+          }
+        }
+
+        // Apply Scale if present
+        if (scaleMatch) {
+          const scaleVal = scaleMatch[1];
+          let scaleStr = `scale=${scaleVal}`;
+          if (densityReduction.includes('__TRANSFORM_SHAPE__')) {
+            scaleStr += ', transform shape';
+          }
+          if (finalOptions.match(/scale\s*=/)) {
+            finalOptions = finalOptions.replace(/scale\s*=\s*[\d.]+/, scaleStr);
+          } else {
+            finalOptions = finalOptions.replace(/\]$/, `, ${scaleStr}]`);
+          }
+        }
+
+        if (!finalOptions.includes('font=')) {
+          finalOptions = finalOptions.replace(/\]$/, ', font=\\small]');
+        }
+      } else if (densityReduction) {
+        if (finalOptions === '[]' || finalOptions.trim() === '') {
+          finalOptions = `[${densityReduction}]`;
+        } else {
+          finalOptions = finalOptions.replace(/\]$/, `, ${densityReduction}]`);
+        }
+      }
     }
 
     const iframeHtml = `<!DOCTYPE html>
@@ -138,7 +274,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   <link rel="stylesheet" href="https://tikzjax.com/v1/fonts.css">
   <script src="https://tikzjax.com/v1/tikzjax.js"></script>
   <style>
-    body { margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; overflow: visible; }
+    body { margin: 0; padding: 15px; display: flex; justify-content: center; align-items: flex-start; overflow: visible; }
     svg { overflow: visible; }
   </style>
   <script>
@@ -153,17 +289,14 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     \\end{tikzpicture}
   </script>
   <script>
+    // Iframe resize logic - STANDARD SCROLL SIZING
     const observer = new MutationObserver(() => {
       const svg = document.querySelector('svg');
       if (svg && window.frameElement) {
-        // use scroll dimensions to capture the full extent + padding
-        const w = Math.max(document.body.scrollWidth, svg.getBoundingClientRect().width);
-        const h = Math.max(document.body.scrollHeight, svg.getBoundingClientRect().height);
-        
-        window.frameElement.style.height = (h + 5) + 'px';
-        window.frameElement.style.width = (w + 5) + 'px';
-        
-        console.log('TikZ Resize:', { w, h, setH: h+150 });
+         const w = document.body.scrollWidth + 10; 
+         const h = document.body.scrollHeight + 10;
+         window.frameElement.style.width = w + 'px';
+         window.frameElement.style.height = h + 'px';
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -171,8 +304,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 </body>
 </html>`;
     const srcdoc = iframeHtml.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-    // Wrapper Style: removed overflow: hidden, allow auto if needed
-    blocks[id] = `<iframe srcdoc="${srcdoc}" style="width: 100%; border: none; min-height: 100px; overflow: visible;"></iframe>`;
+    blocks[id] = `<div style="display: flex; justify-content: center; width: 100%; margin: 1em 0;"><iframe srcdoc="${srcdoc}" style="border: none;"></iframe></div>`;
     return `\n\n${id}\n\n`;
   };
 
@@ -182,14 +314,13 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     let i = 0;
 
     while (i < txt.length) {
-      // Look for \parbox{
       if (txt.startsWith('\\parbox', i)) {
         const start = i;
         i += 7; // skip \parbox
 
         // Find first argument (width)
         while (i < txt.length && txt[i] !== '{') i++;
-        if (i >= txt.length) { output.push(txt.slice(start)); break; } // Fail safe
+        if (i >= txt.length) { output.push(txt.slice(start)); break; }
 
         let braceDepth = 1;
         i++; // skip {
@@ -197,7 +328,6 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         while (i < txt.length && braceDepth > 0) {
           if (txt[i] === '{') braceDepth++;
           else if (txt[i] === '}') braceDepth--;
-
           if (braceDepth > 0) widthContent += txt[i];
           i++;
         }
@@ -212,14 +342,13 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         while (i < txt.length && braceDepth > 0) {
           if (txt[i] === '{') braceDepth++;
           else if (txt[i] === '}') braceDepth--;
-
           if (braceDepth > 0) boxContent += txt[i];
           i++;
         }
 
         // Processing
         let cssWidth = '100%';
-        if (widthContent.includes('textwidth') || widthContent.includes('linewidth')) {
+        if (widthContent.includes('textwidth') || widthContent.includes('linewidth') || widthContent.includes('columnwidth')) {
           const factor = parseFloat(widthContent) || 1;
           cssWidth = `${factor * 100}%`;
         }
@@ -240,7 +369,6 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   // Typography Normalization (Spec compliance)
   let content = latex
     .replace(/^```latex\s*/i, '').replace(/```$/, '');
-  // Smart quotes handled in sanitized text by latex.js generally, but we normalized above for extraction.
 
   // --- 1.1 THE NUCLEAR PREAMBLE REPLACEMENT (Strict Mode) ---
   let extractedTitle = 'Draft Paper';
@@ -274,30 +402,26 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   // 2. EXTRACTION (THE HEIST)
   // =============================================
 
-  // --- A. MATH (KaTeX) ---
-  content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, math) => createMathBlock(math, true));
-  content = content.replace(/\\begin\{(equation|align|gather|multline)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, (m, env, math) => createMathBlock(math, true));
-  content = content.replace(/(?<!\\)\$([^$]+)(?<!\\)\$/g, (m, math) => createMathBlock(math, false));
-
-  // --- B. TIKZ & IMAGES ---
-  // FIX: Allow whitespace \s* before the options group.
+  // --- A. TIKZ & IMAGES (MUST BE FIRST!) ---
   content = content.replace(/\\begin\{tikzpicture\}\s*(\[[\s\S]*?\])?([\s\S]*?)\\end\{tikzpicture\}/g, (m, options, body) => {
-    // Debug: Log what we caught to ensure overrides apply
     console.log('TikZ Match:', { options, bodyLength: body.length });
     return createTikzBlock(body, options);
   });
   content = content.replace(/\\begin\{forest\}([\s\S]*?)\\end\{forest\}/g, () => createPlaceholder(`<div class="latex-placeholder-box">[Tree Diagram]</div>`));
   content = content.replace(/\\includegraphics\[.*?\]\{.*?\}/g, () => createPlaceholder(`<div class="latex-placeholder-box image">[Image]</div>`));
 
+  // --- B. MATH (KaTeX) ---
+  content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, math) => createMathBlock(math, true));
+  content = content.replace(/\\begin\{(equation|align|gather|multline)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, (m, env, math) => createMathBlock(math, true));
+  content = content.replace(/(?<!\\)\$([^$]+)(?<!\\)\$/g, (m, math) => createMathBlock(math, false));
+
   // --- C. BIBLIOGRAPHY (Two-Pass) ---
-  // Pass 1: Build Map
   let nextCitationId = 1;
   const bibMatches = Array.from(content.matchAll(/\\bibitem(?:\[[^\]]*\])?\{([^}]+)\}/g));
   bibMatches.forEach(m => {
     if (!citationMap[m[1]]) citationMap[m[1]] = nextCitationId++;
   });
 
-  // Pass 2: Extract & Replace
   content = content.replace(/\\begin\{thebibliography\}[\s\S]*?\\end\{thebibliography\}/g, (match) => {
     let listHtml = '<ul class="bib-list">';
     match.replace(/\\bibitem(?:\[[^\]]*\])?\{([^}]+)\}([\s\S]*?)(?=\\bibitem|\\end\{thebibliography\})/g,
@@ -312,22 +436,17 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     return '';
   });
 
-  // Pass 3: Replace Citations in Text
   content = content.replace(/\\cite\{([^}]+)\}/g, (m, key) => {
-    // Handle multiple keys: \cite{ref1,ref2}
-    const keys = key.split(',').map(k => k.trim());
-    const labels = keys.map(k => citationMap[k] ? `[${citationMap[k]}]` : `[?]`);
+    const keys = key.split(',').map((k: string) => k.trim());
+    const labels = keys.map((k: string) => citationMap[k] ? `[${citationMap[k]}]` : `[?]`);
     return labels.join('');
   });
 
-  // --- D. TABLES ---
-  content = content.replace(/\\begin\{(tabularx|longtable)\}([\s\S]*?)\\end\{\1\}/g, () => createPlaceholder(`<div class="latex-placeholder-box table">[Complex Table/TabularX]</div>`));
 
   // --- E. ABSTRACT EXTRACTION (Manual Control) ---
   const abstractMatch = content.match(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/);
   if (abstractMatch) {
     const abstractContent = abstractMatch[1].trim();
-    // Simple parsing for the abstract content
     const paragraphs = abstractContent.split(/\n\s*\n/).map(p => {
       return `<p>${parseLatexFormatting(p.trim())}</p>`;
     }).join('');
@@ -343,6 +462,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   }
 
   // --- F. TABLES (Standard) ---
+  // MOVED UP: Must process Standard Tables BEFORE Standalone Tables
   content = content.replace(/\\begin\{table(\*?)\}(\[.*?\])?([\s\S]*?)\\end\{table\1\}/g, (m, star, pos, inner) => {
     let caption = '';
     const captionMatch = inner.match(/\\caption\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/);
@@ -350,20 +470,75 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
     // === HELPER: Manual Tabular Parser ===
     const parseTabular = (inner: string): string | null => {
-      const startTag = '\\begin{tabular}';
-      const startIdx = inner.indexOf(startTag);
-      if (startIdx === -1) return null;
+      const startTagTabular = '\\begin{tabular}';
+      const startTagTabularX = '\\begin{tabularx}';
 
-      let cursor = startIdx + startTag.length;
+      let startIdx = inner.indexOf(startTagTabular);
+      let startIdxX = inner.indexOf(startTagTabularX);
+      let isTabularX = false;
+      let startTag = startTagTabular;
 
-      // Optional arg [pos]
-      if (inner[cursor] === '[') {
-        while (cursor < inner.length && inner[cursor] !== ']') cursor++;
-        cursor++; // skip ]
+      // Detect which one comes first
+      if (startIdxX !== -1) {
+        if (startIdx === -1 || startIdxX < startIdx) {
+          startIdx = startIdxX;
+          startTag = startTagTabularX;
+          isTabularX = true;
+        }
       }
 
+      if (startIdx === -1) {
+        console.warn('parseTabular: Start tag not found in inner content', inner.substring(0, 50));
+        return null; // Not a standard tabular
+      }
+
+      let cursor = startIdx + startTag.length;
+      console.log(`parseTabular: Found ${startTag} at`, startIdx);
+
+      // HELPER: Skip Whitespace
+      while (cursor < inner.length && /\s/.test(inner[cursor])) {
+        cursor++;
+      }
+
+      // Optional arg [pos] - Common to both tabular and tabularx
+      if (inner[cursor] === '[') {
+        console.log('parseTabular: Found optional arg [');
+        while (cursor < inner.length && inner[cursor] !== ']') cursor++;
+        cursor++; // skip ]
+        // Skip whitespace again after optional arg
+        while (cursor < inner.length && /\s/.test(inner[cursor])) {
+          cursor++;
+        }
+      }
+
+      // TabularX SPECIFIC: Mandatory Width Argument {width}
+      if (isTabularX) {
+        if (inner[cursor] !== '{') {
+          console.error('parseTabular: (TabularX) Expected {width} but found', inner[cursor]);
+          return null;
+        }
+        // Skip balanced braces for width
+        let braceDepth = 1;
+        cursor++;
+        while (cursor < inner.length && braceDepth > 0) {
+          if (inner[cursor] === '{') braceDepth++;
+          else if (inner[cursor] === '}') braceDepth--;
+          cursor++;
+        }
+        // Skip whitespace after width
+        while (cursor < inner.length && /\s/.test(inner[cursor])) {
+          cursor++;
+        }
+      }
+
+      console.log('parseTabular: Cursor at char:', inner[cursor], 'Context:', inner.substring(cursor, cursor + 10));
+
       // Mandatory arg {cols} - Handle nested braces!
-      if (inner[cursor] !== '{') return null; // Should be {
+      if (inner[cursor] !== '{') {
+        console.error('parseTabular: Expected {cols} but found', inner[cursor]);
+        return null; // Should be {
+      }
+
       let braceDepth = 1;
       cursor++;
       while (cursor < inner.length && braceDepth > 0) {
@@ -373,11 +548,15 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       }
 
       // Found end of cols. The rest until \end{tabular} is the body.
-      const endTag = '\\end{tabular}';
+      const endTag = isTabularX ? '\\end{tabularx}' : '\\end{tabular}';
       const endIdx = inner.indexOf(endTag, cursor);
-      if (endIdx === -1) return null;
+      if (endIdx === -1) {
+        console.error(`parseTabular: End tag ${endTag} not found`);
+        return null;
+      }
 
       const body = inner.substring(cursor, endIdx);
+      console.log('parseTabular: Successfully extracted body. Length:', body.length);
 
       // Render
       const rows = body.split('\\\\').filter(r => r.trim());
@@ -403,7 +582,34 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     return createPlaceholder(`<div class="table-wrapper">${caption}<div class="latex-placeholder-box">[Table Body - Parse Failed]</div></div>`);
   });
 
-  // --- E. ALGORITHMS ---
+  // --- G. TABLES (Standalone) ---
+  // MOVED DOWN: Naked tabulars defined here.
+  const parseStandaloneTabular = (body: string): string => {
+    const rows = body.split('\\\\').filter((r: string) => r.trim());
+    let tableHtml = '<table><tbody>';
+    rows.forEach((row: string) => {
+      let r = row.trim().replace(/\\hline/g, '').replace(/\\cline\{.*?\}/g, '')
+        .replace(/\\toprule/g, '').replace(/\\midrule/g, '').replace(/\\bottomrule/g, '');
+      if (!r) return;
+      tableHtml += '<tr>';
+      r.split('&').forEach((cell: string) => {
+        tableHtml += `<td>${parseLatexFormatting(cell.trim())}</td>`;
+      });
+      tableHtml += '</tr>';
+    });
+    tableHtml += '</tbody></table>';
+    return tableHtml;
+  };
+
+  content = content.replace(
+    /\\begin\{tabular\}(?:\[[^\]]*\])?\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}([\s\S]*?)\\end\{tabular\}/g,
+    (match: string, body: string) => {
+      const tableHtml = parseStandaloneTabular(body);
+      return createPlaceholder(`<div class="table-wrapper">${tableHtml}</div>`);
+    }
+  );
+
+  // --- H. ALGORITHMS ---
   content = content.replace(/\\begin\{algorithmic\}([\s\S]*?)\\end\{algorithmic\}/g, (m, body) => {
     const formatted = body
       .replace(/\\State/g, '<br><strong>State</strong> ')
@@ -415,10 +621,10 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   });
   content = content.replace(/\\begin\{algorithm(\*?)\}([\s\S]*?)\\end\{algorithm\1\}/g, '$2');
 
-  // --- F. PARBOX (Manual Parser) ---
+  // --- I. PARBOX (Manual Parser) ---
   content = processParboxes(content);
 
-  // --- G. ENVIRONMENTS ---
+  // --- J. ENVIRONMENTS ---
   ['theorem', 'lemma', 'definition', 'corollary', 'proposition'].forEach(env => {
     const regex = new RegExp(`\\\\begin\\{${env}\\}(.*?)([\\s\\S]*?)\\\\end\\{${env}\\}`, 'g');
     content = content.replace(regex, (m, args, body) => {
@@ -428,7 +634,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   });
   content = content.replace(/\\begin\{proof\}([\s\S]*?)\\end\{proof\}/g, (m, body) => `\n\n\\textit{Proof:} ${body} \u220E\n\n`);
 
-  // --- H. COMMAND STRIPPING ---
+  // --- K. COMMAND STRIPPING ---
   content = content
     .replace(/\\tableofcontents/g, '')
     .replace(/\\listoffigures/g, '')
@@ -437,18 +643,19 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     .replace(/\\input\{.*?\}/g, '')
     .replace(/\\include\{.*?\}/g, '');
 
-  // --- I. CJK Stripper ---
+  // --- D. TABLES (Fallback for unparsed TabularX/Longtable) ---
+  // MOVED DOWN: Catch-all for things we couldn't parse manually
+  content = content.replace(/\\begin\{(tabularx|longtable)\}([\s\S]*?)\\end\{\1\}/g, () => createPlaceholder(`<div class="latex-placeholder-box table">[Complex Table/TabularX (Fallback)]</div>`));
+
   content = content.replace(/\\begin\{CJK.*?\}([\s\S]*?)\\end\{CJK.*?\}/g, '$1');
 
   // =============================================
   // 3. SAFE ZONE PREPARATION
   // =============================================
 
-  // Underscore Protection for Text (after extracting everything else)
+  // Underscore Protection
   content = content.replace(/_/g, '\\_').replace(/\\\\_/g, '\\_');
 
-  // Spec: Pre-load standard packages in the fake preamble
-  // FIX: Removed amsmath/amssymb/graphicx as they cause 'require is not defined' errors in browser latex.js
   const safePreamble = `
 \\documentclass{article}
 \\title{${extractedTitle}}
@@ -467,8 +674,6 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Vertical Rhythm & Styles (Injected Override as per Doc)
-  // We inject this style tag to ensure it overrides everything else
   const styleInjection = `
     .latex-preview { line-height: 1.8 !important; }
     .latex-preview > * + * { margin-top: 1.5em; }
@@ -476,7 +681,6 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
     .latex-preview p > div { margin-top: 1.5em !important; }
   `;
 
-  // Inject styles on mount
   useEffect(() => {
     const styleId = 'latex-preview-dynamic-styles';
     if (!document.getElementById(styleId)) {
@@ -501,26 +705,16 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
 
         const { sanitized, blocks, bibliographyHtml } = sanitizeLatexForBrowser(latexContent);
 
-        // Hyphenation Killer
         const generator = new latexjs.HtmlGenerator({ hyphenate: false });
 
         try {
           const doc = latexjs.parse(sanitized, { generator: generator });
-
-          // We append directly to our container
-          // latex.js creates a whole document fragment
           containerRef.current!.appendChild(generator.domFragment());
-
         } catch (parseErr: any) {
           console.error("latex.js parse error:", parseErr);
-          // Fallback: If latex.js crashes, we show the sanitized text roughly
-          // Or we rethrow to show the error banner?
           throw new Error(`Browser Render Error: ${parseErr.message}`);
         }
 
-        // =============================================
-        // 5. THE REVEAL: Surgical Re-Injection (Robust)
-        // =============================================
         const walker = document.createTreeWalker(
           containerRef.current!,
           NodeFilter.SHOW_TEXT,
@@ -537,25 +731,35 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
 
         nodesToProcess.forEach(textNode => {
           const text = textNode.textContent || '';
-          // Find all placeholders in this node
-          // Regex to match LATEXPREVIEW + (MATH|TIKZ|TABLE|etc) + numbers
           const parts = text.split(/(LATEXPREVIEW[A-Z]+[0-9]+)/g);
 
-          if (parts.length <= 1) return; // No split occurred
+          if (parts.length <= 1) return;
 
           const fragment = document.createDocumentFragment();
 
+          // SECRET: The Parent Node Surgery
+          const parent = textNode.parentElement;
+          if (parent && parent.childNodes.length === 1 && parts.length === 3 && !parts[0].trim() && !parts[2].trim()) {
+            const key = parts[1];
+            if (blocks[key]) {
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = blocks[key];
+              while (tempDiv.firstChild) {
+                fragment.appendChild(tempDiv.firstChild);
+              }
+              parent.replaceWith(fragment);
+              return;
+            }
+          }
+
           parts.forEach(part => {
             if (blocks[part]) {
-              // It's a placeholder -> Render HTML
               const tempDiv = document.createElement('div');
               tempDiv.innerHTML = blocks[part];
-              // Unwrap if single child, otherwise append all
               while (tempDiv.firstChild) {
                 fragment.appendChild(tempDiv.firstChild);
               }
             } else if (part) {
-              // It's normal text -> Keep it
               fragment.appendChild(document.createTextNode(part));
             }
           });
@@ -563,7 +767,6 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
           textNode.replaceWith(fragment);
         });
 
-        // Append Bibliography if exists
         if (bibliographyHtml) {
           const bibEl = document.createElement('div');
           bibEl.classList.add('bibliography-section');
