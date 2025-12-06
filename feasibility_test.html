@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <link rel="stylesheet" href="https://tikzjax.com/v1/fonts.css">
+  <script src="https://tikzjax.com/v1/tikzjax.js"></script>
+  <title>Primitive Test</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+
+    .container {
+      border: 1px solid #ccc;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Primitive Geometry Test (No Libraries)</h1>
+
+  <!-- 1. Pure Primitives -->
+  <div class="container" id="test1">
+    <h3>1. Line & Circle</h3>
+    <script type="text/tikz">
+            \begin{tikzpicture}
+                \draw[red, thick] (0,0) -- (2,2);
+                \draw[blue] (1,1) circle (0.5);
+                \node at (2,0) {ALIVE};
+            \end{tikzpicture}
+        </script>
+  </div>
+
+  <!-- 2. Manual Brace (Bezier Approximation) -->
+  <div class="container" id="test2">
+    <h3>2. Manual Bezier Brace</h3>
+    <script type="text/tikz">
+            \begin{tikzpicture}
+                % A rough bracket/brace using controls
+                \draw[thick] (0,0) 
+                    .. controls (-0.5,0) and (-0.5,1.5) .. (-0.5,2) 
+                    .. controls (-0.5,2.5) and (-0.5,4) .. (0,4);
+                \node[left] at (-0.6, 2) {Bezier Works};
+            \end{tikzpicture}
+        </script>
+  </div>
+</body>
+
+</html>
