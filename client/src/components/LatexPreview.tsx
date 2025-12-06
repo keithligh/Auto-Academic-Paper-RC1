@@ -94,12 +94,29 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   const createMathBlock = (mathContent: string, displayMode: boolean): string => {
     const id = `LATEXPREVIEWMATH${blockCount++}`;
     try {
-      blocks[id] = katex.renderToString(mathContent, {
+      const renderedHtml = katex.renderToString(mathContent, {
         displayMode,
         throwOnError: false,
         strict: false,
         macros: { "\\eqref": "\\href{#1}{#1}", "\\label": "" }
       });
+
+      // STRATEGY: Auto-scale long equations to fit container
+      // Estimate rendered width based on content length (rough heuristic)
+      // Average character in KaTeX ≈ 0.5em, so length * 0.5em gives estimate
+      const estimatedWidth = mathContent.length * 0.5; // in em units
+      const maxWidth = displayMode ? 40 : 30; // Max width in em before scaling
+
+      if (estimatedWidth > maxWidth) {
+        const scaleFactor = maxWidth / estimatedWidth;
+        const minScale = 0.6; // Don't scale below 60% - becomes unreadable
+        const actualScale = Math.max(scaleFactor, minScale);
+
+        // Wrap in a scaling container
+        blocks[id] = `<span class="katex-autoscale" style="display: inline-block; transform: scale(${actualScale}); transform-origin: left center; max-width: ${100 / actualScale}%;">${renderedHtml}</span>`;
+      } else {
+        blocks[id] = renderedHtml;
+      }
     } catch (e) {
       blocks[id] = `<span style="color:red;">Math Error</span>`;
     }

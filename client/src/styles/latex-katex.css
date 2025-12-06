@@ -1167,3 +1167,45 @@ p .katex {
   }
 }
 
+/* ===================================================================
+ * AUTO-SCALING for Ridiculously Long Equations
+ * ===================================================================
+ * When equations are too long to fit, we auto-scale them down.
+ * Hover to see full size (with scroll if needed).
+ * ================================================================= */
+
+.katex-autoscale {
+  transition: transform 0.2s ease;
+  cursor: help; /* Indicate it's interactive */
+  position: relative;
+}
+
+/* Hover to zoom back to 100% and allow scrolling to see full equation */
+.katex-autoscale:hover {
+  transform: scale(1) !important;
+  overflow-x: auto;
+  overflow-y: visible;
+  z-index: 100;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 4px 8px;
+  border-radius: 2px;
+  max-width: 100% !important;
+}
+
+/* Add a subtle indicator that equation is scaled */
+.katex-autoscale::before {
+  content: '🔍';
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.katex-autoscale:hover::before {
+  opacity: 0;
+}
+
