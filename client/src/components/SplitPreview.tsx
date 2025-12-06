@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -14,8 +14,8 @@ interface SplitPreviewProps {
 }
 
 export function SplitPreview({ originalContent, latexContent, fileName }: SplitPreviewProps) {
-  // Default to "latex" view as requested
-  const [activeView, setActiveView] = useState<"original" | "latex">("latex");
+  // View State: 'latex' (default) or 'original'. Removed 'split' mode.
+  const [activeView, setActiveView] = useState<"latex" | "original">("latex");
   const [latexViewMode, setLatexViewMode] = useState<"code" | "preview">("preview");
   const { toast } = useToast();
 
@@ -36,164 +36,123 @@ export function SplitPreview({ originalContent, latexContent, fileName }: SplitP
   };
 
   return (
-    <div className="w-full flex flex-col">
-      {/* View Toggle */}
-      <div className="flex items-center justify-between mb-4 px-4">
-        <h3 className="text-lg font-semibold text-foreground">Document Preview</h3>
-        <div className="flex gap-2">
+    <div className="w-full h-full flex flex-col">
+      {/* View Toggle Header */}
+      <div className="flex items-center justify-between mb-4 px-4 shrink-0">
+        <h3 className="text-lg font-semibold text-foreground">Document Editor</h3>
+        <div className="flex gap-2 bg-muted p-1 rounded-lg">
           <Button
-            variant={activeView === "original" ? "default" : "outline"}
+            variant={activeView === "original" ? "secondary" : "ghost"}
             size="sm"
             onClick={() => setActiveView("original")}
             data-testid="button-view-original"
+            className="h-7 text-xs"
           >
+            <DocumentTextIcon className="w-4 h-4 mr-1" />
             Original
           </Button>
           <Button
-            variant={activeView === "latex" ? "default" : "outline"}
+            variant={activeView === "latex" ? "secondary" : "ghost"}
             size="sm"
             onClick={() => setActiveView("latex")}
             data-testid="button-view-latex"
+            className="h-7 text-xs"
           >
+            <CodeBracketIcon className="w-4 h-4 mr-1" />
             LaTeX
           </Button>
         </div>
       </div>
 
-      {/* Desktop View */}
-      <div className="hidden md:flex flex-1 gap-4">
-        {/* Single View: Original Only */}
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden gap-4 min-h-0">
+
+        {/* ORIGINAL CONTENT PANE */}
         {activeView === "original" && (
-          <div className="flex-1">
-            <Card className="h-full flex flex-col">
-              <div className="p-4 border-b border-card-border flex items-center gap-2">
-                <DocumentTextIcon className="w-5 h-5 text-muted-foreground" />
-                <h4 className="text-sm font-medium text-foreground">Original Content</h4>
+          <div className="w-full flex flex-col min-h-0 transition-all duration-300">
+            <Card className="flex-1 flex flex-col overflow-hidden border-border/50">
+              <div className="p-3 border-b border-border/50 bg-muted/20 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2">
+                  <DocumentTextIcon className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Source</span>
+                </div>
               </div>
-              <ScrollArea className="flex-1 p-6">
-                <pre className="whitespace-pre-wrap break-words font-sans text-sm text-foreground leading-relaxed bg-transparent">
-                  {originalContent}
-                </pre>
+              <ScrollArea className="flex-1">
+                <div className="p-6">
+                  <pre className="whitespace-pre-wrap break-words font-sans text-sm text-foreground/80 leading-relaxed bg-transparent">
+                    {originalContent}
+                  </pre>
+                </div>
               </ScrollArea>
             </Card>
           </div>
         )}
 
-        {/* Single View: LaTeX Only */}
+        {/* LATEX CONTENT PANE */}
         {activeView === "latex" && (
-          <div className="flex-1">
-            <Card className="h-full flex flex-col">
-              <div className="p-4 border-b border-card-border flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CodeBracketIcon className="w-5 h-5 text-muted-foreground" />
-                  <h4 className="text-sm font-medium text-foreground">Enhanced LaTeX</h4>
+          <div className="w-full flex flex-col min-h-0">
+            <Card className="flex-1 flex flex-col overflow-hidden border-border/50 shadow-sm">
+              <div className="p-2 border-b border-border/50 bg-muted/20 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-2 px-2">
+                  <CodeBracketIcon className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    {latexViewMode === "preview" ? "Live Preview" : "LaTeX Source"}
+                  </span>
                 </div>
+
+                {/* LaTeX Toolbar */}
                 <div className="flex gap-1">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleCopyLatex}
-                    className="h-8 px-3"
+                    className="h-7 px-2 text-xs hover:bg-background"
                     title="Copy LaTeX Code"
                   >
-                    <ClipboardDocumentIcon className="w-4 h-4 mr-1" />
+                    <ClipboardDocumentIcon className="w-3.5 h-3.5 mr-1" />
                     Copy
                   </Button>
-                  <Button
-                    variant={latexViewMode === "code" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setLatexViewMode("code")}
-                    data-testid="button-latex-code-single"
-                    className="h-8 px-3"
-                  >
-                    <CodeBracketIcon className="w-4 h-4 mr-1" />
-                    Code
-                  </Button>
-                  <Button
-                    variant={latexViewMode === "preview" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setLatexViewMode("preview")}
-                    data-testid="button-latex-preview-single"
-                    className="h-8 px-3"
-                  >
-                    <EyeIcon className="w-4 h-4 mr-1" />
-                    Preview
-                  </Button>
+                  <div className="h-4 w-px bg-border my-auto mx-1" />
+                  <div className="flex bg-background rounded-md border border-border p-0.5">
+                    <Button
+                      variant={latexViewMode === "code" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setLatexViewMode("code")}
+                      className="h-6 px-2 text-[10px]"
+                    >
+                      Code
+                    </Button>
+                    <Button
+                      variant={latexViewMode === "preview" ? "secondary" : "ghost"}
+                      size="sm"
+                      onClick={() => setLatexViewMode("preview")}
+                      className="h-6 px-2 text-[10px]"
+                    >
+                      Preview
+                    </Button>
+                  </div>
                 </div>
               </div>
-              <ScrollArea className="flex-1">
+
+              <div className="flex-1 overflow-hidden relative bg-muted/10">
                 {latexViewMode === "code" ? (
-                  <div className="p-6 bg-muted/30">
-                    <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground leading-relaxed bg-transparent">
-                      {latexContent}
-                    </pre>
-                  </div>
+                  <ScrollArea className="h-full">
+                    <div className="p-6">
+                      <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground/90 leading-relaxed">
+                        {latexContent}
+                      </pre>
+                    </div>
+                  </ScrollArea>
                 ) : (
-                  <LatexPreview latexContent={latexContent} className="min-h-full" />
+                  <div className="h-full w-full overflow-y-auto">
+                    {/* Pass className to manage internal scrolling if needed, or let parent handle */}
+                    <LatexPreview latexContent={latexContent} className="min-h-full py-8" />
+                  </div>
                 )}
-              </ScrollArea>
+              </div>
             </Card>
           </div>
         )}
-      </div>
-
-      {/* Mobile: Tabbed View */}
-      <div className="md:hidden flex-1">
-        <Tabs value={activeView} onValueChange={(v) => setActiveView(v as any)} className="h-full flex flex-col">
-          <TabsList className="w-full">
-            <TabsTrigger value="original" className="flex-1">Original</TabsTrigger>
-            <TabsTrigger value="latex" className="flex-1">LaTeX</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="original" className="flex-1 mt-4">
-            <Card className="h-full flex flex-col">
-              <ScrollArea className="flex-1 p-6">
-                <pre className="whitespace-pre-wrap break-words font-sans text-sm text-foreground leading-relaxed bg-transparent">
-                  {originalContent}
-                </pre>
-              </ScrollArea>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="latex" className="flex-1 mt-4">
-            <Card className="h-full flex flex-col">
-              <div className="p-3 border-b border-card-border flex items-center justify-between">
-                <h4 className="text-sm font-medium text-foreground">LaTeX</h4>
-                <div className="flex gap-1">
-                  <Button
-                    variant={latexViewMode === "code" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setLatexViewMode("code")}
-                    data-testid="button-latex-code-mobile"
-                    className="h-7 px-2 text-xs"
-                  >
-                    Code
-                  </Button>
-                  <Button
-                    variant={latexViewMode === "preview" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setLatexViewMode("preview")}
-                    data-testid="button-latex-preview-mobile"
-                    className="h-7 px-2 text-xs"
-                  >
-                    Preview
-                  </Button>
-                </div>
-              </div>
-              <ScrollArea className="flex-1">
-                {latexViewMode === "code" ? (
-                  <div className="p-6 bg-muted/30">
-                    <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground leading-relaxed bg-transparent">
-                      {latexContent}
-                    </pre>
-                  </div>
-                ) : (
-                  <LatexPreview latexContent={latexContent} className="min-h-full" />
-                )}
-              </ScrollArea>
-            </Card>
-          </TabsContent>
-        </Tabs>
       </div>
     </div>
   );

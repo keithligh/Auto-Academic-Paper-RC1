@@ -26,14 +26,36 @@ export class PoeProvider implements AIProvider {
     }
 
     async completion(prompt: string, systemPrompt: string, onProgress?: (text: string) => void, enableWebSearch?: boolean): Promise<string> {
-        // Build user message with optional web search (from pre-BYOK line 152-157)
+        // Build user message with optional web search
         const userMessage: any = {
             role: "user",
             content: prompt
         };
 
+        // Whitelist Check (Refined from test_whitelist_refined.ts)
+        // Verified models that support web search on Poe
+        const poeSearchModels = [
+            "Gemini-1.5-Pro",
+            "Gemini-1.5-Flash",
+            "Gemini-2.5-Pro",
+            "Gemini-2.5-Flash",
+            "GPT-4o",
+            "Claude-3.5-Sonnet", // Allows generic search context
+            "Perplexity-Sonar"
+        ];
+
+        // Only attach web_search parameter if the model supports it or if it's explicitly requested
         if (enableWebSearch) {
-            userMessage.parameters = { web_search: true };
+            const isKnownSearchModel = poeSearchModels.some(m =>
+                this.config.model.includes(m) || m.includes(this.config.model)
+            );
+
+            if (isKnownSearchModel) {
+                userMessage.parameters = { web_search: true };
+            } else {
+                console.warn(`[PoeProvider] Model ${this.config.model} may not support web_search, but parameters are being sent.`);
+                userMessage.parameters = { web_search: true }; // Try anyway, as Poe often updates support
+            }
         }
 
         const stream = await this.client.chat.completions.create({
@@ -158,6 +180,7 @@ export class PoeProvider implements AIProvider {
                     if (['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'].includes(nextChar)) {
                         escape = true;
                         result += char;
+                        escape = false; // logic correction
                     } else {
                         result += '\\\\';
                         escape = false;
@@ -171,69 +194,8 @@ export class PoeProvider implements AIProvider {
         return result;
     }
 
-    async research(queries: string[]): Promise<string> {
-        const poeSearchModels = ["Gemini-2.5-Pro", "Gemini-2.5-Flash"];
-        if (!poeSearchModels.includes(this.config.model)) {
-            throw new Error(`Model ${this.config.model} is not whitelisted for research on Poe.`);
-        }
-
-        if (queries.length === 0) return "{}";
-
-        // Librarian Prompt from pre-byok-poe.ts
-        const prompt = `You are a Research Librarian.
-    
-    RESEARCH TASKS:
-    ${queries.map((q, i) => `${i + 1}. ${q}`).join('\n')}
-
-    INSTRUCTIONS:
-    1. SEARCH ONLINE for high-quality academic references for these specific topics.
-    2. VERIFY that these papers actually exist.
-    3. OUTPUT FORMAT: Return a JSON array of references.
-    
-    REQUIRED JSON FORMAT:
-    {
-        "references": [
-            { "key": "authorYear", "author": "Names", "title": "Title", "venue": "Journal", "year": 2024, "url": "link if available" }
-        ]
-    }
-    `;
-
-        console.log("[Poe Debug] Sending Librarian request:", {
-            model: this.config.model,
-            prompt: prompt.substring(0, 100) + "..."
-        });
-
-        const response = await this.client.chat.completions.create({
-            model: this.config.model,
-            messages: [
-                {
-                    role: "user",
-                    content: prompt,
-                    parameters: { web_search: true }
-                } as any,
-            ],
-            temperature: 0.1,
-        });
-
-        const content = response.choices[0]?.message?.content || "{}";
-
-        // Process JSON (Battle-Tested Logic)
-        try {
-            const parsed = extractJson(content);
-
-            if (parsed.references && Array.isArray(parsed.references)) {
-                // Assign unique IDs (Librarian's Card Catalog)
-                parsed.references = parsed.references.map((ref: any, index: number) => ({
-                    ...ref,
-                    key: `ref_${index + 1}`
-                }));
-                return JSON.stringify(parsed);
-            }
-
-            return "{}";
-        } catch (e) {
-            console.error("Failed to parse Librarian response:", e);
-            return "{}";
-        }
-    }
+    // DEAD CODE REMOVAL: The dedicated 'research' method has been removed.
+    // The orchestration is handled by 'service.ts' using the standard 'completion' method
+    // with { web_search: true } enabled by the refined whitelist above.
+    // This aligns the Code with the Architecture (Service Orchestration).
 }

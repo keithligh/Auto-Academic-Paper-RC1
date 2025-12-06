@@ -134,11 +134,33 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   const createTikzBlock = (tikzCode: string, options: string = ''): string => {
     const id = `LATEXPREVIEWTIKZ${blockCount++}`;
     if (tikzCode.includes('\\begin{axis}') || tikzCode.includes('\\addplot')) {
-      blocks[id] = `<div class="latex-placeholder-box warning">⚠️ Complex diagram (pgfplots) - renders in PDF only</div>`;
+      blocks[id] = `<div class="latex-placeholder-box warning">⚠️ Complex diagram (pgfplots) - not supported in browser preview</div>`;
       return `\n\n${id}\n\n`;
     }
 
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
+    let safeTikz = tikzCode.replace(/[^\x00-\x7F]/g, '');
+
+    // GEOMETRIC POLYFILL: Manual Bezier Braces for TikZJax
+    // TikZJax cannot handle decoration={brace}, so we draw it manually.
+    safeTikz = safeTikz.replace(
+      /\\draw\[decorate,decoration=\{brace([^}]*)\}\]\s*\(([^)]+)\)\s*--\s*\(([^)]+)\)\s*node\[([^\]]*)\]\s*\{([^}]*)\};/g,
+      (match, decoOpts, start, end, nodeOpts, label) => {
+        const isMirror = decoOpts && decoOpts.includes('mirror');
+        const parseCoord = (s: string) => {
+          const parts = s.split(',').map(p => parseFloat(p.trim()));
+          return { x: parts[0] || 0, y: parts[1] || 0 };
+        };
+        const p1 = parseCoord(start); const p2 = parseCoord(end);
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        const curvature = isMirror ? 1 : -1;
+        const offset = 0.15 * curvature;
+        const tip = 0.35 * curvature;
+        return `\\draw[thick] (${p1.x},${p1.y}) .. controls (${p1.x},${p1.y + offset}) and (${midX},${midY + offset}) .. (${midX},${midY + tip}) .. controls (${midX},${midY + offset}) and (${p2.x},${p2.y + offset}) .. (${p2.x},${p2.y}); \\node[${nodeOpts}] at (${midX},${midY + tip + (0.4 * curvature)}) {${label}};`;
+      }
+    );
+
     const nodeMatches = safeTikz.match(/\\node/g) || [];
     const drawMatches = safeTikz.match(/\\draw/g) || [];
     const arrowMatches = safeTikz.match(/->/g) || [];
@@ -520,6 +542,36 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   }
 
   // --- F. TABLES (Standard) ---
+  // HELPER: Resolve Placeholders (Recursive)
+  const resolvePlaceholders = (text: string): string => {
+    return text.replace(/(LATEXPREVIEW[A-Z]+[0-9]+)/g, (match) => {
+      return blocks[match] || match;
+    });
+  };
+
+  // HELPER: Smart Row Splitting (Brace-aware)
+  const smartSplitRows = (text: string): string[] => {
+    const res: string[] = [];
+    let buf = '';
+    let depth = 0;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (c === '{') depth++;
+      else if (c === '}') depth--;
+
+      // Detect \\ at depth 0
+      if (depth === 0 && c === '\\' && text[i + 1] === '\\') {
+        res.push(buf);
+        buf = '';
+        i++; // Skip next slash
+        continue;
+      }
+      buf += c;
+    }
+    if (buf) res.push(buf);
+    return res;
+  };
+
   // MOVED UP: Must process Standard Tables BEFORE Standalone Tables
   content = content.replace(/\\begin\{table(\*?)\}(\[.*?\])?([\s\S]*?)\\end\{table\1\}/g, (m, star, pos, inner) => {
     let caption = '';
@@ -616,30 +668,6 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       const body = inner.substring(cursor, endIdx);
       console.log('parseTabular: Successfully extracted body. Length:', body.length);
 
-      // Render
-      // AUDIT FIX #2: Smart Row Splitting (Brace-aware)
-      const smartSplitRows = (text: string): string[] => {
-        const res: string[] = [];
-        let buf = '';
-        let depth = 0;
-        for (let i = 0; i < text.length; i++) {
-          const c = text[i];
-          if (c === '{') depth++;
-          else if (c === '}') depth--;
-
-          // Detect \\ at depth 0
-          if (depth === 0 && c === '\\' && text[i + 1] === '\\') {
-            res.push(buf);
-            buf = '';
-            i++; // Skip next slash
-            continue;
-          }
-          buf += c;
-        }
-        if (buf) res.push(buf);
-        return res;
-      };
-
       const rows = smartSplitRows(body).filter(r => r.trim());
       let tableHtml = '<table><tbody>';
       rows.forEach(row => {
@@ -666,7 +694,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   // --- G. TABLES (Standalone) ---
   // MOVED DOWN: Naked tabulars defined here.
   const parseStandaloneTabular = (body: string): string => {
-    const rows = body.split('\\\\').filter((r: string) => r.trim());
+    const rows = smartSplitRows(body).filter((r: string) => r.trim());
     let tableHtml = '<table><tbody>';
     rows.forEach((row: string) => {
       let r = row.trim().replace(/\\hline/g, '').replace(/\\cline\{.*?\}/g, '')
@@ -674,7 +702,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       if (!r) return;
       tableHtml += '<tr>';
       r.split('&').forEach((cell: string) => {
-        tableHtml += `<td>${parseLatexFormatting(cell.trim())}</td>`;
+        tableHtml += `<td>${resolvePlaceholders(parseLatexFormatting(cell.trim()))}</td>`;
       });
       tableHtml += '</tr>';
     });
@@ -722,14 +750,20 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     .replace(/\\paragraph\*?\{([^{}]*)\}/g, '\n\n\\vspace{1em}\\noindent\\textbf{$1} ')
     .replace(/\\subparagraph\*?\{([^{}]*)\}/g, '\n\n\\noindent\\textbf{$1} ');
 
-  // --- K. COMMAND STRIPPING ---
+  // --- K. COMMAND STRIPPING (Strict Containment) ---
+  // Architecture Rule: "Code is Law" - Dangerous macros must be intercepted.
   content = content
     .replace(/\\tableofcontents/g, '')
     .replace(/\\listoffigures/g, '')
     .replace(/\\listoftables/g, '')
     .replace(/\\maketitle/g, '')
     .replace(/\\input\{.*?\}/g, '')
-    .replace(/\\include\{.*?\}/g, '');
+    .replace(/\\include\{.*?\}/g, '')
+    .replace(/\\label\{.*?\}/g, '') // Remove labels
+    .replace(/\\ref\{.*?\}/g, '[?]') // Safe placeholder for refs
+    .replace(/\\eqref\{.*?\}/g, '(eqn)') // Safe placeholder for eqrefs
+    .replace(/\\footnote\{.*?\}/g, '') // Remove footnotes (too complex for inline)
+    .replace(/\\url\{([^{}]*)\}/g, '<span class="url">$1</span>'); // Flatten URLs to text
 
   // --- D. TABLES (Fallback for unparsed TabularX/Longtable) ---
   // MOVED DOWN: Catch-all for things we couldn't parse manually
@@ -867,7 +901,7 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
         }
 
         // FEATURE: Responsive Math (Scale-to-Fit like TikZ)
-        // We look for equations that overflow and shrink them (zoom) to fit.
+        // We look for equations that overflow and shrink them (transform) to fit.
         // This is "responsive" in the sense of fitting the A4 page width.
         const mathBlocks = containerRef.current!.querySelectorAll('.katex-display');
         mathBlocks.forEach((block) => {
@@ -875,17 +909,21 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
           // Reset previous scaling
           el.style.transform = '';
           el.style.width = '';
+          el.style.transformOrigin = 'left center'; // transform scale originates from center by default
 
           if (el.scrollWidth > el.clientWidth) {
             const scale = el.clientWidth / el.scrollWidth;
-            // Use zoom for simpler flow reflow in Chrome/Edge. 
-            // Fallback to transform for others if needed, but zoom is cleaner here.
             // We cap the shrink at 50% to prevent unreadable microscopic text.
-            const safeScale = Math.max(scale, 0.5);
+            const safeScale = Math.max(scale, 0.55);
 
             if (safeScale < 1) {
-              // @ts-ignore
-              el.style.zoom = safeScale;
+              el.style.transform = `scale(${safeScale})`;
+              // When we scale down, the element still occupies original width in flow unless we adjust width.
+              // However, since it's shrinking, we increase the width percentage to ensure the scaled version fills the container?
+              // Actually, simply scaling it down makes it fit visually. 
+              // To handle flow correctly with transform, we often need to adjust margins or width.
+              // According to LATEX_PREVIEW_SYSTEM.md: "width: (100/0.X)%"
+              el.style.width = `${(100 / safeScale)}%`;
             }
           }
         });
@@ -909,7 +947,7 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
           <p>{error}</p>
           <p style={{ marginTop: '10px', color: '#666', fontSize: '0.9em' }}>
             The preview uses a simplified browser renderer.
-            <strong>Your PDF download will still come out perfectly.</strong>
+            <strong>Your LaTeX source will still compile perfectly.</strong>
           </p>
         </div>
       </div>
