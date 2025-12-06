@@ -167,13 +167,75 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const isTextHeavy = avgLabelTextPerNode > 40; // Use accurate label-based metric
     const baseComplexity = nodeMatches.length + drawMatches.length + (arrowMatches.length / 2);
 
-    // REFACTOR (v1.4.0): Valid Responsive SVG Logic
-    // Instead of hacking the scale, we let CSS do its job.
-    // 1. We tell the internal SVG to fill the width (width: 100%; height: auto)
-    // 2. We tell the iframe to take 100% of the parent container
-    // 3. We use the observer ONLY to adapt the height
+    // REFACTOR (v1.5.5): HYBRID INTENT (Phase 7 + Density Override)
+    // We analyze the AI's *intent* based on 'node distance', BUT we fallback to 
+    // text density if the distance is missing (to catch implicit "Large" layout).
+    // See TIKZ_HANDLING.md for the "8.4cm" magic number.
 
-    const finalOptions = options || '[]';
+    let intent = 'MEDIUM'; // Default
+    let nodeDist = 2.0; // Default assumption if missing
+
+    // 1. EXTRACT INTENT
+    const distMatch = options.match(/node distance\s*=\s*([\d\.]+)/);
+    if (distMatch) {
+      nodeDist = parseFloat(distMatch[1]);
+    }
+
+    // 2. CLASSIFY
+    if (distMatch) {
+      // Explicit intent wins
+      if (nodeDist < 2.0) intent = 'COMPACT';
+      else if (nodeDist >= 2.5) intent = 'LARGE';
+    } else {
+      // Implicit intent (Inference)
+      if (isTextHeavy) intent = 'LARGE'; // Text-heavy = Cycle = Large
+      else if (nodeMatches.length >= 8) intent = 'COMPACT'; // Many nodes = Pipeline = Compact
+    }
+
+    // 3. EXECUTE RULES (The Table)
+    let extraOpts = '';
+
+    if (intent === 'COMPACT') {
+      // GOAL: Fit to A4
+      const scale = nodeMatches.length >= 8 ? 0.75 : 0.85;
+      if (!options.includes('scale=')) extraOpts += `, scale=${scale}`;
+      if (!options.includes('transform shape')) extraOpts += ', transform shape';
+      if (!options.includes('node distance')) extraOpts += ', node distance=1.5cm';
+
+    } else if (intent === 'LARGE') {
+      // GOAL: Readability
+      // Magic Number from Doc: 8.4cm for text-heavy expansions
+      const scale = nodeMatches.length >= 6 ? 0.85 : 1.0;
+      if (!options.includes('scale=')) extraOpts += `, scale=${scale}`;
+
+      if (!options.includes('node distance')) {
+        // If we forced LARGE due to text density, we use the proven magic number
+        const targetDist = isTextHeavy ? 8.4 : 5.0;
+        extraOpts += `, node distance=${targetDist}cm`;
+      } else {
+        // If AI set a distance, we allow it but boost it if it's clearly too small for a cycle
+        if (nodeDist < 4.0) extraOpts += ', node distance=5cm';
+      }
+
+      // Mandatory for Large
+      if (!options.includes('text width')) extraOpts += ', every node/.append style={align=center}';
+
+    } else {
+      // MEDIUM
+      const scale = nodeMatches.length >= 6 ? 0.8 : 0.9;
+      if (!options.includes('scale=')) extraOpts += `, scale=${scale}`;
+      if (!options.includes('node distance')) extraOpts += ', node distance=2.5cm';
+    }
+
+    // Merge logic
+    let finalOptions = options.trim();
+    if (!finalOptions) {
+      finalOptions = extraOpts ? `[${extraOpts.replace(/^,/, '').trim()}]` : '[]';
+    } else if (finalOptions.startsWith('[') && finalOptions.endsWith(']')) {
+      finalOptions = finalOptions.slice(0, -1) + extraOpts + ']';
+    } else {
+      finalOptions = `[${finalOptions}${extraOpts}]`;
+    }
 
     const iframeHtml = `<!DOCTYPE html>
 <html>

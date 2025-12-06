@@ -465,3 +465,25 @@ If the renderer encounters a catastrophic failure (e.g., `latex.js` throws an ex
 
 - **The Guard**: A `try-catch` block wraps the entire render process.
 - **The UI**: An `Alert` component (shadcn/ui) is rendered in place of the document.
+
+---
+
+## 21. The Dynamic TikZ Engine (Intent-Based Phase 7)
+
+We adhere to the strict "Phase 7" logic documented in `TIKZ_HANDLING.md`. This strategy respects the AI's *intent* (expressed via `node distance`) while ensuring fit and readability.
+
+### 1. The Classifier (The Intent)
+We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm if node count > 8).
+*   **COMPACT** (Pipeline): `dist < 2.0cm`.
+*   **LARGE** (Cycle): `dist >= 2.5cm`.
+*   **MEDIUM**: Everything else.
+
+### 2. The Execution Rules
+
+| Intent | Goal | Action |
+| :--- | :--- | :--- |
+| **COMPACT** | **Fit to A4** | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm` |
+| **LARGE** | **Readability** | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
+| **MEDIUM** | **Balance** | `scale=0.9`, `node distance=2.5cm` |
+
+This ensures that "Cycle" diagrams (Large intent) get the massive spacing they need to avoid overlap, while "Pipelines" (Compact intent) are shrunk proportionally.
