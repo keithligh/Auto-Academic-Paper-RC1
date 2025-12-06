@@ -266,3 +266,40 @@ ul,
 ol {
     padding-left: 2em;
 }
+
+/* ===================================================================
+ * FIX: Parbox Overflow Handling for Long Content (especially KaTeX)
+ * ================================================================= */
+.parbox {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    /* Allow scrolling for very long content */
+    display: inline-block;
+    vertical-align: top;
+}
+
+/* Ensure parbox doesn't break layout */
+.latex-preview .parbox {
+    margin: 0.5em 0;
+    padding: 0.2em 0;
+}
+
+/* Add subtle scrollbar for parbox */
+.parbox::-webkit-scrollbar {
+    height: 6px;
+}
+
+.parbox::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.parbox::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.parbox::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}

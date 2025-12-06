@@ -1077,3 +1077,93 @@ body {
   counter-reset: katexEqnNo mmlEqnNo;
 }
 
+/* ===================================================================
+ * FIX: Long KaTeX Equations Overflow Handling
+ * ===================================================================
+ * Problem: KaTeX uses white-space: nowrap, causing long equations to
+ * overflow their containers (especially in parbox, narrow columns, etc.)
+ *
+ * Solution Strategy:
+ * 1. Allow horizontal scrolling for long inline equations
+ * 2. Add responsive max-width constraints
+ * 3. Provide visual feedback for scrollable content
+ * ================================================================= */
+
+/* Container for inline KaTeX when it might overflow */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  padding: 2px 0; /* Small padding for scrollbar */
+}
+
+/* For inline katex inside constrained containers (like parbox) */
+.parbox .katex,
+.table-wrapper .katex,
+p .katex {
+  max-width: 100%;
+  display: inline-block;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: middle;
+}
+
+/* Add subtle scrollbar styling for better UX */
+.katex-display::-webkit-scrollbar,
+.parbox .katex::-webkit-scrollbar {
+  height: 6px;
+}
+
+.katex-display::-webkit-scrollbar-track,
+.parbox .katex::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.katex-display::-webkit-scrollbar-thumb,
+.parbox .katex::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.katex-display::-webkit-scrollbar-thumb:hover,
+.parbox .katex::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* For very long equations, add a subtle shadow to indicate scrollability */
+.katex-display::after,
+.parbox .katex::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 30px;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.8));
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+/* Show shadow when content overflows */
+.katex-display:not(:hover)::after,
+.parbox .katex:not(:hover)::after {
+  opacity: 0;
+}
+
+/* Alternative strategy: Allow word breaking for very long expressions */
+.katex .base {
+  /* Keep nowrap for normal cases, but allow override */
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Responsive handling: On small screens, be more aggressive */
+@media (max-width: 768px) {
+  .parbox .katex,
+  p .katex {
+    font-size: 0.9em; /* Slightly smaller on mobile */
+  }
+}
+
