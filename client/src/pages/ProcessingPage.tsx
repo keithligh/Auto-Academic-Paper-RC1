@@ -80,8 +80,22 @@ export default function ProcessingPage() {
             if (logContainerRef.current) {
                 logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
             }
+            // Update timestamp for Stall Detection
+            lastUpdateRef.current = Date.now();
+            setStallWarning(false);
         }
     }, [job?.logs]);
+
+    // Effect: Stall Detection (The Safety Net)
+    // If logs haven't changed for >10 seconds, show "Deep research" warning
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (job?.status === 'processing' && Date.now() - lastUpdateRef.current > 10000) {
+                setStallWarning(true);
+            }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [job?.status]);
 
     // Effect: Sync Progress Bar with Real Logs
     useEffect(() => {

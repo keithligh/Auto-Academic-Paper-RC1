@@ -11,7 +11,10 @@ export async function extractTextFromFile(filePath: string, mimeType: string): P
     } else if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
       return await extractTextFromDOCX(filePath);
     } else if (mimeType === "text/plain" || mimeType === "text/markdown") {
-      return await extractTextFromTXT(filePath);
+      let result = await extractTextFromTXT(filePath);
+
+      // Sanitization: Remove existing bibliographies to prevent AI hallucination
+      return sanitizeExtractedText(result);
     } else {
       throw new Error(`Unsupported file type: ${mimeType}`);
     }
@@ -19,6 +22,28 @@ export async function extractTextFromFile(filePath: string, mimeType: string): P
     console.error("Error extracting text:", error);
     throw error;
   }
+}
+
+// === SANITIZATION HELPER ===
+function sanitizeExtractedText(text: string): string {
+  // 1. Remove LaTeX \begin{thebibliography} blocks
+  let clean = text.replace(/\\begin\{thebibliography\}[\s\S]*?\\end\{thebibliography\}/g, "");
+
+  // 2. Remove common "References" or "Bibliography" sections at the end of text
+  // Heuristic: Look for "References" followed by [1] or (Author, Year) patterns
+  // We truncate everything after "References" if it looks like a list
+  const refMatch = clean.match(/(^|\n)(References|Bibliography|Works Cited)\s*(\n|$)/i);
+  if (refMatch) {
+    // Check if what follows looks like citations (simplistic check)
+    // If the remainder is > 50 chars and contains [1] or (20..., assume it's a bib
+    const index = refMatch.index!;
+    const remainder = clean.substring(index);
+    if (remainder.length > 50 && (/\[\d+\]/.test(remainder) || /\(\d{4}\)/.test(remainder))) {
+      clean = clean.substring(0, index);
+    }
+  }
+
+  return clean;
 }
 
 async function extractTextFromPDF(filePath: string): Promise<string> {

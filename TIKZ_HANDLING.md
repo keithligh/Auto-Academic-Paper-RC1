@@ -2,7 +2,7 @@
 
 This document details the specific engineering strategies used to render compiled TikZ diagrams in the browser within the Auto Academic Paper application.
 
-Rendering TikZ in the browser is notoriously difficult because TikZ is a Turing-complete language that requires a full TeX engine. We use a **Hybrid Isolation Strategy** to achieve this without crashing the main application.
+Rendering TikZ in the browser is notoriously difficult because TikZ is a Turing-complete language that requires a full TeX engine. We use a **Hybrid Isolation Strategy** (part of the **Strict Containment Protocol** detailed in `LATEX_PREVIEW_SYSTEM.md`) to achieve this without crashing the main application.
 
 ---
 
@@ -84,44 +84,36 @@ Since the TikZ diagram size is unknown until render time, the iframe defaults to
 -   **Action**: Once found, it measures the SVG's `getBoundingClientRect()` and sets the `window.frameElement.style.height` and `width` on the parent page.
 -   **Result**: The iframe snaps to the exact size of the diagram.
 
-### Phase 7: The Density Reduction (Pure Coordinate Expansion)
-AI-generated TikZ diagrams often have cramped, overlapping elements because the AI uses tight spacing.
+### Phase 7: The True Dynamic Scaling (Intent-Based Architecture)
 
-**The Problem: Proportional Scaling Doesn't Work**
--   Using `scale=X` in TikZ acts like a magnifying glass—it zooms EVERYTHING proportionally.
--   If text overlaps at `scale=1`, it still overlaps at `scale=2` (just bigger).
--   `Density = Content Size / Available Space`. Scaling increases both equally.
+> **History**: 
+> - v1.0: Small diagrams were cramped.
+> - v1.1: Forced spacing (`x=5cm`) made small diagrams enormous.
+> - v1.2: Complexity Scoring (Nodes/Draws). Failed to distinguish "compact structure" from "text-heavy flows".
+> - v1.3 (Current): **Intent-Based Classification** using the AI's original choices.
 
-**The Solution: Decouple Space from Content**
-We inject default options that expand the *coordinate system* while keeping *text compact*:
+**Current Strategy (v1.3.0+):**
+We analyze the AI's *intent* by looking at its chosen `node distance`. This is the single best predictor of whether a diagram is meant to be tight (pipeline) or spacious (cycle).
 
-```latex
-\begin{tikzpicture}[x=5cm, y=5cm, node distance=7cm, every node/.append style={font=\small}]
-```
+1.  **Classification Logic**:
+    -   **COMPACT (Pipeline)**: If original `node distance < 2.0cm`. The AI wants a tight layout.
+    -   **LARGE (Cycle)**: If original `node distance >= 2.5cm`. The AI expects multi-line text boxes.
+    -   **MEDIUM**: Everything else (`2.0cm - 2.5cm`).
 
-| Option | Effect | Default | Our Value |
-|--------|--------|---------|-----------|
-| `x=5cm` | Horizontal unit vector | 1cm | 5cm (5x expansion) |
-| `y=5cm` | Vertical unit vector | 1cm | 5cm (5x expansion) |
-| `node distance=7cm` | Spacing for relative positioning | 1cm | 7cm (7x expansion) |
-| `font=\small` | Text size | Normal | Small (reduces content size) |
+2.  **The Execution Rules**:
 
-**Why These Values:**
--   Default TikZ unit: 1cm
--   Typical academic node with text: ~2-3cm wide
--   Safe spacing to prevent overlap: ~2-3x node width
--   Conservative: `5cm` provides ~2.5x safety margin
+| Type | Goal | Action | Technical Implementation |
+| :--- | :--- | :--- | :--- |
+| **COMPACT** | **Fit to A4** | **Scale Down** (Whole) | `scale` (0.75 if ≥8 nodes, else 0.85) + `transform shape` + Reduced Dist (Proportional) |
+| **LARGE** | **Readability** | **Expand** (Spacing) | `scale` (1.0 default, 0.85 if ≥6 nodes) + Boost Dist (2.8x if ≥3cm, else 2.0x) |
+| **MEDIUM** | Balance | Adjust | `scale` (0.8 if ≥6 nodes, else 0.9) + Moderate Dist (1.2x) |
 
-**The Iframe Resize Logic:**
-The MutationObserver measures the resulting SVG using `scrollWidth`/`scrollHeight` (to capture full content extent) plus a small buffer:
-```javascript
-const w = Math.max(document.body.scrollWidth, svg.getBoundingClientRect().width);
-const h = Math.max(document.body.scrollHeight, svg.getBoundingClientRect().height);
-window.frameElement.style.height = (h + 5) + 'px';
-window.frameElement.style.width = (w + 5) + 'px';
-```
+3.  **Why `transform shape` Matters**:
+    -   For **Compact** diagrams, we MUST use `transform shape` (supported by TikZ). This forces the *text and nodes* to scale down along with the coordinates. Without it, `scale=0.5` would just crowd 12pt text into a tiny grid.
+    -   For **Large** diagrams, we **Disable** `transform shape`. We want the text to remain readable (10pt/12pt) while the grid expands to accommodate it.
 
-The iframe has **fixed width** (100% of parent) and **dynamic height** (adapts to content).
+4.  **Preservation**: If the user provides explicit manual overrides, they are respected, but the dynamic system is the default for all AI-generated content.
+
 
 ---
 
@@ -132,6 +124,5 @@ The iframe has **fixed width** (100% of parent) and **dynamic height** (adapts t
 3.  **NEVER** normalize/prettify code inside a TikZ block (keep raw `--`).
 4.  **ALWAYS** wrap the injected code in `\begin{tikzpicture}`.
 5.  **ALWAYS** use an iframe.
-6.  **NEVER** use `scale=X` to fix density (it zooms everything proportionally).
-7.  **ALWAYS** expand the coordinate system (`x=`, `y=`, `node distance=`) to create space.
-8.  **ALWAYS** keep text compact (`font=\small`) to reduce content size.
+6.  **ALWAYS** extract TikZ BEFORE math (so TikZJax receives raw math, not placeholders).
+7.  **NEVER** force spacing overrides in the renderer (fix via AI prompts instead).

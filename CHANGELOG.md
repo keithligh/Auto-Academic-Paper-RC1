@@ -8,6 +8,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2025-12-06
+### Added
+- **Strict Containment Protocol**: Enforced "Code is Law" rules for `latex.js`.
+  - **Dangerous Macros**: `\eqref`, `\ref`, `\label`, `\url`, `\footnote` are now strictly intercepted and sanitized to safe HTML/text before reaching the renderer.
+  - **Parent Node Surgery**: Implemented deep DOM surgery in `LatexPreview.tsx` to prevent invalid HTML nesting (e.g., `<div>` inside `<p>`) for block-level placeholders.
+  - **Parbox Support**: Added support for `\columnwidth` in the manual parbox parser.
+- **Documentation**: Updated `ARCHITECTURE.md` and `LATEX_PREVIEW_SYSTEM.md` to fully align with the strict implementation.
+
+## [1.3.0] - 2025-12-06
+### Added
+- **Recall Last Generation**: Added Persistence/Recall feature. Users can now restore their last generated paper (including LaTeX source) from the database across page reloads and browser sessions.
+- **Import LaTeX**: Added "Import LaTeX" feature on the landing page, allowing users to upload local `.tex` files for immediate preview and debugging.
+- **Intent-Based TikZ Scaling**: Implemented "True Dynamic Scaling" architecture for diagrams:
+  - **Compact Strategy**: Automatically detects tight diagrams (e.g., entity flow) and scales them down (`scale=0.75` + `transform shape`) to fit A4 pages.
+  - **Large Strategy**: Automatically detects text-heavy diagrams (e.g., cycle processes) and expands spacing (`node distance=8.4cm`) without shrinking text to ensure readability.
+
+## [1.2.0] - 2025-12-06
+### Added
+- **6-Phase AI Pipeline**: Refactored "Research-First" architecture:
+  - Phase 1: Strategist (analyze input → research queries)
+  - Phase 2: Librarian (find papers BEFORE writing)
+  - Phase 3: Thinker (draft with evidence awareness)
+  - Phase 4: Critic (identify weak claims)
+  - Phase 5: Rewriter (strengthen text with evidence)
+  - Phase 6: Editor (insert citation markers)
+- **PipelineContext Pattern**: Shared state object for data flow between phases.
+- **Compiler Logic**: Added `compileCitations()` to `latexGenerator.ts` to convert `(ref_X)` → `\cite{ref_X}`.
+
+### Fixed
+- **Standalone Tabular**: Added handler for `\begin{tabular}...\end{tabular}` outside table wrappers (was causing "unknown environment: tabular" crash).
+- **TikZ Math Placeholders**: Moved TikZ extraction BEFORE math extraction so TikZJax receives raw math (not LATEXPREVIEWMATH placeholders).
+- **TikZ Sizing**: Removed forced spacing overrides that inflated diagrams. Diagrams now render at natural size.
+- **TikZ Centering**: Wrapped TikZ iframes in centered flex container.
+- **Math Display Rhythm**: Added consistent 1.5em spacing above/below display equations.
+- **Math Font Size**: Increased display equation font size to 1.1em.
+
 ## [1.1.4] - 2025-12-05
 ### Fixed
 - **TikZ Diagram Density**: Implemented "Pure Density Reduction" strategy to eliminate cramped/overlapping diagrams.

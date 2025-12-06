@@ -266,3 +266,19 @@ ul,
 ol {
     padding-left: 2em;
 }
+
+/* =============================================
+ * MATH DISPLAY: Consistent Vertical Rhythm
+ * ============================================= */
+.latex-preview .katex-display {
+    margin: 1.5em 0 !important;
+    font-size: 1.1em;
+    /* Slightly larger than body text for display equations */
+}
+
+/* Inline math should not add extra spacing */
+.latex-preview .katex:not(.katex-display) {
+    margin: 0;
+    font-size: 1em;
+    /* Match body text */
+}

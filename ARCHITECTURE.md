@@ -43,6 +43,8 @@ The **Auto Academic Paper** system uses a **human-like 5-phase research workflow
     *   **Sanitization (The Shield):** Aggressively strips dangerous preambles and macros that crash browsers.
     *   **Extraction (The Heist):** Steals complex elements (Math, TikZ, Tables) *before* the renderer sees them.
     *   **Injection (The Trojan Horse):** Replaces stolen elements with placeholders, then surgically swaps them back with high-fidelity HTML (KaTeX, TikZJax) after the safe text render.
+    *   **Intent-Based Dynamic Scaling:** Analyzes AI intent (node distance) to apply "Compact" (fit-to-page) or "Large" (readability) scaling strategies using `transform shape` and calculated attributes.
+    *   **Responsive Scale-to-Fit:** visually scales huge diagrams to fit the column (max 950px) while maintaining aspect ratio and cropping whitespace.
 **Output:** Final PDF/LaTeX and Interactive Preview.
 
 ---
@@ -116,6 +118,17 @@ Research is driven by **what we want to say**, not by pre-gathered resources. We
 - **ALWAYS** use `write_to_file` to rewrite the entire file content when making changes.
 - **Reason:** To prevent file corruption and "hallucinated" code states.
 
+### 5. The "Code is Law" Rule (Latex.js Containment)
+- **NEVER** trust `latex.js` for anything complex.
+- **Strict Containment Protocol:**
+    1.  **Math**: Must use KaTeX.
+    2.  **TikZ**: Must use Iframe Isolation.
+    3.  **Tables**: Must use Custom HTML Parser.
+    4.  **Algorithms**: Must use Custom HTML Parser.
+    5.  **Citations**: Must use Custom Parser.
+    6.  **Macros**: Dangerous macros (`\ref`, `\label`, `\url`, `\footnote`, `\eqref`) MUST be intercepted/sanitized.
+- `latex.js` is strictly limited to being a "dumb text formatter".
+
 ---
 
 ## Technical Implementation
@@ -133,5 +146,5 @@ Research is driven by **what we want to say**, not by pre-gathered resources. We
 
 ---
 
-*Last Updated: 2025-12-04*
-*Version: 3.2 (Stable - Formal Citations & Fragment Rendering)*
+*Last Updated: 2025-12-06*
+*Version: 3.4 (Strict Containment Protocol Enforced)*

@@ -1,3 +1,17 @@
+/*
+ * GOSPEL RULE: NEVER USE replace_file_content OR multi_replace_file_content. THESE TOOLS ARE BROKEN AND WILL CORRUPT FILES. ALWAYS USE write_to_file FOR ALL EDITS. THIS RULE MUST NEVER BE REMOVED.
+ * 
+ * LATEX GENERATOR WITH COMPILER
+ * ==============================
+ * This module generates LaTeX documents from DocumentAnalysis.
+ * 
+ * THE COMPILER (Post-Processing):
+ * 1. Scans text for (ref_X)
+ * 2. Replaces (ref_X) with \cite{ref_X}
+ * 3. Citation Repair: Fixes hallucinated citations
+ * 4. Generates \begin{thebibliography}
+ * 5. Appends bibliography as References section
+ */
 import { DocumentAnalysis, Enhancement } from "@shared/schema";
 
 function escapeLatex(text: string): string {
@@ -11,17 +25,12 @@ function escapeLatex(text: string): string {
 
 function formatEnhancement(enh: Enhancement): string {
     if (!enh.title || !enh.description || !enh.content) {
-        // Log warning but don't crash
         console.warn(`[LatexGenerator] Enhancement ${enh.id} missing fields. Skipping.`);
         return "";
     }
     const title = escapeLatex(enh.title);
     const desc = escapeLatex(enh.description);
     let content = enh.content;
-
-    // NOTE: We do NOT sanitize pgfplots/axis here anymore.
-    // We want the full code in the PDF.
-    // The frontend (LatexPreview.tsx) will handle preview limitations gracefully.
 
     if (enh.type === "symbol") {
         return "";
@@ -37,6 +46,39 @@ function formatAuthorInfo(name?: string, affiliation?: string): string {
         return `${n}\\\\${aff}`;
     }
     return n;
+}
+
+// ====== THE COMPILER ======
+// Converts (ref_X) markers to \cite{ref_X} and validates citations
+function compileCitations(text: string, references: { key: string }[]): string {
+    // Step 1: Build a set of valid reference keys
+    const validKeys = new Set(references.map(r => r.key));
+
+    // Step 2: Replace (ref_X) with \cite{ref_X}
+    // Pattern: (ref_1), (ref_2), etc.
+    let compiled = text.replace(/\(ref_(\d+)\)/g, (match, num) => {
+        const key = `ref_${num}`;
+        if (validKeys.has(key)) {
+            return `\\cite{${key}}`;
+        } else {
+            // Invalid citation - mark as [?]
+            console.warn(`[Compiler] Invalid citation marker: ${match}`);
+            return `[?]`;
+        }
+    });
+
+    // Step 3: Citation Repair - detect any hallucinated \cite{} that aren't in our list
+    compiled = compiled.replace(/\\cite\{([^}]+)\}/g, (match, key) => {
+        if (validKeys.has(key)) {
+            return match; // Valid, keep it
+        } else {
+            // Hallucinated citation - mark as [?]
+            console.warn(`[Compiler] Hallucinated citation detected: ${match}`);
+            return `[?]`;
+        }
+    });
+
+    return compiled;
 }
 
 // Generate LaTeX document from analysis
@@ -60,14 +102,25 @@ export async function generateLatex(
         }
 
         const title = escapeLatex(analysis.title);
-        const abstract = analysis.abstract;
+
+        // Run COMPILER on abstract
+        const abstract = compileCitations(analysis.abstract, analysis.references || []);
 
         const symbolDefs = enabled
             .filter((e) => e.type === "symbol")
             .map((e) => (e.content?.endsWith("\n") ? e.content : `${e.content}\n`))
             .join("");
 
-        let latex = `\\documentclass[12pt]{article}
+        // === CJK DETECTION ===
+        const hasCJK = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/.test(analysis.sections?.map(s => s.content).join(" ") || "")
+            || /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]/.test(analysis.abstract || "");
+
+        const cjkPreamble = hasCJK ? "\\usepackage{CJKutf8}" : "";
+        const cjkStart = hasCJK ? "\\begin{CJK*}{UTF8}{min}" : "";
+        const cjkEnd = hasCJK ? "\\end{CJK*}" : "";
+        // =====================
+
+        let latex = `\\documentclass[11pt]{article}
 
 % Packages
 \\usepackage[utf8]{inputenc}
@@ -82,6 +135,7 @@ export async function generateLatex(
 \\usepackage{algorithm}
 \\usepackage{algpseudocode}
 \\usepackage{tabularx}
+${cjkPreamble}
 
 % TikZ and diagram packages
 \\usepackage{tikz}
@@ -98,13 +152,13 @@ export async function generateLatex(
 \\newtheorem{remark}{Remark}
 \\newtheorem{constraint}{Constraint}
 
-${symbolDefs ? `% Symbol definitions
-${symbolDefs}` : ""}% Title and author
+${symbolDefs ? `% Symbol definitions\n${symbolDefs}` : ""}% Title and author
 \\title{${title}}
 \\author{${formatAuthorInfo(authorName, authorAffiliation)}}
 \\date{\\today}
 
 \\begin{document}
+${cjkStart}
 \\maketitle
 \\begin{abstract}
 ${abstract}
@@ -127,13 +181,14 @@ ${abstract}
                     continue;
                 }
                 const secName = escapeLatex(sec.name);
-                const secContent = sec.content;
+
+                // Run COMPILER on section content
+                const secContent = compileCitations(sec.content, analysis.references || []);
 
                 // Add Section Header
                 latex += `\\section{${secName}}\n\n`;
 
                 // --- INLINE ENHANCEMENT PLACEMENT ---
-                // Find enhancements for this section
                 const secEnhs = enabled.filter((e) => {
                     if (e.type === "symbol") return false;
                     const loc = (e.location || "").toLowerCase().trim();
@@ -166,7 +221,6 @@ ${abstract}
         }
 
         // --- UNMATCHED ENHANCEMENTS ---
-        // Append to end of document, NO separate section header
         const unmatched = enabled.filter((e) => {
             if (e.type === "symbol") return false;
             return e.id && !placedEnhancementIds.has(e.id);
@@ -187,18 +241,17 @@ ${abstract}
         if (analysis.references && analysis.references.length > 0) {
             latex += `\n\\begin{thebibliography}{99}\n`;
             for (const ref of analysis.references) {
-                // Escape fields just in case
                 const author = escapeLatex(ref.author);
-                const title = escapeLatex(ref.title);
+                const refTitle = escapeLatex(ref.title);
                 const venue = escapeLatex(ref.venue);
                 const year = ref.year;
 
-                latex += `\\bibitem{${ref.key}} ${author}. \\textit{${title}}. ${venue}, ${year}.\n`;
+                latex += `\\bibitem{${ref.key}} ${author}. \\textit{${refTitle}}. ${venue}, ${year}.\n`;
             }
             latex += `\\end{thebibliography}\n`;
         }
 
-        latex += `\\end{document}\n`;
+        latex += `${cjkEnd}\n\\end{document}\n`;
 
         return latex;
     } catch (error: any) {

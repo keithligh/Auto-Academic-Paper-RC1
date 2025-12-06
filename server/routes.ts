@@ -1,5 +1,6 @@
 /*
- * GOSPEL RULE: NEVER USE replace_file_content OR multi_replace_file_content. THESE TOOLS ARE BROKEN AND WILL CORRUPT FILES. ALWAYS USE write_to_file FOR ALL EDITS. THIS RULE MUST NEVER BE REMOVED.
+ * GOSPEL RULE: replace_file_content is BROKEN in this environment and corrupts files.
+ * Use multi_replace_file_content first. If that fails, fall back to write_to_file.
  */
 import type { Express } from "express";
 import { createServer, type Server } from "http";
@@ -252,6 +253,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Debug import: Create a preview job from raw LaTeX (for debugging TikZ etc)
+  app.post("/api/conversions/debug-import", async (req, res) => {
+    try {
+      const { latexContent, originalFileName } = req.body;
+
+      if (!latexContent) {
+        return res.status(400).json({ error: "No LaTeX content provided" });
+      }
+
+      const job = await storage.createConversionJob({
+        originalFileName: originalFileName || "imported.tex",
+        fileType: "tex",
+        fileSize: String(latexContent.length),
+        objectPath: `debug-import/${Date.now()}`,
+        paperType: "research_paper",
+        enhancementLevel: "standard"
+      });
+
+      // Mark as completed with the imported LaTeX
+      await storage.updateConversionJob(job.id, {
+        status: "completed",
+        latexContent,
+        originalContent: "[Debug Import]",
+        completedAt: new Date()
+      });
+
+      res.json({ id: job.id, status: "completed" });
+    } catch (error) {
+      console.error("Error creating debug import:", error);
+      res.status(500).json({ error: "Failed to create debug import" });
+    }
+  });
+
+  // Get latest completed conversion job (for "Recall Last" feature) - MUST be before /:id
+  app.get("/api/conversions/latest", async (req, res) => {
+    try {
+      const job = await storage.getLatestCompletedJob();
+      if (!job) {
+        return res.status(404).json({ error: "No completed jobs found" });
+      }
+      res.json(job);
+    } catch (error) {
+      console.error("Error fetching latest job:", error);
+      res.status(500).json({ error: "Failed to fetch latest job" });
+    }
+  });
+
   // Get conversion job status
   app.get("/api/conversions/:id", async (req, res) => {
     try {
@@ -259,13 +307,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!job) {
         return res.status(404).json({ error: "Job not found" });
       }
-      // console.log("[API] Returning job:", JSON.stringify(job, null, 2)); // Reduced verbosity
       res.json(job);
     } catch (error) {
       console.error("Error fetching job:", error);
       res.status(500).json({ error: "Failed to fetch job" });
     }
   });
+
 
   // Update enhancements (toggle enabled state)
   app.patch("/api/conversions/:id/enhancements", async (req, res) => {
@@ -450,6 +498,34 @@ async function processDocumentFile(
   authorAffiliation?: string
 ) {
   try {
+    const fs = await import("fs");
+
+    // === PASSTHROUGH PROTOCOL (The Magic Mechanism) ===
+    // If it's a LaTeX file, we skip the entire AI pipeline and use it directly.
+    // This turns the app into a "Universal LaTeX Previewer".
+    if (mimeType === "application/x-tex" || filePath.endsWith(".tex")) {
+      await logJobProgress(jobId, "LaTeX file detected. Activating Passthrough Protocol...", { phase: "Initialization", step: "Passthrough Detected", progress: 0 });
+
+      const latexContent = fs.readFileSync(filePath, "utf-8");
+
+      await storage.updateConversionJob(jobId, {
+        status: "completed",
+        originalContent: latexContent, // Store original for reference
+        latexContent: latexContent, // Direct injection
+        analysis: {
+          title: "Imported LaTeX Document",
+          abstract: "This document was imported directly via the Passthrough Protocol.",
+          sections: [],
+          references: []
+        }, // Dummy analysis to satisfy schema
+        completedAt: new Date()
+      });
+
+      await logJobProgress(jobId, "Passthrough complete. Rendering preview.", { phase: "Complete", step: "Done", progress: 100 });
+      return;
+    }
+    // ==================================================
+
     // Update status to processing
     await storage.updateConversionJob(jobId, { status: "processing" });
     await logJobProgress(jobId, "Initializing processing environment...", { phase: "Initialization", step: "Setup", progress: 0 });

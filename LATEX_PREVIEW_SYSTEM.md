@@ -86,7 +86,7 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 - **Placeholder**: Replaced with `LATEXPREVIEWTIKZBLOCK{N}`.
 - **Rendering**: We construct a complete HTML page that loads **TikZJax** and inject it into an `<iframe>`.
 - **Environment Wrapping**: We explicitly wrap the extracted TikZ code in `\begin{tikzpicture} ... \end{tikzpicture}` inside the iframe script tag.
-- **Intent-Based Sizing (v1.3.0)**: Diagrams scale dynamically based on the AI's intended layout (Compact vs Large).
+- **Responsive SVG Layout (v1.4.0)**: CSS-driven `max-width: 100%` ensures perfect fit on A4 pages without manual scaling hacks.
 - **Centering**: Iframes are wrapped in flexbox containers for horizontal centering.
 - **ASCII Sanitization**: We strip non-ASCII characters to prevent `btoa` errors.
 - **No Typography Normalization**: We **DO NOT** convert `--` to `–` inside TikZ (breaks path syntax).

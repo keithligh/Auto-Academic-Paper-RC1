@@ -326,7 +326,11 @@ Return ONLY the JSON.
 **Logic:**
 1.  **Bibliography Generation:** Deterministically constructs the `\begin{thebibliography}` section from the structured `references` array. **Zero hallucination risk.**
 2.  **Template Application:** Wraps the content in the standard LaTeX template (Title, Abstract, Sections).
-3.  **Sanitization:** Final pass to strip any remaining invalid characters or unsafe commands.
+3.  **Browser Sanitization (The Trojan Horse):** Uses a **Strict Containment Protocol** in `LatexPreview.tsx`:
+    *   **The Shield:** Strips dangerous preambles and macros (`\eqref`, `\url`, etc.).
+    *   **The Heist:** Steals complex elements (Math, TikZ, Tables, Algorithms) before parsing.
+    *   **The Reveal:** Surgically re-injects high-fidelity HTML (KaTeX, TikZJax) into the DOM, replacing the render-safe placeholders.
+    *   **Code is Law:** We treat `latex.js` purely as a dumb text formatter. It is forbidden from touching complex logic.
 
 #### Reasoning & Design Decisions
 *   **Why Deterministic Compilation?**

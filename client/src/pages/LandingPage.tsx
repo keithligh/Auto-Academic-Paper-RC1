@@ -1,8 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { useDropzone } from "react-dropzone";
 import { useMutation } from "@tanstack/react-query";
-import { FileText, User, ListChecks, Code, ChartLine, Settings2, Upload, AlertCircle, FolderOpen } from "lucide-react";
+import { FileText, User, ListChecks, Code, ChartLine, Settings2, Upload, AlertCircle, FolderOpen, RotateCcw, FileUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { FileCard } from "@/components/FileCard";
@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { enhancementLevels } from "@shared/schema";
+import { enhancementLevels, paperTypes } from "@shared/schema";
 import { useAIConfig } from "@/context/AIConfigContext";
 
 // Generate a unique ID for file uploads
@@ -63,6 +63,7 @@ export default function LandingPage() {
     const [uploadID, setUploadID] = useState<string>("");
 
     // Job Ticket State
+    const [paperType, setPaperType] = useState("research_paper");
     const [enhancementLevel, setEnhancementLevel] = useState("standard");
     const [authorName, setAuthorName] = useState("");
     const [authorAffiliation, setAuthorAffiliation] = useState("");
@@ -80,6 +81,67 @@ export default function LandingPage() {
     const handleOptionToggle = (key: keyof typeof advancedOptions) => {
         setAdvancedOptions(prev => ({ ...prev, [key]: !prev[key] }));
     };
+
+    const handleRecallLast = useCallback(async () => {
+        try {
+            const res = await apiRequest("GET", "/api/conversions/latest");
+            const job = await res.json();
+
+            if (!job || !job.id) {
+                toast({
+                    title: "No previous generation found",
+                    description: "Generate a paper first to use this feature",
+                    variant: "destructive"
+                });
+                return;
+            }
+
+            setLocation(`/results/${job.id}`);
+        } catch (err: any) {
+            toast({
+                title: "Failed to recall generation",
+                description: err.message || "Could not fetch latest generation",
+                variant: "destructive"
+            });
+        }
+    }, [setLocation, toast]);
+
+    // Import LaTeX file for debugging
+    const latexInputRef = useRef<HTMLInputElement>(null);
+
+    const handleImportLatex = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const latexContent = await file.text();
+
+            // Create a debug job entry via API
+            const res = await apiRequest("POST", "/api/conversions/debug-import", {
+                latexContent,
+                originalFileName: file.name
+            });
+            const job = await res.json();
+
+            toast({
+                title: "LaTeX imported",
+                description: `Imported ${file.name} for preview`
+            });
+
+            setLocation(`/results/${job.id}`);
+        } catch (err: any) {
+            toast({
+                title: "Failed to import LaTeX",
+                description: err.message || "Could not create preview job",
+                variant: "destructive"
+            });
+        }
+
+        // Reset input for re-import
+        if (latexInputRef.current) {
+            latexInputRef.current.value = '';
+        }
+    }, [setLocation, toast]);
 
     // Upload File to Local Storage
     const uploadFileToStorage = async (file: File, id: string) => {
@@ -105,7 +167,7 @@ export default function LandingPage() {
                 fileType: stagedFile.type,
                 fileSize: stagedFile.size.toString(),
                 uploadURL: `/api/local-upload/${uploadID}`,
-                paperType: "research_paper",
+                paperType,
                 enhancementLevel,
                 authorName,
                 authorAffiliation,
@@ -167,6 +229,33 @@ export default function LandingPage() {
                         </h1>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleRecallLast}
+                            title="Recall Last Generation"
+                            className="gap-2"
+                        >
+                            <RotateCcw className="w-4 h-4 text-gray-500" />
+                            <span className="hidden sm:inline text-sm">Recall Last</span>
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => latexInputRef.current?.click()}
+                            title="Import LaTeX File for Debug"
+                            className="gap-2"
+                        >
+                            <FileUp className="w-4 h-4 text-gray-500" />
+                            <span className="hidden sm:inline text-sm">Import LaTeX</span>
+                        </Button>
+                        <input
+                            ref={latexInputRef}
+                            type="file"
+                            accept=".tex,.latex,text/x-latex"
+                            className="hidden"
+                            onChange={handleImportLatex}
+                        />
                         <Button
                             variant="ghost"
                             size="icon"
@@ -371,6 +460,18 @@ export default function LandingPage() {
                                         </div>
 
                                         <div className="mt-6 pt-6 border-t border-gray-200 space-y-4">
+                                            <div className="space-y-2">
+                                                <Label>Paper Type</Label>
+                                                <RadioGroup value={paperType} onValueChange={setPaperType}>
+                                                    {paperTypes.map(t => (
+                                                        <div key={t.value} className="flex items-center space-x-2">
+                                                            <RadioGroupItem value={t.value} id={`paper-${t.value}`} />
+                                                            <Label htmlFor={`paper-${t.value}`} className="font-normal cursor-pointer">{t.label}</Label>
+                                                        </div>
+                                                    ))}
+                                                </RadioGroup>
+                                            </div>
+
                                             <div className="space-y-2">
                                                 <Label>Enhancement Level</Label>
                                                 <RadioGroup value={enhancementLevel} onValueChange={setEnhancementLevel}>

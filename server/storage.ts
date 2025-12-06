@@ -1,7 +1,7 @@
 import { type ConversionJob, type InsertConversionJob, conversionJobs } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
   getConversionJob(id: string): Promise<ConversionJob | undefined>;
@@ -9,6 +9,7 @@ export interface IStorage {
   updateConversionJob(id: string, updates: Partial<ConversionJob>): Promise<ConversionJob | undefined>;
   deleteConversionJob(id: string): Promise<boolean>;
   listConversionJobs(): Promise<ConversionJob[]>;
+  getLatestCompletedJob(): Promise<ConversionJob | undefined>;
 }
 
 export class SQLiteStorage implements IStorage {
@@ -64,6 +65,29 @@ export class SQLiteStorage implements IStorage {
 
   async listConversionJobs(): Promise<ConversionJob[]> {
     return await db.select().from(conversionJobs).orderBy(conversionJobs.createdAt);
+  }
+
+  async getLatestCompletedJob(): Promise<ConversionJob | undefined> {
+    // TEMP DEBUG: Get ALL jobs first, then filter in JS
+    const allJobs = await db.select().from(conversionJobs);
+    console.log(`[Storage] Total jobs in DB: ${allJobs.length}`);
+
+    const completedJobs = allJobs.filter(j => j.status === 'completed');
+    console.log(`[Storage] Completed jobs: ${completedJobs.length}`);
+
+    if (completedJobs.length > 0) {
+      // Sort by createdAt desc
+      completedJobs.sort((a, b) => {
+        const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+        const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+        return bTime - aTime;
+      });
+      console.log(`[Storage] Returning latest: ${completedJobs[0].id}`);
+      return completedJobs[0];
+    }
+
+    console.log('[Storage] No completed jobs found');
+    return undefined;
   }
 }
 

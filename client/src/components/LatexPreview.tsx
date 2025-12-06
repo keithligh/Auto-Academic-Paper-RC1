@@ -148,125 +148,13 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const isTextHeavy = avgLabelTextPerNode > 40; // Use accurate label-based metric
     const baseComplexity = nodeMatches.length + drawMatches.length + (arrowMatches.length / 2);
 
-    console.log(`[TikZ Metrics] nodes=${nodeMatches.length}, avgLabel=${avgLabelTextPerNode.toFixed(0)}, complexity=${baseComplexity.toFixed(0)}`);
+    // REFACTOR (v1.4.0): Valid Responsive SVG Logic
+    // Instead of hacking the scale, we let CSS do its job.
+    // 1. We tell the internal SVG to fill the width (width: 100%; height: auto)
+    // 2. We tell the iframe to take 100% of the parent container
+    // 3. We use the observer ONLY to adapt the height
 
-    // Dynamic spacing - FIX: Reduced y-scale to prevent "massive gap" between title and diagram
-    let xScale = '2.5cm';
-    let yScale = '1.5cm';  // Reduced from 3cm - prevents massive vertical gaps
-    let nodeDistance = '3cm';
-
-    if (isTextHeavy || baseComplexity >= 8) {
-      // HYBRID SPACING: Balanced to fix both "Massive Gap" & "Cramp"
-      xScale = '2.5cm';
-      yScale = '1.2cm';  // Aggressive reduction for text-heavy diagrams
-      nodeDistance = '5cm';
-
-      if (textDensityScore > 30) {
-        xScale = '3cm'; yScale = '1.5cm'; nodeDistance = '6cm';
-      }
-    } else if (baseComplexity >= 4) {
-      xScale = '3cm'; yScale = '1.5cm'; nodeDistance = '4cm';
-    }
-
-    const hasExplicitX = options.includes('x=');
-    const hasExplicitY = options.includes('y=');
-    const hasScale = options.includes('scale=');
-    const hasNodeDistance = options.includes('node distance');
-
-    let densityReduction = '';
-
-    if (hasNodeDistance) {
-      // === TRUE DYNAMIC SCALING ===
-      const nodeCount = nodeMatches.length;
-
-      // Extract original node distance
-      const nodeDistMatch = options.match(/node distance\s*=\s*([\d.]+)(cm|em|pt|mm)?/);
-      const originalDist = nodeDistMatch ? parseFloat(nodeDistMatch[1]) : 2.0;
-      const unit = nodeDistMatch ? (nodeDistMatch[2] || 'cm') : 'cm';
-
-      const isCompactByDistance = originalDist < 2.0;
-      const isLargeDistance = originalDist >= 2.5;
-
-      console.log(`[TikZ Dynamic] nodes=${nodeCount}, avgLabel=${avgLabelTextPerNode.toFixed(0)}, origDist=${originalDist}${unit}, isCompact=${isCompactByDistance}, isLarge=${isLargeDistance}`);
-
-      // === COMPUTE DYNAMIC SCALE FACTOR ===
-      let scaleFactor = 1.0;
-
-      if (isCompactByDistance) {
-        // Type A: COMPACT - scale down AS A WHOLE to fit A4
-        scaleFactor = nodeCount >= 8 ? 0.75 : 0.85;
-        const reducedDist = Math.max(originalDist * scaleFactor, 0.8);
-        console.log(`[TikZ] → COMPACT: dist=${reducedDist.toFixed(1)}${unit}, scale=${scaleFactor} (transform shape)`);
-        densityReduction = `__REPLACE_NODE_DIST__${reducedDist.toFixed(1)}${unit}__SCALE__${scaleFactor}__TRANSFORM_SHAPE__`;
-      } else if (isLargeDistance) {
-        // Type B: LARGE - increase spacing, keep scale at 1.0 for text readability
-        scaleFactor = nodeCount >= 6 ? 0.85 : 1.0;
-        const increaseFactor = originalDist >= 3.0 ? 2.8 : 2.0; // Restored to verified working value
-        const newDist = Math.max(originalDist * increaseFactor, 7.5);
-        console.log(`[TikZ] → LARGE: dist=${newDist.toFixed(1)}${unit}, scale=${scaleFactor}`);
-        densityReduction = `__REPLACE_NODE_DIST__${newDist.toFixed(1)}${unit}__SCALE__${scaleFactor}`;
-      } else {
-        // Type C: Medium - moderate adjustments
-        scaleFactor = nodeCount >= 6 ? 0.8 : 0.9;
-        const newDist = Math.max(originalDist * 1.2, 2.5);
-        console.log(`[TikZ] → MEDIUM: dist=${newDist.toFixed(1)}${unit}, scale=${scaleFactor}`);
-        densityReduction = `__REPLACE_NODE_DIST__${newDist.toFixed(1)}${unit}__SCALE__${scaleFactor}`;
-      }
-    } else if (hasExplicitX || hasExplicitY || hasScale) {
-      // AI already set scaling - only add font
-      if (!options.includes('font=')) {
-        densityReduction = 'font=\\small';
-      }
-    } else {
-      // No positioning info at all - safe to add our defaults for absolute coords
-      densityReduction = `x=${xScale}, y=${yScale}, node distance=${nodeDistance}, font=\\small`;
-    }
-
-    // Merge with existing options
-    let finalOptions = options || '[]';
-    if (densityReduction) {
-      if (densityReduction.includes('__REPLACE_NODE_DIST__')) {
-        // Parse computed values
-        const distMatch = densityReduction.match(/__REPLACE_NODE_DIST__([^_]+)/);
-        const scaleMatch = densityReduction.match(/__SCALE__([^_]+)/);
-
-        if (distMatch) {
-          const newDistValue = distMatch[1];
-          if (finalOptions.includes('node distance')) {
-            finalOptions = finalOptions.replace(
-              /node distance\s*=\s*[\d.]+\s*(cm|em|pt|mm)?/,
-              `node distance=${newDistValue}`
-            );
-          } else {
-            finalOptions = finalOptions.replace(/\]$/, `, node distance=${newDistValue}]`);
-          }
-        }
-
-        // Apply Scale if present
-        if (scaleMatch) {
-          const scaleVal = scaleMatch[1];
-          let scaleStr = `scale=${scaleVal}`;
-          if (densityReduction.includes('__TRANSFORM_SHAPE__')) {
-            scaleStr += ', transform shape';
-          }
-          if (finalOptions.match(/scale\s*=/)) {
-            finalOptions = finalOptions.replace(/scale\s*=\s*[\d.]+/, scaleStr);
-          } else {
-            finalOptions = finalOptions.replace(/\]$/, `, ${scaleStr}]`);
-          }
-        }
-
-        if (!finalOptions.includes('font=')) {
-          finalOptions = finalOptions.replace(/\]$/, ', font=\\small]');
-        }
-      } else if (densityReduction) {
-        if (finalOptions === '[]' || finalOptions.trim() === '') {
-          finalOptions = `[${densityReduction}]`;
-        } else {
-          finalOptions = finalOptions.replace(/\]$/, `, ${densityReduction}]`);
-        }
-      }
-    }
+    const finalOptions = options || '[]';
 
     const iframeHtml = `<!DOCTYPE html>
 <html>
@@ -274,8 +162,28 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   <link rel="stylesheet" href="https://tikzjax.com/v1/fonts.css">
   <script src="https://tikzjax.com/v1/tikzjax.js"></script>
   <style>
-    body { margin: 0; padding: 15px; display: flex; justify-content: center; align-items: flex-start; overflow: visible; }
-    svg { overflow: visible; }
+    /* RESPONSIVE SVG: The Holy Grail */
+    body { 
+      margin: 0; 
+      padding: 0; 
+      display: flex; 
+      justify-content: center; 
+      align-items: flex-start; 
+      overflow: hidden; /* Hide scrollbars, let height grow */
+      width: 100%;
+    }
+    svg { 
+      width: auto !important; 
+      height: auto !important; 
+      max-width: 100% !important; 
+      display: block;
+      margin: 0 auto;
+    }
+    .tikzjax-container {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
   </style>
   <script>
     window.addEventListener('error', e => { if (e.message?.includes('message channel closed')) e.preventDefault(); });
@@ -283,20 +191,22 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   </script>
 </head>
 <body>
-  <script type="text/tikz">
-    \\begin{tikzpicture}${finalOptions}
-    ${safeTikz}
-    \\end{tikzpicture}
-  </script>
+  <div class="tikzjax-container">
+    <script type="text/tikz">
+      \\begin{tikzpicture}${finalOptions}
+      ${safeTikz}
+      \\end{tikzpicture}
+    </script>
+  </div>
   <script>
-    // Iframe resize logic - STANDARD SCROLL SIZING
+    // Iframe resize logic - HEIGHT ONLY
+    // We let the width be 100% (controlled by parent), we only adapt height to fit content.
     const observer = new MutationObserver(() => {
       const svg = document.querySelector('svg');
       if (svg && window.frameElement) {
-         const w = document.body.scrollWidth + 10; 
-         const h = document.body.scrollHeight + 10;
-         window.frameElement.style.width = w + 'px';
-         window.frameElement.style.height = h + 'px';
+         // Add a small buffer for tooltips/shadows
+         const h = document.body.scrollHeight;
+         window.frameElement.style.height = (h + 20) + 'px';
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -304,7 +214,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 </body>
 </html>`;
     const srcdoc = iframeHtml.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-    blocks[id] = `<div style="display: flex; justify-content: center; width: 100%; margin: 1em 0;"><iframe srcdoc="${srcdoc}" style="border: none;"></iframe></div>`;
+    // Wrapper must be 100% width to allow iframe to fill it
+    blocks[id] = `<div style="display: flex; justify-content: center; width: 100%; margin: 1em 0;"><iframe srcdoc="${srcdoc}" style="border: none; width: 100%; overflow: hidden;"></iframe></div>`;
     return `\n\n${id}\n\n`;
   };
 

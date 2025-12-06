@@ -3,6 +3,7 @@
  */
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { ConversionJob } from "@shared/schema";
 import { SplitPreview } from "@/components/SplitPreview";
 import { Button } from "@/components/ui/button";
