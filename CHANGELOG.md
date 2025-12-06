@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2025-12-06
+### Fixed
+- **Audit Remediation (Stability Hardening)**: Addressed 3 critical rendering risks identified by external audit.
+  - **TikZ Nested Brackets**: Replaced brittle regex extraction with `extractTikzBlocks` manual parser. Safely handles nested options like `[label={[0,1]}]`.
+  - **Table Row Integrity**: Replaced naive row splitting with `smartSplitRows`. Prevents `\\` inside `\parbox` or braces from corrupting the table structure.
+  - **Placeholder Safety**: Added `DOM.normalize()` before injection to prevent browser text-node splitting from breaking placeholder replacement.
+
 ## [1.5.0] - 2025-12-06
 ### Added
 - **Responsive TikZ Architecture (v1.4.0 Re-architecture)**: Abandoned manual "intent-based" scaling hacks in favor of professional web standards.

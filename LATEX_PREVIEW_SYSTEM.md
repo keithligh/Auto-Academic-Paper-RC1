@@ -398,7 +398,7 @@ The `parbox` width calculator is **blind to absolute units**.
 The `parseLatexFormatting` function used for Tables and Parboxes uses **non-recursive regex**.
 
 - **Reality**: It matches `\textbf{...}` using `[^{}]+`.
-- **Limitation**: It **cannot handle nested formatting**.
+- **Limitation**: It **cannot handle nested formatting** (except for Table Rows, which now use `smartSplitRows` to respect brace nesting).
   - `\textbf{Bold}` -> **Bold** (Works)
   - `\textbf{Bold \textit{Italic}}` -> Fails (breaks on the inner brace). The user sees the raw LaTeX commands.
 
