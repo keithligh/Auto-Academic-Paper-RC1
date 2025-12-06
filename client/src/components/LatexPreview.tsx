@@ -139,8 +139,38 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
 
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
-    const safeTikz = tikzCode
+    let safeTikz = tikzCode
       .replace(/[^\x00-\x7F]/g, ''); // Remove non-ASCII
+
+    // === GEOMETRIC POLYFILL: Manual Bezier Brace ===
+    // TikZJax does NOT support decoration={brace} (PGFkeys error).
+    // We replace it with distinct Bezier curves to render the brace manually.
+    safeTikz = safeTikz.replace(
+      /\\draw\[decorate,decoration=\{brace[^}]*\}\]\s*\(([^)]+)\)\s*--\s*\(([^)]+)\)\s*node\[([^\]]*)\]\s*\{([^}]*)\};/g,
+      (match, start, end, nodeOpts, label) => {
+        // Parse coordinates
+        const parseCoord = (s: string) => {
+          const parts = s.split(',').map(p => parseFloat(p.trim()));
+          return { x: parts[0] || 0, y: parts[1] || 0 };
+        };
+        const p1 = parseCoord(start); // e.g. (0.5, -0.7)
+        const p2 = parseCoord(end);   // e.g. (5, -0.7)
+
+        // Midpoint
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+
+        // Brace Control Points (Vertical Offset)
+        // Adjust these magic numbers to change brace curvature
+        const offset = -0.15; // Starting curvature
+        const tip = -0.35;    // The pointy tip of the brace
+
+        // Manual Bezier Path (P1 -> Mid -> P2)
+        // Two curves: P1 to Mid, then Mid to P2
+        return `\\draw[thick] (${p1.x},${p1.y}) .. controls (${p1.x},${p1.y + offset}) and (${midX},${midY + offset}) .. (${midX},${midY + tip}) .. controls (${midX},${midY + offset}) and (${p2.x},${p2.y + offset}) .. (${p2.x},${p2.y});
+        \\node[${nodeOpts}] at (${midX},${midY + tip - 0.4}) {${label}};`;
+      }
+    );
 
     // === DYNAMIC DENSITY REDUCTION ===
     // Count complexity indicators
@@ -199,7 +229,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // GOAL: Fit to A4
       const scale = nodeMatches.length >= 8 ? 0.75 : 0.85;
       if (!options.includes('scale=')) extraOpts += `, scale=${scale}`;
-      if (!options.includes('transform shape')) extraOpts += ', transform shape';
+      // EXEMPTION: Don't add transform shape if diagram has explicit x= or y= (already scaled)
+      if (!options.includes('transform shape') && !options.includes('x=') && !options.includes('y=')) extraOpts += ', transform shape';
       if (!options.includes('node distance')) extraOpts += ', node distance=1.5cm';
 
     } else if (intent === 'LARGE') {
@@ -219,6 +250,12 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
       // Mandatory for Large
       if (!options.includes('text width')) extraOpts += ', every node/.append style={align=center}';
+
+      // GOLDILOCKS PROTOCOL: Coordinate Boost for text-heavy diagrams
+      // RECOVERED from Artifacts: x=2.2cm (Resolve Label Overlap), y=1.5cm (Increase Height)
+      if (isTextHeavy && !options.includes('x=')) {
+        extraOpts += ', x=2.2cm, y=1.5cm';
+      }
 
     } else {
       // MEDIUM
