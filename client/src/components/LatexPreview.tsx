@@ -321,7 +321,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   });
 
   // --- D. TABLES ---
-  content = content.replace(/\\begin\{(tabularx|longtable)\}([\s\S]*?)\\end\{\1\}/g, () => createPlaceholder(`<div class="latex-placeholder-box table">[Complex Table/TabularX]</div>`));
+  // Note: Standalone tabularx/longtable processing moved after table environment processing
+  // to avoid premature placeholder replacement
 
   // --- E. ABSTRACT EXTRACTION (Manual Control) ---
   const abstractMatch = content.match(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/);
@@ -348,11 +349,20 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const captionMatch = inner.match(/\\caption\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/);
     if (captionMatch) caption = `<div class="table-caption"><strong>Table:</strong> ${parseLatexFormatting(captionMatch[1])}</div>`;
 
-    // === HELPER: Manual Tabular Parser ===
+    // === HELPER: Manual Tabular Parser (supports tabular and tabularx) ===
     const parseTabular = (inner: string): string | null => {
-      const startTag = '\\begin{tabular}';
-      const startIdx = inner.indexOf(startTag);
-      if (startIdx === -1) return null;
+      // Try tabular first, then tabularx
+      let startTag = '\\begin{tabular}';
+      let endTag = '\\end{tabular}';
+      let startIdx = inner.indexOf(startTag);
+
+      if (startIdx === -1) {
+        // Try tabularx
+        startTag = '\\begin{tabularx}';
+        endTag = '\\end{tabularx}';
+        startIdx = inner.indexOf(startTag);
+        if (startIdx === -1) return null;
+      }
 
       let cursor = startIdx + startTag.length;
 
@@ -372,8 +382,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         cursor++;
       }
 
-      // Found end of cols. The rest until \end{tabular} is the body.
-      const endTag = '\\end{tabular}';
+      // Found end of cols. The rest until end tag is the body.
       const endIdx = inner.indexOf(endTag, cursor);
       if (endIdx === -1) return null;
 
@@ -402,6 +411,10 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
     return createPlaceholder(`<div class="table-wrapper">${caption}<div class="latex-placeholder-box">[Table Body - Parse Failed]</div></div>`);
   });
+
+  // --- G. STANDALONE TABULARX/LONGTABLE (not inside table environment) ---
+  // Process any remaining standalone tabularx or longtable environments
+  content = content.replace(/\\begin\{(tabularx|longtable)\}([\s\S]*?)\\end\{\1\}/g, () => createPlaceholder(`<div class="latex-placeholder-box table">[Complex Table/TabularX]</div>`));
 
   // --- E. ALGORITHMS ---
   content = content.replace(/\\begin\{algorithmic\}([\s\S]*?)\\end\{algorithmic\}/g, (m, body) => {
