@@ -99,70 +99,31 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
   // === HELPER: Create KaTeX math block ===
   const createMathBlock = (mathContent: string, displayMode: boolean): string => {
-    // FEATURE: Auto-wrap long \text{} blocks to prevent overflow
-    // Problem: \text{very long line} doesn't wrap in KaTeX.
-    // Solution: Detect long \text{} and wrap in \parbox{14cm}{...}
-
-    let processedMath = mathContent;
-    if (displayMode && mathContent.includes('\\text{')) {
-      // Manual parser to simplify handling nested braces
-      let result = '';
-      let cursor = 0;
-
-      while (cursor < mathContent.length) {
-        const matchIndex = mathContent.indexOf('\\text{', cursor);
-        if (matchIndex === -1) {
-          result += mathContent.substring(cursor);
-          break;
-        }
-
-        // Add text before strict \text
-        result += mathContent.substring(cursor, matchIndex);
-
-        // Parse the content of \text{...}
-        const contentStart = matchIndex + 6; // \text{ len is 6
-        let depth = 1;
-        let endIdx = contentStart;
-
-        while (endIdx < mathContent.length && depth > 0) {
-          if (mathContent[endIdx] === '{') depth++;
-          else if (mathContent[endIdx] === '}') depth--;
-          if (depth > 0) endIdx++;
-        }
-
-        if (depth === 0) {
-          // Extracted content
-          const innerText = mathContent.substring(contentStart, endIdx); // excludes closing }
-
-          // Heuristic: If > 50 chars, wrap in \parbox
-          // We strip spacing commands to guess "real" length roughly
-          const approxLength = innerText.length;
-
-          if (approxLength > 50) {
-            // KaTeX \parbox support needs explicit width
-            // 14cm is safe for our 210mm - 50mm margin page
-            result += `\\parbox{14cm}{${innerText}}`;
-          } else {
-            result += `\\text{${innerText}}`;
-          }
-          cursor = endIdx + 1; // Skip closing brace
-        } else {
-          // Malformed/Unclosed, just skip parsing
-          result += mathContent.substring(matchIndex);
-          cursor = mathContent.length;
-        }
-      }
-      processedMath = result;
-    }
-
     const id = `LATEXPREVIEWMATH${blockCount++}`;
     try {
-      blocks[id] = katex.renderToString(processedMath, {
+      let html = katex.renderToString(mathContent, {
         displayMode,
         throwOnError: false,
         strict: false,
         macros: { "\\eqref": "\\href{#1}{#1}", "\\label": "" }
       });
+
+      // STRATEGY: Auto-scale long equations to fit container (Auditor Suggestion)
+      if (displayMode) {
+        // Heuristic: Average char width in KaTeX is ~0.5em.
+        // A4 Printable area width is approx 45-50em.
+        const estimatedWidthEm = mathContent.length * 0.4; // Conservative estimate
+        const maxEm = 50;
+
+        if (estimatedWidthEm > maxEm) {
+          const scale = Math.max(0.55, maxEm / estimatedWidthEm); // Floor at 0.55x
+          // REVERT: User confirmed 'transform' works for fitting, 'zoom' does not.
+          // Restoring transform logic with calculated width.
+          html = `<div class="katex-autoscale" style="transform: scale(${scale.toFixed(2)}); transform-origin: left center; width: ${(100 / scale).toFixed(1)}%;">${html}</div>`;
+        }
+      }
+
+      blocks[id] = html;
     } catch (e) {
       blocks[id] = `<span style="color:red;">Math Error</span>`;
     }
@@ -687,6 +648,13 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     });
   });
   content = content.replace(/\\begin\{proof\}([\s\S]*?)\\end\{proof\}/g, (m, body) => `\n\n\\textit{Proof:} ${body} \u220E\n\n`);
+
+  // --- J2. PARAGRAPH/SUBPARAGRAPH ---
+  // Ensure they look like headers (Bold, Run-in)
+  // Fix: Handle \paragraph*{Title} and optional spaces
+  content = content
+    .replace(/\\paragraph\*?\{([^{}]*)\}/g, '\n\n\\vspace{1em}\\noindent\\textbf{$1} ')
+    .replace(/\\subparagraph\*?\{([^{}]*)\}/g, '\n\n\\noindent\\textbf{$1} ');
 
   // --- K. COMMAND STRIPPING ---
   content = content

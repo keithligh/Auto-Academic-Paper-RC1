@@ -287,3 +287,58 @@ ol {
     font-size: 1em;
     /* Match body text */
 }
+
+/* ===================================================================
+ * FIX: Parbox Overflow Handling for Long Content (especially KaTeX)
+ * ================================================================= */
+.parbox,
+.latex-preview .parbox {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    /* Allow scrolling for very long content */
+    display: inline-block;
+    vertical-align: top;
+    margin: 0.5em 0;
+    padding: 0.2em 0;
+}
+
+/* ===================================================================
+ * AUTO-SCALING for Ridiculously Long Equations
+ * =================================================================== */
+/* ===================================================================
+ * AUTO-SCALING for Ridiculously Long Equations
+ * =================================================================== */
+.katex-autoscale {
+    position: relative;
+    /* Simple wrapper, interaction removed per user request */
+}
+
+/* Remove hover and pseudo-elements */
+
+/* Scrollbar Styles for Parbox/Autoscale */
+.parbox::-webkit-scrollbar,
+.latex-preview .katex-display::-webkit-scrollbar,
+.katex-autoscale:hover::-webkit-scrollbar {
+    height: 6px;
+}
+
+.parbox::-webkit-scrollbar-track,
+.latex-preview .katex-display::-webkit-scrollbar-track,
+.katex-autoscale:hover::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.parbox::-webkit-scrollbar-thumb,
+.latex-preview .katex-display::-webkit-scrollbar-thumb,
+.katex-autoscale:hover::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.parbox::-webkit-scrollbar-thumb:hover,
+.latex-preview .katex-display::-webkit-scrollbar-thumb:hover,
+.katex-autoscale:hover::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
