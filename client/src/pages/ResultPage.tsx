@@ -53,7 +53,10 @@ export default function ResultPage() {
         <div className="min-h-screen bg-white text-foreground font-sans">
             <header className="border-b border-gray-100 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
                 <div className="container mx-auto px-6 h-16 flex items-center justify-between">
-                    <h1 className="font-serif text-lg font-bold text-gray-900">
+                    <h1
+                        className="font-serif text-lg font-bold text-gray-900 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setLocation("/")}
+                    >
                         Auto Academic Paper
                     </h1>
                     <div className="flex items-center gap-4">

@@ -157,7 +157,12 @@ export default function ProcessingPage() {
             {/* Header */}
             <header className="fixed top-0 w-full bg-white/90 backdrop-blur-sm border-b border-gray-100 z-50">
                 <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-                    <span className="font-serif font-bold text-lg tracking-tight">Auto Academic Paper</span>
+                    <span
+                        className="font-serif font-bold text-lg tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => setLocation("/")}
+                    >
+                        Auto Academic Paper
+                    </span>
                     <div className="flex items-center gap-2 text-xs font-mono text-gray-400">
                         <span>STATUS: {job?.status?.toUpperCase() || "CONNECTING..."}</span>
                         <div className={`w-2 h-2 rounded-full ${job?.status === 'processing' ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
@@ -169,10 +174,10 @@ export default function ProcessingPage() {
 
                 {/* 1. Status Heading */}
                 <div className="text-center space-y-4">
-                    <h1 className="text-3xl md:text-4xl font-serif font-bold text-gray-900">
+                    <h1 className="text-3xl md:text-4xl font-serif font-bold text-gray-900 text-center mx-auto">
                         {job?.status === 'failed' ? 'Processing Failed' : 'Transforming into Academic Paper'}
                     </h1>
-                    <p className="text-gray-500 font-sans">
+                    <p className="text-gray-500 font-sans text-center mx-auto">
                         {job?.originalFileName || "Document"}
                     </p>
                     {job?.status === 'processing' && (

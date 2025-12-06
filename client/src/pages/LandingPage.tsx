@@ -224,7 +224,10 @@ export default function LandingPage() {
             <header className="fixed top-0 w-full bg-white/80 backdrop-blur-sm border-b border-gray-100 z-50">
                 <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <h1 className="text-xl font-serif font-bold text-gray-900">
+                        <h1
+                            className="text-xl font-serif font-bold text-gray-900 cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => setLocation("/")}
+                        >
                             Auto Academic Paper
                         </h1>
                     </div>
@@ -275,7 +278,7 @@ export default function LandingPage() {
                     {/* Hero Section */}
                     {!stagedFile && (
                         <div className="text-center space-y-3 mb-12">
-                            <h1 className="text-5xl md:text-6xl font-serif font-bold tracking-tight text-gray-900">
+                            <h1 className="text-5xl md:text-6xl font-serif font-bold tracking-tight text-gray-900 text-center">
                                 Auto Academic Paper
                             </h1>
                             <p className="text-xl text-gray-500 font-sans max-w-2xl mx-auto">
