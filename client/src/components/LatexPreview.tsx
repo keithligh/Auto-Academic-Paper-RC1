@@ -54,26 +54,28 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       return `__MATH_PROTECT_${mathPlaceholders.length - 1}__`;
     });
 
-    // 2. Unescape & Normalize
+    // 2. Unescape LaTeX Special Chars
     protectedText = protectedText
       .replace(/\\%/g, '%')
       .replace(/\\\&/g, '&')
       .replace(/\\#/g, '#')
       .replace(/\\_/g, '_')
       .replace(/\\\{/g, '{')
-      .replace(/\\\}/g, '}')
-      // Spec: Typography Normalization
+      .replace(/\\\}/g, '}');
+
+    // 3. HTML Escaping (MUST happen before typography to prevent &ndash; -> &amp;ndash;)
+    protectedText = protectedText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // 4. Typography Normalization
+    protectedText = protectedText
       .replace(/---/g, '&mdash;')
       .replace(/--/g, '&ndash;')
       .replace(/``/g, '&ldquo;')
       .replace(/''/g, '&rdquo;')
       .replace(/\\textcircled\{([^{}])\}/g, '($1)');
-
-    // 3. HTML Escaping
-    protectedText = protectedText
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
 
     // 4. Macro Replacement
     protectedText = protectedText
@@ -97,9 +99,65 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
   // === HELPER: Create KaTeX math block ===
   const createMathBlock = (mathContent: string, displayMode: boolean): string => {
+    // FEATURE: Auto-wrap long \text{} blocks to prevent overflow
+    // Problem: \text{very long line} doesn't wrap in KaTeX.
+    // Solution: Detect long \text{} and wrap in \parbox{14cm}{...}
+
+    let processedMath = mathContent;
+    if (displayMode && mathContent.includes('\\text{')) {
+      // Manual parser to simplify handling nested braces
+      let result = '';
+      let cursor = 0;
+
+      while (cursor < mathContent.length) {
+        const matchIndex = mathContent.indexOf('\\text{', cursor);
+        if (matchIndex === -1) {
+          result += mathContent.substring(cursor);
+          break;
+        }
+
+        // Add text before strict \text
+        result += mathContent.substring(cursor, matchIndex);
+
+        // Parse the content of \text{...}
+        const contentStart = matchIndex + 6; // \text{ len is 6
+        let depth = 1;
+        let endIdx = contentStart;
+
+        while (endIdx < mathContent.length && depth > 0) {
+          if (mathContent[endIdx] === '{') depth++;
+          else if (mathContent[endIdx] === '}') depth--;
+          if (depth > 0) endIdx++;
+        }
+
+        if (depth === 0) {
+          // Extracted content
+          const innerText = mathContent.substring(contentStart, endIdx); // excludes closing }
+
+          // Heuristic: If > 50 chars, wrap in \parbox
+          // We strip spacing commands to guess "real" length roughly
+          const approxLength = innerText.length;
+
+          if (approxLength > 50) {
+            // KaTeX \parbox support needs explicit width
+            // 14cm is safe for our 210mm - 50mm margin page
+            result += `\\parbox{14cm}{${innerText}}`;
+          } else {
+            result += `\\text{${innerText}}`;
+          }
+          cursor = endIdx + 1; // Skip closing brace
+        } else {
+          // Malformed/Unclosed, just skip parsing
+          result += mathContent.substring(matchIndex);
+          cursor = mathContent.length;
+        }
+      }
+      processedMath = result;
+    }
+
     const id = `LATEXPREVIEWMATH${blockCount++}`;
     try {
-      blocks[id] = katex.renderToString(mathContent, {
+      blocks[id] = katex.renderToString(processedMath, {
         displayMode,
         throwOnError: false,
         strict: false,
@@ -773,6 +831,30 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
           bibEl.innerHTML = bibliographyHtml;
           containerRef.current!.appendChild(bibEl);
         }
+
+        // FEATURE: Responsive Math (Scale-to-Fit like TikZ)
+        // We look for equations that overflow and shrink them (zoom) to fit.
+        // This is "responsive" in the sense of fitting the A4 page width.
+        const mathBlocks = containerRef.current!.querySelectorAll('.katex-display');
+        mathBlocks.forEach((block) => {
+          const el = block as HTMLElement;
+          // Reset previous scaling
+          el.style.transform = '';
+          el.style.width = '';
+
+          if (el.scrollWidth > el.clientWidth) {
+            const scale = el.clientWidth / el.scrollWidth;
+            // Use zoom for simpler flow reflow in Chrome/Edge. 
+            // Fallback to transform for others if needed, but zoom is cleaner here.
+            // We cap the shrink at 50% to prevent unreadable microscopic text.
+            const safeScale = Math.max(scale, 0.5);
+
+            if (safeScale < 1) {
+              // @ts-ignore
+              el.style.zoom = safeScale;
+            }
+          }
+        });
 
       } catch (err: any) {
         console.error("Preview Render Error:", err);

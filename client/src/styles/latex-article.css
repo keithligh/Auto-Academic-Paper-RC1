@@ -273,7 +273,12 @@ ol {
 .latex-preview .katex-display {
     margin: 1.5em 0 !important;
     font-size: 1.1em;
-    /* Slightly larger than body text for display equations */
+    /* Prevent overflow on small screens */
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    padding-bottom: 0.5em;
+    /* Space for scrollbar */
 }
 
 /* Inline math should not add extra spacing */
