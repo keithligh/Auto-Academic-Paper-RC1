@@ -314,10 +314,72 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   // =============================================
 
   // --- A. TIKZ & IMAGES (MUST BE FIRST!) ---
-  content = content.replace(/\\begin\{tikzpicture\}\s*(\[[\s\S]*?\])?([\s\S]*?)\\end\{tikzpicture\}/g, (m, options, body) => {
-    console.log('TikZ Match:', { options, bodyLength: body.length });
-    return createTikzBlock(body, options);
-  });
+  // --- A. TIKZ & IMAGES (MUST BE FIRST!) ---
+  // AUDIT FIX #1: Manual Extraction for nested brackets in options
+  // Old Regex: /\\begin\{tikzpicture\}\s*(\[[\s\S]*?\])?([\s\S]*?)\\end\{tikzpicture\}/g
+  // Problem: Fails on [label={[0,1]}]
+
+  let loopSafety = 0;
+  while (content.includes('\\begin{tikzpicture}')) {
+    if (loopSafety++ > 100) {
+      console.error('TikZ extraction loop safety limit reached');
+      break;
+    }
+
+    const startTag = '\\begin{tikzpicture}';
+    const endTag = '\\end{tikzpicture}';
+    const startIdx = content.indexOf(startTag);
+    if (startIdx === -1) break;
+
+    let cursor = startIdx + startTag.length;
+
+    // 1. Skip whitespace
+    while (cursor < content.length && /\s/.test(content[cursor])) cursor++;
+
+    // 2. Parse Optional Arguments [...]
+    let options = '';
+    if (content[cursor] === '[') {
+      const optStart = cursor;
+      let depth = 0;
+      let inString = false;
+
+      while (cursor < content.length) {
+        const char = content[cursor];
+        if (char === '"' && content[cursor - 1] !== '\\') inString = !inString;
+
+        if (!inString) {
+          if (char === '[' || char === '{') depth++;
+          else if (char === ']' || char === '}') depth--;
+        }
+
+        cursor++;
+
+        // Break if we closed the main bracket [ ... ]
+        if (depth === 0 && content[cursor - 1] === ']') break;
+      }
+      options = content.substring(optStart, cursor);
+    }
+
+    // 3. Find End Tag
+    const bodyStart = cursor;
+    const endIdx = content.indexOf(endTag, cursor);
+
+    if (endIdx === -1) {
+      console.error('Unclosed TikZ environment found');
+      break;
+    }
+
+    const body = content.substring(bodyStart, endIdx);
+
+    // 4. Create Block
+    console.log('TikZ Match (Manual):', { options: options.substring(0, 50), bodyLength: body.length });
+    const placeholder = createTikzBlock(body, options);
+
+    // 5. Replace in content (Extract and substitute)
+    const blockLen = (endIdx + endTag.length) - startIdx;
+    content = content.substring(0, startIdx) + placeholder + content.substring(endIdx + endTag.length);
+  }
+
   content = content.replace(/\\begin\{forest\}([\s\S]*?)\\end\{forest\}/g, () => createPlaceholder(`<div class="latex-placeholder-box">[Tree Diagram]</div>`));
   content = content.replace(/\\includegraphics\[.*?\]\{.*?\}/g, () => createPlaceholder(`<div class="latex-placeholder-box image">[Image]</div>`));
 
@@ -470,7 +532,30 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       console.log('parseTabular: Successfully extracted body. Length:', body.length);
 
       // Render
-      const rows = body.split('\\\\').filter(r => r.trim());
+      // AUDIT FIX #2: Smart Row Splitting (Brace-aware)
+      const smartSplitRows = (text: string): string[] => {
+        const res: string[] = [];
+        let buf = '';
+        let depth = 0;
+        for (let i = 0; i < text.length; i++) {
+          const c = text[i];
+          if (c === '{') depth++;
+          else if (c === '}') depth--;
+
+          // Detect \\ at depth 0
+          if (depth === 0 && c === '\\' && text[i + 1] === '\\') {
+            res.push(buf);
+            buf = '';
+            i++; // Skip next slash
+            continue;
+          }
+          buf += c;
+        }
+        if (buf) res.push(buf);
+        return res;
+      };
+
+      const rows = smartSplitRows(body).filter(r => r.trim());
       let tableHtml = '<table><tbody>';
       rows.forEach(row => {
         let r = row.trim().replace(/\\hline/g, '').replace(/\\cline\{.*?\}/g, '')
@@ -625,6 +710,10 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
           console.error("latex.js parse error:", parseErr);
           throw new Error(`Browser Render Error: ${parseErr.message}`);
         }
+
+        // AUDIT FIX #3: Normalize DOM to prevent text node splitting
+        // Merges adjacent text nodes (e.g. "LATEXPREVIEW" + "BLOCK1") so regex works.
+        containerRef.current!.normalize();
 
         const walker = document.createTreeWalker(
           containerRef.current!,
