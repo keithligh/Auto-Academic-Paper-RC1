@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2025-12-06
+### Added
+- **Responsive TikZ Architecture (v1.4.0 Re-architecture)**: Abandoned manual "intent-based" scaling hacks in favor of professional web standards.
+  - **CSS-Driven Layout**: Enforced `width: auto`, `max-width: 100%`, and `margin: 0 auto` on SVG elements to ensure perfect responsiveness.
+  - **Height-Only Observation**: Updated iframe resize observers to only manage height, relying on the browser's layout engine for width.
+  - **Centering**: Added Flexbox centering to TikZ containers, resolving left-alignment issues.
+- **Native TabularX Parsing**:
+  - **Parser Upgrade**: Updated manual parser to natively handle `\begin{tabularx}` environments (previously skipped/nuked) by ignoring the width argument.
+  - **Whitespace Robustness**: Fixed "Table Body - Parse Failed" errors caused by whitespace in command arguments (e.g., `\begin{tabular} {cols}`).
+- **Parsing Order Fix**: Moved standard table parsing *before* `tabularx` replacement to ensure nested tables are correctly extracted.
+
 ## [1.4.0] - 2025-12-06
 ### Added
 - **Strict Containment Protocol**: Enforced "Code is Law" rules for `latex.js`.
