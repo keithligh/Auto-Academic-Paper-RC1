@@ -10,10 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.3] - 2025-12-06
 ### Fixed
-- **TikZ Decoration Rendering**: Fixed PGFkeys error "I do not know the key '/pgf/decoration/.expanded'" that occurred when rendering TikZ diagrams with brace decorations.
-  - **Root Cause**: TikZJax cannot properly process nested key-value pairs in decoration options like `decoration={brace,amplitude=5pt}`.
-  - **Solution**: Added sanitization in `LatexPreview.tsx` to strip nested decoration options, converting `decoration={name,options...}` to `decoration=name`.
-  - **Impact**: All TikZ diagrams using `\draw[decorate,decoration={...}]` syntax now render correctly without emergency stops.
+- **TikZ Decoration Rendering**: Fixed PGFkeys error "I do not know the key '/pgf/decoration/.expanded'" that crashed TikZ diagram rendering.
+  - **Root Cause**: TikZJax cannot handle the PGF decorations library at all. Even simple syntax like `decoration=brace` triggers a PGFkeys `.expanded` key error and emergency stop.
+  - **Solution**: Remove all `\draw` commands containing `decorate` keyword from TikZ code before sending to TikZJax. Decorative annotations (braces, ornaments) are stripped from browser preview but preserved in final PDF.
+  - **Trade-off**: Brace annotations showing phase transitions won't appear in preview, but core diagram structure (nodes, arrows, labels) renders correctly.
+  - **Impact**: TikZ diagrams with decorations now render successfully in browser instead of crashing completely.
 
 ## [1.5.2] - 2025-12-06
 ### Fixed

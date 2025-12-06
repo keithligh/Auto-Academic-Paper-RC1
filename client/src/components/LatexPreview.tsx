@@ -142,11 +142,11 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     let safeTikz = tikzCode
       .replace(/[^\x00-\x7F]/g, ''); // Remove non-ASCII
 
-    // SANITIZATION: TikZJax has issues with decoration={...} nested syntax
-    // Convert decoration={name,option=value,...} to just decoration=name
-    // The .expanded key error occurs when TikZJax tries to process nested decoration options
-    // Pattern: decoration={word,anything} -> decoration={word}
-    safeTikz = safeTikz.replace(/decoration=\{([a-zA-Z]+),[^}]+\}/g, 'decoration=$1');
+    // SANITIZATION: TikZJax cannot handle decoration syntax at all
+    // The .expanded key error occurs even with simple decoration=name syntax
+    // Solution: Remove entire \draw commands that use decorations (they're typically just annotations)
+    // This will remove brace annotations but preserve the main diagram structure
+    safeTikz = safeTikz.replace(/\\draw\s*\[[^\]]*decorate[^\]]*\][^;]*;/g, '');
 
     // === DYNAMIC DENSITY REDUCTION ===
     // Count complexity indicators

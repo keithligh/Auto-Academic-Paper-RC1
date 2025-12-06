@@ -42,10 +42,11 @@ Raw LaTeX cannot be fed directly to TikZJax strings because of JavaScript encodi
     -   **Critical Failure**: In TikZ, `--` is a functional operator defining a path between coordinates (e.g., `(A) -- (B)`). Converting this to an en-dash `(A) – (B)` breaks the syntax, causing "Cannot parse coordinate" errors.
     -   **Solution**: We explicitly **SKIP** typography normalization for extracted TikZ blocks. We pass the raw `--` exactly as written.
 
-3.  **Decoration Syntax Sanitization (The PGFkeys Fix)**
-    -   **Problem**: TikZJax cannot properly handle nested key-value pairs in decoration options like `decoration={brace,amplitude=5pt}`. When it tries to expand these options, it creates an invalid `/pgf/decoration/.expanded` key, causing a PGFkeys error and emergency stop.
-    -   **Critical Failure**: Any TikZ diagram using `\draw[decorate,decoration={brace,amplitude=5pt}]` for bracket annotations will fail to render with the error "I do not know the key '/pgf/decoration/.expanded'".
-    -   **Solution**: We sanitize the decoration syntax by stripping nested options: `decoration={name,options...}` becomes `decoration=name`. This preserves the decoration type (e.g., brace) while removing incompatible amplitude and other parameters that TikZJax cannot process.
+3.  **Decoration Removal (The PGFkeys Fix)**
+    -   **Problem**: TikZJax cannot handle the PGF decorations library at all. Even simple syntax like `decoration=brace` (without nested options) triggers a PGFkeys error: "I do not know the key '/pgf/decoration/.expanded'", causing an emergency stop.
+    -   **Critical Failure**: Any TikZ diagram using `\draw[decorate,decoration=...]` for bracket annotations, curved braces, or other decorative elements will fail to render completely.
+    -   **Solution**: We remove all `\draw` commands that contain the `decorate` keyword. This strips out decorative annotations (like braces showing phase transitions) but preserves the core diagram structure (nodes, arrows, main paths).
+    -   **Trade-off**: Brace annotations won't appear in the browser preview, but they will render correctly in the final PDF. This is preferable to a complete diagram failure.
 
 ### Phase 3: The Sandbox (Iframe Isolation)
 We do not render TikZ in the main DOM. We inject it into a dedicated `<iframe>`.
@@ -127,7 +128,7 @@ We analyze the AI's *intent* by looking at its chosen `node distance`. This is t
 1.  **NEVER** let `latex.js` see `\begin{tikzpicture}`.
 2.  **NEVER** pass Unicode characters to TikZJax.
 3.  **NEVER** normalize/prettify code inside a TikZ block (keep raw `--`).
-4.  **ALWAYS** sanitize decoration syntax by removing nested options (e.g., `decoration={brace,amplitude=5pt}` → `decoration=brace`).
+4.  **ALWAYS** remove `\draw` commands containing `decorate` (TikZJax cannot handle the decorations library).
 5.  **ALWAYS** wrap the injected code in `\begin{tikzpicture}`.
 6.  **ALWAYS** use an iframe.
 7.  **ALWAYS** extract TikZ BEFORE math (so TikZJax receives raw math, not placeholders).
