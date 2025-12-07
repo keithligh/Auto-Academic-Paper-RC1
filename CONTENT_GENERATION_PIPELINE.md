@@ -34,12 +34,12 @@ graph TD
     
     Draft --> Phase4
     
-    subgraph "Phase 4: The Critic (Verification)"
-        Phase4["Strategist Agent"] -->|Claims List| Claims
-        Note4["Logic: Identifies specific claims that need STRONGER evidence."]
+    subgraph "Phase 4: The Peer Reviewer (Verification)"
+        Phase4["Librarian Agent"] -->|Review Report| Report
+        Note4["Logic: Verifies draft against library. Maps supported claims."]
     end
     
-    Claims --> Phase5
+    Report --> Phase5
     References --> Phase5
     
     subgraph "Phase 5: The Rewriter (Synthesis)"
@@ -108,22 +108,25 @@ AVAILABLE EVIDENCE:
 You may structure your arguments knowing this evidence exists, but do NOT insert citations yet.
 ```
 
-### Phase 4: The Critic (Verification)
-**Agent:** Strategist
-**Input:** Draft (Phase 3).
-**Output:** List of `Claims` needing support.
+### Phase 4: The Peer Reviewer (Verification)
+**Agent:** Librarian (Role: Senior PI)
+**Input:** Draft + **Available References** (The Card Catalog).
+**Output:** `Review Report` (Supported Claims, Unverified Claims, Critique).
 **Logic:**
-1.  **Review:** Scans the draft for specific claims (empirical, theoretical, factual) that are not yet adequately supported.
-2.  **Targeting:** Focuses on claims that *must* have citations (e.g., "Studies show that...").
+1.  **Verification:** Reads the draft *alongside* the library.
+2.  **Mapping:** Identifies claims explicitly supported by specific papers (`supported_claims`).
+3.  **Auditing:** Flags claims that sound factual but lack evidence (`unverified_claims`).
+4.  **No Hallucinations:** Prevents the system from asking for citations that don't exist.
 
 ### Phase 5: The Rewriter (Synthesis)
 **Agent:** Writer
 **Input:** Draft + Claims + References.
 **Output:** `Improved Draft`.
 **Logic:**
-1.  **Synthesis:** Rewrites specific sentences to integrate the evidence found in Phase 2.
-2.  **Natural Flow:** Instead of just appending "[1]", it rewrites the sentence: "As demonstrated by Smith (2023)...".
-3.  **Preservation:** Preserves all LaTeX structure and diagrams.
+1.  **Deterministic Synthesis:** Rewrites the text based on the `Review Report`.
+2.  **Verified Integration:** "The Peer Reviewer confirmed Ref_X supports this claim -> Integrate Ref_X."
+3.  **Correction:** "The Peer Reviewer flagged this as Unverified -> Soften the language."
+4.  **Preservation:** Preserves all LaTeX structure and diagrams.
 
 #### System Prompt
 ```text
@@ -141,7 +144,7 @@ Do NOT add citation markers ((ref_X)) yet. Just integrate the ideas.
 **Output:** Final `AiResponse` with `(ref_X)` markers.
 **Logic:**
 1.  **Insertion:** The ONLY task is to insert `(ref_X)` markers at valid locations.
-2.  **Conversion:** The System (Compiler) later converts `(ref_X)` to `\cite{ref_X}`.
+2.  **Compiler Logic:** The System later converts `(ref_X)` to `\cite{ref_X}` using a **Two-Pass Universal Processor** (Tokenize + Merge).
 
 ---
 

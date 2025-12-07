@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.12] - 2025-12-07
+### Refactored
+- **Phase 4: The Peer Reviewer**: Rebranded "The Critic" to "The Peer Reviewer".
+  - **New Role**: Acts as a Senior PI conducting a "Nature/Science" caliber review.
+  - **Capabilities**: Now uses the **Librarian Agent** (Web/Search capable) instead of the Strategist.
+  - **New Criteria**: Assesses **Novelty** (Originality), **Rigor** (Logic), and **Validity** (Claim Verification).
+  - **Data Flow**: Outputs a structured `ReviewReport` consuming `ctx.references` to prevent blind guessing.
+
+## [1.5.11] - 2025-12-07
+### Refactored
+- **Citation System Overhaul**: Replaced ad-hoc regex with a two-pass **Universal Citation Processor**.
+  1. **Tokenization**: Converts ANY parenthesized reference block `(ref_X...)` to `\cite{X}`.
+  2. **Normalization**: Recursively merges adjacent citations `\cite{A} \cite{B}` into `\cite{A,B}`.
+  - **Result**: Guarantees Standard Academic Formatting (e.g., `[2, 7]`) regardless of AI output variations.
+
+## [1.5.10] - 2025-12-07
+### Fixed
+- **Citation Grouping**: Compiler now correctly groups multiple citations like `(ref_1, ref_2)` into `\cite{ref_1,ref_2}`, enabling `natbib` to render them as compressed groups `[1, 2]`. Previously they were left as raw text.
+
 ## [1.5.9] - 2025-12-07
 ### Fixed
 - **TikZ Scaling Explosion**: "Goldilocks Protocol" (Text Heavy boost) was incorrectly expanding absolute-coordinate diagrams.

@@ -55,21 +55,45 @@ function compileCitations(text: string, references: { key: string }[]): string {
     const validKeys = new Set(references.map(r => r.key));
 
     // Step 2: Replace (ref_X) with \cite{ref_X}
-    // Pattern: (ref_1), (ref_2), etc.
-    let compiled = text.replace(/\(ref_(\d+)\)/g, (match, num) => {
-        const key = `ref_${num}`;
-        if (validKeys.has(key)) {
-            return `\\cite{${key}}`;
+    // Pattern: ANY parenthesized block starting with ref_X (handles leading space, newlines, separators)
+    // Final Regex: matches `( ref_1...)`
+    let compiled = text.replace(/\(\s*(ref_\d+(?:[^)]*))\)/g, (match, content) => {
+        // Extract all ref keys from the content
+        const keys = content.match(/ref_\d+/g);
+        if (!keys) return match;
+
+        // Filter for valid keys
+        const valid = keys.filter((k: string) => validKeys.has(k));
+
+        if (valid.length > 0) {
+            // Join valid keys with commas: \cite{ref_1,ref_2}
+            // natbib will handle sorting and compressing: [1, 2] or [1-3]
+            return `\\cite{${valid.join(',')}}`;
         } else {
-            // Invalid citation - mark as [?]
-            console.warn(`[Compiler] Invalid citation marker: ${match}`);
+            // No valid keys found in group
+            console.warn(`[Compiler] Invalid citation group: ${match}`);
             return `[?]`;
         }
     });
 
-    // Step 3: Citation Repair - detect any hallucinated \cite{} that aren't in our list
+    // Step 3: Citation Merging - combine adjacent \cite{} commands
+    // Converts \cite{ref_1} \cite{ref_2} -> \cite{ref_1,ref_2}
+    // This ensures [1][2] becomes [1, 2] (Best Practice)
+    let prev;
+    do {
+        prev = compiled;
+        compiled = compiled.replace(/\\cite\{([^}]+)\}\s*\\cite\{([^}]+)\}/g, (match, keys1, keys2) => {
+            return `\\cite{${keys1},${keys2}}`;
+        });
+    } while (compiled !== prev);
+
+    // Step 4: Citation Repair - detect any hallucinated \cite{} that aren't in our list
     compiled = compiled.replace(/\\cite\{([^}]+)\}/g, (match, key) => {
-        if (validKeys.has(key)) {
+        // Handle merged keys like "ref_1,ref_2"
+        const keys = key.split(',');
+        const allValid = keys.every((k: string) => validKeys.has(k.trim()));
+
+        if (allValid) {
             return match; // Valid, keep it
         } else {
             // Hallucinated citation - mark as [?]

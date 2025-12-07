@@ -46,11 +46,27 @@ interface Reference {
     year: number;
 }
 
-interface Claim {
-    section: string;
+// Review Report Item (Supported Claim)
+interface SupportedClaim {
     sentence: string;
-    context: string;
+    reference_key: string;
     reasoning: string;
+    confidence: string;
+}
+
+// Review Report Item (Unverified Claim)
+interface UnverifiedClaim {
+    sentence: string;
+    issue: string; // "No evidence found" or "Contradicts evidence"
+    suggestion: string; // "Soften language" or "Remove"
+}
+
+// Full Review Report
+interface ReviewReport {
+    supported_claims: SupportedClaim[];
+    unverified_claims: UnverifiedClaim[];
+    critique: string;
+    novelty_check: string; // New: Assessment of originality
 }
 
 interface PipelineContext {
@@ -69,8 +85,8 @@ interface PipelineContext {
     // Phase 3: Thinker
     draft: AiResponse | null;
 
-    // Phase 4: Critic
-    claims: Claim[];
+    // Phase 4: Peer Reviewer
+    reviewReport: ReviewReport | null;
 
     // Phase 5: Rewriter
     improvedDraft: AiResponse | null;
@@ -171,7 +187,7 @@ export class AIService {
             researchQueries: [],
             references: [],
             draft: null,
-            claims: [],
+            reviewReport: null,
             improvedDraft: null,
             finalDraft: null
         };
@@ -186,8 +202,8 @@ export class AIService {
             // Phase 3: Thinker (Draft with knowledge of evidence)
             await this.phase3_Thinker(ctx);
 
-            // Phase 4: Critic (Identify weak claims)
-            await this.phase4_Critic(ctx);
+            // Phase 4: The Peer Reviewer (Verify claims against evidence)
+            await this.phase4_PeerReviewer(ctx);
 
             // Phase 5: Rewriter (Strengthen text with evidence)
             await this.phase5_Rewriter(ctx);
@@ -453,78 +469,66 @@ Return ONLY the JSON.`;
         });
     }
 
-    // ====== PHASE 4: THE CRITIC ======
-    private async phase4_Critic(ctx: PipelineContext): Promise<void> {
-        await this.log(`[Phase 4/6] The Critic: Identifying claims needing evidence...`, { phase: "Phase 4: Critique", step: "Analyzing Draft", progress: 52 });
+    // ====== PHASE 4: THE PEER REVIEWER (formerly The Critic) ======
+    private async phase4_PeerReviewer(ctx: PipelineContext): Promise<void> {
+        await this.log(`[Phase 4/6] The Peer Reviewer: Verifying draft against ${ctx.references.length} references...`, { phase: "Phase 4: Peer Review", step: "Reviewing Draft", progress: 52 });
 
         if (!ctx.draft) {
-            await this.log(`[Critic] Error: No draft to critique.`);
+            await this.log(`[PeerReviewer] Error: No draft to review.`);
             return;
         }
 
-        // Claim count based on enhancement level
-        const claimCounts = {
-            minimal: "2-3 critical claims",
-            standard: "5-7 key claims",
-            advanced: "8-12 important claims"
-        };
-        const targetClaims = claimCounts[ctx.enhancementLevel as keyof typeof claimCounts] || claimCounts.standard;
-
-        // Paper type determines what kinds of claims to prioritize (keys must match schema)
-        const claimPriorities = {
-            research_paper: `PRIORITIZE:
-- Empirical claims about measurements, outcomes, or performance
-- Methodological assertions
-- Statistical or quantitative statements`,
-            thesis: `PRIORITIZE:
-- Theoretical framework claims
-- Foundational assumptions
-- Novel contribution statements`,
-            essay: `PRIORITIZE:
-- Argumentative claims and positions
-- Philosophical or ethical assertions
-- Interpretive statements`
-        };
-        const priorityGuide = claimPriorities[ctx.paperType as keyof typeof claimPriorities] || "";
-
         const draftText = ctx.draft.sections.map(s => `### ${s.name}\n${s.content}`).join("\n\n");
+        const referencesText = JSON.stringify(ctx.references, null, 2);
 
-        const systemPrompt = `You are an expert academic reviewer for ${ctx.paperType} papers.
-Your task is to identify claims that would be strengthened by scholarly citations.
+        const systemPrompt = `You are a Senior Principal Investigator conducting a rigorous Peer Review of a draft paper.
+YOUR AUTHORITY:
+You have the "Card Catalog" (our gathered evidence) and the Draft. Your word is law.
 
-${priorityGuide}`;
+YOUR TASK:
+Perform a "Nature/Science" caliber review focusing on:
+1.  **Verification**: Do the references actually support the claims? (The Evidence Map).
+2.  **Novelty**: Does this paper offer new insights or just repeat known facts?
+3.  **Rigor**: Is the logical flow sound? Are the conclusions earned?
+
+OUTPUT STRUCTURE:
+- **supported_claims**: Claims where you can point to a specific 'ref_X' and say "This proves it."
+- **unverified_claims**: Claims that sound factual but look like hallucinations or guesses.
+- **novelty_check**: A brief assessment of whether the work feels derivative or significant.
+- **critique**: High-level feedback on logic and flow.
+
+CRITICAL RULE:
+Do NOT hallucinate connections. If the reference doesn't mention it, it's UNVERIFIED.`;
 
         const userPrompt = `DRAFT PAPER:
 ${draftText}
 
+AVAILABLE REFERENCES (Card Catalog):
+${referencesText}
+
 TASK:
-Identify ${targetClaims} that would benefit from supporting citations.
+Perform a Peer Review. Map claims to evidence.
 
-CLAIM TYPES TO LOOK FOR:
-- Factual claims about performance, outcomes, or comparisons
-- Empirical statements referencing studies or data
-- Technical claims about algorithms, complexity, or methods
-- Statements invoking established theories or frameworks
-- Assertions that begin with "Studies show...", "Research indicates...", etc.
+OUTPUT FORMAT (JSON):
+{
+  "supported_claims": [
+    { "sentence": "Exact text...", "reference_key": "ref_X", "reasoning": "Ref X explicitly states...", "confidence": "High" }
+  ],
+  "unverified_claims": [
+    { "sentence": "Exact text...", "issue": "No matching evidence", "suggestion": "Soften to 'hypothesized' or remove" }
+  ],
+  "novelty_check": "The paper presents... but lacks...",
+  "critique": "General assessment..."
+}
 
-OUTPUT FORMAT (JSON array):
-[
-  {
-    "section": "Section name",
-    "sentence": "Exact sentence needing citation",
-    "context": "Surrounding 1-2 sentences for context",
-    "reasoning": "Why this claim needs evidence"
-  }
-]
-
-Return ONLY the JSON array.`;
+Return ONLY the JSON.`;
 
         return await pRetry(async () => {
             const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Critic timed out after 10 minutes")), 600000)
+                setTimeout(() => reject(new Error("PeerReviewer timed out after 10 minutes")), 600000)
             );
 
-            const completionPromise = this.strategist.jsonCompletion(
+            const completionPromise = this.librarian.jsonCompletion(
                 userPrompt,
                 systemPrompt,
                 null,
@@ -532,13 +536,16 @@ Return ONLY the JSON array.`;
             );
 
             const result: any = await Promise.race([completionPromise, timeoutPromise]);
-            ctx.claims = result || [];
+            ctx.reviewReport = result || { supported_claims: [], unverified_claims: [], critique: "No review generated.", novelty_check: "N/A" };
 
-            await this.log(`[Critic] Identified ${ctx.claims.length} claims needing evidence.`, { phase: "Phase 4: Critique", step: "Complete", progress: 58, details: `${ctx.claims.length} claims` });
+            const supportedCount = ctx.reviewReport?.supported_claims?.length || 0;
+            const unverifiedCount = ctx.reviewReport?.unverified_claims?.length || 0;
+
+            await this.log(`[PeerReviewer] Review complete: ${supportedCount} verified, ${unverifiedCount} unverified.`, { phase: "Phase 4: Peer Review", step: "Complete", progress: 58, details: `${supportedCount} verified claims` });
         }, {
             retries: 2,
             onFailedAttempt: async (error: any) => {
-                await this.log(`[Critic] Attempt ${error.attemptNumber} failed: ${error.message}. Retrying...`, { phase: "Phase 4: Critique", step: "Error - Retrying", progress: 52 });
+                await this.log(`[PeerReviewer] Attempt ${error.attemptNumber} failed: ${error.message}. Retrying...`, { phase: "Phase 4: Peer Review", step: "Error - Retrying", progress: 52 });
             }
         });
     }
@@ -552,9 +559,9 @@ Return ONLY the JSON array.`;
             return;
         }
 
-        // If no claims or no references, skip rewriting
-        if (ctx.claims.length === 0 || ctx.references.length === 0) {
-            await this.log(`[Rewriter] No claims or references. Skipping rewrite.`);
+        // If no report or no verified claims, skip rewrite?
+        if (!ctx.reviewReport || (ctx.reviewReport.supported_claims.length === 0 && ctx.reviewReport.unverified_claims.length === 0)) {
+            await this.log(`[Rewriter] No claims to address in Peer Review. Skipping rewrite.`);
             ctx.improvedDraft = ctx.draft;
             return;
         }
@@ -565,7 +572,6 @@ Return ONLY the JSON array.`;
             sections: ctx.draft.sections
         }, null, 2);
 
-        const claimsText = JSON.stringify(ctx.claims, null, 2);
         const referencesText = JSON.stringify(ctx.references, null, 2);
 
         // Build enhancement-level specific instructions
@@ -626,26 +632,28 @@ EVIDENCE INTEGRATION TECHNIQUES:
         const userPrompt = `DRAFT PAPER:
 ${draftText}
 
-CLAIMS IDENTIFIED BY THE CRITIC (needing evidence):
-${claimsText}
+PEER REVIEW REPORT:
+${JSON.stringify(ctx.reviewReport, null, 2)}
 
 AVAILABLE REFERENCES (from our research):
 ${referencesText}
 
 TASK:
-1. For each claim, find the BEST matching reference based on topic relevance.
-2. REWRITE the sentence to incorporate the evidence naturally and compellingly.
-3. Make arguments stronger, more credible, and academically rigorous.
-4. Apply ${ctx.enhancementLevel.toUpperCase()} enhancement level guidance.
-5. Do NOT add citation markers yet - just integrate the ideas.
+1. Address the PEER REVIEW REPORT.
+2. FOR SUPPORTED CLAIMS: Rewrite sentences to naturally integrate the specific evidence identified ($$ref_X$$) and Reasoning.
+3. FOR UNVERIFIED CLAIMS: Apply the "Suggestion" (e.g., soften "It is proven" to "It is hypothesized").
+4. FOR CRITICAL FEEDBACK: Improve the logical flow and emphasize the "Novelty" points identified by the PI.
+5. Maintain academic rigor and flow.
+6. Apply ${ctx.enhancementLevel.toUpperCase()} enhancement level guidance.
+7. Do NOT add citation markers ((ref_X)) yet - that is Phase 6.
 
 OUTPUT SCHEMA:
 {
   "title": "String",
-  "abstract": "String (also strengthen with evidence if appropriate)", 
-  "sections": [{ "name": "String", "content": "LaTeX String (REWRITTEN, NO CITATIONS)" }],
+  "abstract": "String",
+  "sections": [{ "name": "String", "content": "LaTeX String (REWRITTEN)" }],
   "references": [],
-  "enhancements": [preserve existing enhancements]
+  "enhancements": [preserve existing]
 }
 
 Return ONLY the JSON.`;

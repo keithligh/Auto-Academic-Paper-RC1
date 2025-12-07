@@ -228,7 +228,7 @@ Rendering user-generated LaTeX in the browser presents security risks (XSS).
 | **Math** | **KaTeX** | Extraction -> Placeholder -> Injection. |
 | **Diagrams** | **TikZJax** | Extraction -> Iframe Isolation. |
 | **Tables** | **Custom Parser** | Regex Parse -> HTML Table Generation. |
-| **Citations** | **Custom Parser** | Regex Extract -> HTML List -> Injection. |
+| **Citations** | **Universal Processor** | Tokenize `(ref)` -> Merge `[1,2]` -> Inject `\cite`. |
 
 ---
 
@@ -592,5 +592,30 @@ We **NEVER** auto-scale structured environments (`\begin{equation}`, `align`, `g
 ### 3. The "No Scrollbar" Policy
 A4 papers do not have scrollbars.
 
--   **CSS Rule**: `.katex-display { overflow-x: hidden; }`
--   **Outcome**: We rely entirely on the auto-scaling logic to fit content. If an equation is truly too wide, it will be scaled down. It will never generate a scrollbar.
+
+## 23. The Universal Citation Processor (v1.5.11 System Refactor)
+
+We replaced the fragile regex-based citation patcher with a **Two-Pass Universal Processor** in `server/latexGenerator.ts`. This ensures that *all* AI-generated citations are correctly formatted, regardless of spacing, newlines, or separation.
+
+### The Problem
+The AI outputs unpredictable formats:
+1.  `(ref_1)` (Standard)
+2.  `( ref_2 )` (Leading/Trailing spaces)
+3.  `(ref_3, ref_4)` (Grouped)
+4.  `(ref_5) (ref_6)` (Adjacent but separate)
+
+Legacy regexes failed to handle all these variations simultaneously, leading to "Active Fixing" loops.
+
+### The Solution: Two-Pass Architecture
+
+#### Pass 1: The Universal Tokenizer (Anti-Fragile)
+Logic: "Find ANY parenthesized block starting with `ref_` and extract all keys."
+-   **Regex**: `/\(\s*(ref_\d+(?:[^)]*))\)/g`
+-   **Behavior**: It captures the *intent* of a citation block, ignores internal formatting (commas vs spaces vs newlines), extracts valid keys, and recompiles them into `\cite{a,b}`.
+
+#### Pass 2: The Recursive Merger (Best Practice Enforcement)
+Logic: "Recursively merge adjacent `\cite{}` commands into a single group."
+-   **Input**: `\cite{ref_1} \cite{ref_2}`
+-   **Output**: `\cite{ref_1,ref_2}`
+-   **Benefit**: This guarantees compliance with standard academic formatting (e.g., `[1, 2]`) even if the AI output separate blocks. This is a **structural enforcement** of style, not just a fix.
+

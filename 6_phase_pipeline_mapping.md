@@ -11,9 +11,9 @@ As defined in `ARCHITECTURE.md` and implemented in `server/ai/service.ts`:
 | **1** | **The Strategist** | Analysis | **Strategist Agent** | Analyzes input, generates research queries. |
 | **2** | **The Librarian** | Research | **Librarian Agent** | Searches for papers **BEFORE** writing (prevents hallucinations). |
 | **3** | **The Thinker** | Drafting | **Writer Agent** | Drafts content + `enhancements`. **KNOWS EVIDENCE EXISTS** but NO CITATIONS yet. |
-| **4** | **The Critic** | Verification | **Strategist Agent** | Identifies claims needing stronger evidence. |
-| **5** | **The Rewriter** | Synthesis | **Writer Agent** | **REWRITES** text to integrate evidence naturally. |
-| **6** | **The Editor** | Citation | **Writer Agent** | Inserts `(ref_X)` markers. The **Compiler** converts these to `\cite{ref_X}`. |
+| **4** | **The Peer Reviewer** | Verification | **Librarian Agent** | Verifies draft against library (`ReviewReport`). IDs supported vs unverified claims. |
+| **5** | **The Rewriter** | Synthesis | **Writer Agent** | **REWRITES** text based on Review Report deterministically. |
+| **6** | **The Editor** | Citation | **Writer Agent** | Inserts `(ref_X)` markers. The **Compiler** converts these via Universal Processor. |
 
 ## Key Design Decisions
 
@@ -45,8 +45,8 @@ interface PipelineContext {
 | Agent | Used In Phases |
 |-------|---------------|
 | **Writer Agent** | 3 (Thinker), 5 (Rewriter), 6 (Editor) |
-| **Strategist Agent** | 1 (Strategist), 4 (Critic) |
-| **Librarian Agent** | 2 (Librarian) |
+| **Strategist Agent** | 1 (Strategist) |
+| **Librarian Agent** | 2 (Librarian), 4 (Peer Reviewer) |
 | **System (Compiler)** | Post-processing in `latexGenerator.ts` |
 
 ## Conclusion
