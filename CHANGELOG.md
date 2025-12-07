@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.9] - 2025-12-07
+### Fixed
+- **TikZ Scaling Explosion**: "Goldilocks Protocol" (Text Heavy boost) was incorrectly expanding absolute-coordinate diagrams.
+  - **Fix**: Restricted boost to only apply if `horizontalSpan < 7` (Index-based layouts) or unknown. Physical layouts (Span >= 7) are now exempt.
+- **TikZ Font Shrinkage**: MEDIUM intent was arbitrarily scaling diagrams to 0.8x based on node count.
+  - **Fix**: "Smart Scaling": If `horizontalSpan <= 14cm` (fits A4), use `scale=1.0` to preserve readability.
+
 ## [1.5.8] - 2025-12-07
 ### Fixed
 - **Tiny Equation Bug**: Equations using verbose commands (`\mathrm`, `\text`) were being incorrectly shrunk by auto-scaling.

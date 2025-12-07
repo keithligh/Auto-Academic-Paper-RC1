@@ -542,14 +542,16 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 | **FLAT** | **Balance Ratio** | Multiplier: `y × (ratio/2)`, `x × 1.5`, strip old x/y |
 | **COMPACT** | **Fit to A4** | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm` |
 | **LARGE** | **Readability** | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
-| **MEDIUM** | Balance | `scale` (0.8 if ≥6 nodes, else 0.9) + Moderate Dist (1.2x) |
+| **MEDIUM** | Balance | **Smart Scale**: `1.0` (Fits A4) or `0.8/0.9` + Dist (2.5cm) |
 
-### 3. The "Hybrid" Density Override (v1.5.5)
+### 3. The "Universal" Density Override (v1.5.8)
 We discovered that `node distance` is not always a perfect predictor. Some "Cycle" diagrams use `node distance=2cm` (Medium) but pack 50+ words of text into nodes.
 
-- **The Fix**: We calculate `avgLabelTextPerNode`.
-- **Rule**: If `avgLabelTextPerNode > 30` (Text Heavy), we **FORCE** the `LARGE` intent rules (Spacing Boost) regardless of the original `node distance`.
-- **Global Hoist**: This ensures that even "Compact" diagrams with paragraphs of text get the `x=2.2cm` breathing room they need.
+- **The Fix (Goldilocks Protocol)**: We calculate `avgLabelTextPerNode`.
+- **Rule**: If `avgLabelTextPerNode > 30` (Text Heavy) **AND** `horizontalSpan < 7` (Index Layout):
+    - We **FORCE** the global coordinate boost (`x=2.2cm, y=1.5cm`).
+- **Universal Safety**: If `horizontalSpan >= 7` (Physical Layout), we **SKIP** the boost to prevent "Exploding Diagrams" (v1.5.8 fix).
+- **Result**: Dense cycles get space; Physical diagrams keep their layout.
 
 ### 4. The "Absolute Positioning" Override (v1.5.6)
 Diagrams using `\node at (x,y)` syntax bypass `node distance` entirely. If the horizontal span exceeds A4 safe width (14cm), CSS responsive shrinking causes node overlap.

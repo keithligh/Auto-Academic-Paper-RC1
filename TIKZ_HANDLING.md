@@ -143,7 +143,7 @@ options = options.replace(/y\s*=\s*[\d.]+\s*(cm)?/g, '');
 | **FLAT** | Balance Ratio | Multiplier: `y × (ratio/2)`, `x × 1.5` | Strip old x/y |
 | **COMPACT** | Fit to A4 | `scale=0.75` (>=8 nodes) / `0.85` | `node distance=1.5cm`, `transform shape` |
 | **LARGE** | Readability | `scale=0.85` (>=6 nodes) / `1.0` | `align=center`*, `node distance=8.4cm` (Text) / `5.0cm` (Node) |
-| **MEDIUM** | Balance | `scale=0.8` (>=6 nodes) / `0.9` | `node distance=2.5cm` |
+| **MEDIUM** | Balance | **Smart Scale**: `1.0` (Fits A4) or `0.8/0.9` | `node distance=2.5cm` |
 
 *Note: `transform shape` is strictly exempt from LARGE to keep text readable.*
 *Note*: `align=center` is injected if `text width` is missing, ensuring multi-line labels render correctly.
@@ -159,9 +159,10 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 
 #### E. The Safety Nets (Hidden Logic)
 1.  **The 5cm Safety Net**: In LARGE mode, if an explicit distance is `< 4.0cm`, it is forcibly boosted to `5.0cm` to prevent cramping.
-2.  **The Goldilocks Protocol**: For diagrams that are **Text Heavy** (lots of explanations), we apply a **Global Coordinate Boost** to prevent overlapping:
-    -   **Injection**: `x=2.2cm, y=1.5cm`
-    -   **Reason**: Moves nodes further apart horizontally without affecting the text size.
+2.  **The Goldilocks Protocol (Universal v1.5.8)**: For diagrams that are **Text Heavy**, we apply a **Global Coordinate Boost** (`x=2.2cm`) ONLY if:
+    -   Average text/node > 30 chars
+    -   **AND** `horizontalSpan < 7` (Index-based/Small)
+    -   **Reason**: Prevents "Explosion" of physical layouts (e.g., width 10) while saving dense index layouts (width 1-2).
 3.  **Explicit Coordinate Exemption**: If the diagram already specifies `x=` or `y=` in options, we skip automatic scaling for MEDIUM to respect author intent.
 4.  **FLAT Coordinate Override**: For FLAT intent, existing `x=` and `y=` values are **stripped and replaced** with calculated multiplied values (cannot skip, must fix ratio).
 

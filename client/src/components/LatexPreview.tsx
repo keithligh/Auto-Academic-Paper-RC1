@@ -335,15 +335,29 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
     } else {
       // MEDIUM
-      const scale = nodeMatches.length >= 6 ? 0.8 : 0.9;
+
+      // SMART SCALING (v1.5.8): Trust the user's layout if it fits in A4
+      let scale = 0.9;
+      if (horizontalSpan > 0 && horizontalSpan <= 14) {
+        scale = 1.0; // Fits perfectly, don't shrink
+      } else {
+        // Fallback or too wide
+        scale = nodeMatches.length >= 6 ? 0.8 : 0.9;
+      }
+
       // EXEMPTION: Don't scale if diagram has explicit x= or y= coordinates (already sized)
       if (!options.includes('scale=') && !options.includes('x=') && !options.includes('y=')) extraOpts += `, scale=${scale}`;
+
+      // Only inject default distance if not provided
       if (!options.includes('node distance')) extraOpts += ', node distance=2.5cm';
     }
 
     // GOLDILOCKS PROTOCOL: Coordinate Boost for text-heavy diagrams (Global Scope)
     // RECOVERED from Artifacts: x=2.2cm (Resolve Label Overlap), y=1.5cm (Increase Height)
-    if (isTextHeavy && !options.includes('x=')) {
+    // UNIVERSAL FIX (v1.5.8): Only boost if span is unknown OR small (Index-Based < 7)
+    const isSmallOrUnknown = horizontalSpan === 0 || horizontalSpan < 7;
+
+    if (isTextHeavy && !options.includes('x=') && isSmallOrUnknown) {
       extraOpts += ', x=2.2cm, y=1.5cm';
     }
 

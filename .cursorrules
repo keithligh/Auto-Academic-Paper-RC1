@@ -4,3 +4,4 @@
 2.  **Prefer `write_to_file` (Overwrite)**: If you need to change more than 3 lines of code, rewrite the entire file or function rather than trying to splice it.
 3.  **Use Single-Line Anchors**: If you must use `replace_file_content`, use a SINGLE line of unique code as the `TargetContent` anchor, rather than a block.
 4.  **Verify Context**: Before applying an edit, verify the indentation matches exactly.
+5.  **Git Confirmation**: ALWAYS ask for user confirmation before running `git commit`.
