@@ -288,6 +288,13 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // EXEMPTION: Don't scale if diagram has explicit x= or y= coordinates (already sized)
       if (!options.includes('scale=') && !options.includes('x=') && !options.includes('y=')) extraOpts += `, scale=${scale}`;
 
+      // FIX (v1.6.3): Even for LARGE diagrams, if explicit x/y coordinates are used (e.g. x=0.8cm),
+      // we must enforce proportional text scaling to prevent overlap.
+      const hasExplicitScale = options.includes('x=') || options.includes('y=');
+      if (hasExplicitScale && !options.includes('transform shape')) {
+        extraOpts += ', transform shape';
+      }
+
       if (!options.includes('node distance')) {
         // If we forced LARGE due to text density, we use the proven magic number
         const targetDist = isTextHeavy ? 8.4 : 5.0;
