@@ -147,3 +147,9 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Shift**: We stopped trying to fix `latex.js` and instead **removed the feature from it**.
 -   **The Rule**: **If a library fails at a task twice, remove the task from the library.** Don't patch the library; patch the pipeline to bypass the library.
 
+## 19. The "Scorched Earth" Parser (100% No Fallback)
+-   **The Failure**: A "Universal" regex-based list parser failed when it encountered optional arguments (`\begin{enumerate}[label=\textbf{1.}]`). The regex was too strict, causing the complex list to fall back to the buggy `latex.js` renderer.
+-   **The Insight**: Regex is a "happy path" optimization. It cannot handle arbitrarily nested structures (braces inside brackets inside braces) reliably.
+-   **The Fix**: Abandoned regex. Implemented a **Manual Character-Walker** that counts brace balance `depth++ / depth--`.
+-   **The Rule**: **If "Fallback" is unacceptable, Regex is unacceptable.** To guarantee coverage of unknown edge cases (like code blocks inside lists), you must use a stateful parser (Character Walker) and explicitly order your pipeline (Verbatim -> Structure -> Text).
+

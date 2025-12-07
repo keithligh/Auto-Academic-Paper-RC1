@@ -379,10 +379,10 @@ ol {
  * ============================================= */
 ol.latex-enumerate {
     list-style-type: decimal !important;
-    list-style-position: inside !important;
+    list-style-position: outside !important;
     /* Prevent clipping */
     margin: 1em 0 !important;
-    padding-left: 1em !important;
+    padding-left: 2em !important;
     /* Ensure visibility */
     display: block !important;
 }
@@ -401,4 +401,59 @@ ol.latex-enumerate ol.latex-enumerate {
     /* Nested: a, b */
     margin: 0.5em 0 !important;
     padding-left: 1.5em !important;
+}
+
+/* =============================================
+ * MANUAL ITEMIZE STYLING
+ * ============================================= */
+ul.latex-itemize {
+    list-style-type: disc !important;
+    list-style-position: outside !important;
+    margin: 1em 0 !important;
+    padding-left: 2em !important;
+    display: block !important;
+}
+
+ul.latex-itemize li {
+    display: list-item !important;
+    list-style-type: inherit !important;
+    margin-bottom: 0.5em !important;
+    padding-left: 0.5em !important;
+}
+
+ul.latex-itemize ul.latex-itemize {
+    list-style-type: circle !important;
+    margin: 0.5em 0 !important;
+    padding-left: 1.5em !important;
+}
+
+/* =============================================
+ * MANUAL DESCRIPTION STYLING
+ * ============================================= */
+dl.latex-description {
+    margin: 1em 0 !important;
+    padding-left: 0 !important;
+}
+
+.latex-description-item {
+    margin-bottom: 0.8em !important;
+    display: block !important;
+}
+
+.latex-description-item dt {
+    font-weight: bold !important;
+    display: inline !important;
+    /* Run-in style */
+    margin-right: 0.4em !important;
+    /* The missing space! */
+}
+
+/* Optional: Add a dot if usage implies it? 
+   User input: \item[Compression fallacy.] - dot is in input.
+*/
+
+.latex-description-item dd {
+    display: inline !important;
+    /* Run-in style */
+    margin: 0 !important;
 }

@@ -157,28 +157,6 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 
 ### 5. Bibliography Injection
 
-`latex.js` cannot handle BibTeX or complex `thebibliography` environments.
-
-- **Extraction**: We use regex to find all `\bibitem{key}` entries.
-- **Map Construction**: We map citation keys (`ref_1`) to labels (`[1]`).
-- **Citation Replacement**: We replace `\cite{ref_1}` in the text with `[1]`.
-- **Rendering**: We build a clean HTML list (`<ul>`) of references.
-- **Injection**: This list is appended to the end of the document container.
-
-### 6. Algorithm Rendering
-
-`latex.js` does not support the `algorithm` or `algpseudocode` packages.
-
-- **Extraction**: Regex finds `\begin{algorithmic}` blocks.
-- **Transformation (Order Matters)**:
-  1.  **Format Text**: The body is passed through `parseLatexFormatting` *first* to handle bold/italic and math restoration.
-  2.  **Inject HTML**: structure tags (`<br>`, `<strong>`) are injected *after* formatting to prevent them from being escaped.
-  - Keywords (`\State`, `\If`, `\For`) are replaced with bold HTML equivalents.
-  - Indentation is preserved via `<pre>` or `code` blocks.
-  - Math inside algorithms is parsed via our custom formatter.
-- **Output**: A styled code block (`.algorithm-wrapper`) mimicking the look of academic algorithms.
-- **CSS Requirement**: This relies on `.algorithm-wrapper` being defined in `latex-article.css`.
-
 ### 6b. Verbatim & Code Blocks (The "Raw" Zone)
 
 `latex.js` crashes on `verbatim` environments because it cannot handle raw unformatted text blocks that ignore LaTeX syntax.
@@ -246,6 +224,25 @@ Rendering user-generated LaTeX in the browser presents security risks (XSS).
 | **Diagrams** | **TikZJax** | Extraction -> Iframe Isolation. |
 | **Tables** | **Custom Parser** | Regex Parse -> HTML Table Generation. |
 | **Citations** | **Universal Processor** | Tokenize `(ref)` -> Merge `[1,2]` -> Inject `\cite`. |
+
+---
+
+### 11. The Unified List Parser (Manual Character-Walker)
+
+To handle arbitrarily nested lists (e.g., `itemize` inside `enumerate`) and optional arguments (e.g., `\item[Label]`), we implemented a **Manual Character-Walker Parser** (`processLists`). Regex was abandoned as insufficient for this level of recursive complexity.
+
+**Strategy (Scorched Earth Policy):**
+1.  **Manual Parsing**: We do **not** use regex to find list boundaries. We iterate through the string character-by-character, using a **Balanced Brace Counter** to correctly parse complex optional arguments (e.g., `\begin{enumerate}[label=\textbf{\arabic*.}]`).
+2.  **Leaf-First Recursion**: The parser identifies the "innermost" list (a leaf node that contains no other list start tags) and processes it first. It replaces the list with a safe placeholder (`__LIST_BLOCK_N__`) before processing parent lists. This guarantees infinite nesting support without regex stack overflow or "greedy match" errors.
+3.  **Pipeline Ordering**: To prevent incorrect parsing, **Verbatim/Code extraction happens BEFORE List parsing**. This ensures `\item` commands inside code blocks are ignored by the list parser.
+4.  **Math Safety**: Content is passed through `resolvePlaceholders()` to restore math *before* HTML generation.
+5.  **Manual Formatting**: We manually parse formatting macros (`\emph`, `\textbf`, `\textsc`) within list items, including support for nested braces (e.g., `\textbf{\textit{text}}`).
+6.  **Trojan Horse**: Final HTML lists are wrapped in `createPlaceholder()` so `latex.js` treats them as black boxes.
+
+**Why?**
+*   **100% No Fallback**: We guarantee `latex.js` *never* sees a list environment, preventing the "squashed numbering" bug.
+*   **Mixed Nesting**: Solves the "enumerate inside itemize" crash.
+*   **Robustness**: Handles any optional argument or label complexity that would break a regex.
 
 ---
 

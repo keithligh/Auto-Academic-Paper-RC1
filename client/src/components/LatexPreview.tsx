@@ -78,16 +78,21 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       .replace(/\\textcircled\{([^{}])\}/g, '($1)');
 
     // 4. Macro Replacement
+    // Improved regex to handle one level of nesting: { outer { inner } }
+    const nested = '([^{}]*(?:\\{[^{}]*\\}[^{}]*)*)';
+
     protectedText = protectedText
       .replace(/\\eqref\{([^{}]*)\}/g, '(\\ref{$1})') // Sanitization: eqref -> (\ref)
       .replace(/\\ref\{([^{}]*)\}/g, '[$1]') // Sanitization: ref -> [key] (Prevent latex.js lookup issues)
       .replace(/\\label\{([^{}]*)\}/g, '') // Sanitization: Nuke labels (latex.js doesn't need them)
       .replace(/\\url\{([^{}]*)\}/g, '<code>$1</code>') // Sanitization: url -> monospaced text
       .replace(/\\footnote\{([^{}]*)\}/g, ' ($1)') // Sanitization: footnote -> inline text
-      .replace(/\\textbf\{([^{}]*)\}/g, '<strong>$1</strong>')
-      .replace(/\\textit\{([^{}]*)\}/g, '<em>$1</em>')
-      .replace(/\\underline\{([^{}]*)\}/g, '<u>$1</u>')
-      .replace(/\\texttt\{([^{}]*)\}/g, '<code>$1</code>')
+      .replace(new RegExp(`\\\\textbf\\{${nested}\\}`, 'g'), '<strong>$1</strong>')
+      .replace(new RegExp(`\\\\textit\\{${nested}\\}`, 'g'), '<em>$1</em>')
+      .replace(new RegExp(`\\\\emph\\{${nested}\\}`, 'g'), '<em>$1</em>')
+      .replace(new RegExp(`\\\\underline\\{${nested}\\}`, 'g'), '<u>$1</u>')
+      .replace(new RegExp(`\\\\texttt\\{${nested}\\}`, 'g'), '<code>$1</code>')
+      .replace(new RegExp(`\\\\textsc\\{${nested}\\}`, 'g'), '<span style="font-variant: small-caps;">$1</span>')
       .replace(/\\bullet/g, '&#8226;')
       .replace(/~/g, '&nbsp;')
       .replace(/\\times/g, '&times;')
@@ -854,38 +859,168 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
   );
 
-  // === HELPER: Recursively process Enumerate environments ===
-  const processEnumerate = (content: string): string => {
+  // === HELPER: UNIFIED LIST PARSER (Deep Recursive, Manual Walker) ===
+  const processLists = (content: string): string => {
     let placeholders: { id: string, html: string }[] = [];
-    // Regex targets "Leaf" nodes (enumerate blocks containing no other enumerate starts)
-    const leafRegex = /\\begin\{enumerate\}((?:(?!\\begin\{enumerate\}).)*?)\\end\{enumerate\}/s;
-
     let loopCount = 0;
-    while (loopCount < 100) { // Safety break
-      const match = content.match(leafRegex);
+
+    // Helper to find balanced closing brace
+    const findBalancedClose = (str: string, openIdx: number, openChar: string, closeChar: string): number => {
+      let depth = 1;
+      let i = openIdx + 1;
+      while (i < str.length && depth > 0) {
+        if (str[i] === openChar) depth++;
+        else if (str[i] === closeChar) depth--;
+        i++;
+      }
+      return depth === 0 ? i - 1 : -1;
+    };
+
+    // Helper to extract environment body manually
+    // Returns: { type, fullMatch, body, options, startIdx, endIdx } or null
+    const findLeafList = (txt: string): { type: string, fullMatch: string, body: string, options: string } | null => {
+      const types = ['enumerate', 'itemize', 'description'];
+
+      // We search for the *first* list that DOES NOT contain a nested list start inside it
+      // actually, resolving from inside out means we just need to find ANY list that strictly 
+      // contains NO list starters in its body.
+
+      let candidates: { type: string, startIdx: number, bodyStart: number, endIdx: number, fullMatch: string, body: string, options: string }[] = [];
+
+      for (const t of types) {
+        let searchCursor = 0;
+        while (true) {
+          const startTag = `\\begin{${t}}`;
+          const idx = txt.indexOf(startTag, searchCursor);
+          if (idx === -1) break;
+
+          // Parse Optional Args [ ... ]
+          let bodyStart = idx + startTag.length;
+          let options = '';
+
+          // Skip whitespace
+          while (bodyStart < txt.length && /\s/.test(txt[bodyStart])) bodyStart++;
+
+          if (txt[bodyStart] === '[') {
+            const optEnd = findBalancedClose(txt, bodyStart, '[', ']');
+            if (optEnd !== -1) {
+              options = txt.substring(bodyStart, optEnd + 1); // keep brackets for now? or strip?
+              bodyStart = optEnd + 1;
+            }
+          }
+
+          // Find matching \end{...}
+          // Scan forward, keeping track of nested same-type environments
+          let depth = 1;
+          let cursor = bodyStart;
+          let endTagIdx = -1;
+
+          while (cursor < txt.length) {
+            const tagClose = `\\end{${t}}`;
+            const tagOpen = `\\begin{${t}}`;
+
+            if (txt.startsWith(tagClose, cursor)) {
+              depth--;
+              if (depth === 0) {
+                endTagIdx = cursor;
+                break;
+              }
+              cursor += tagClose.length;
+            } else if (txt.startsWith(tagOpen, cursor)) {
+              depth++;
+              cursor += tagOpen.length;
+            } else {
+              cursor++;
+            }
+          }
+
+          if (endTagIdx !== -1) {
+            const fullMatch = txt.substring(idx, endTagIdx + `\\end{${t}}`.length);
+            const body = txt.substring(bodyStart, endTagIdx);
+
+            candidates.push({
+              type: t,
+              startIdx: idx,
+              bodyStart,
+              endIdx: endTagIdx,
+              fullMatch,
+              body,
+              options
+            });
+
+            searchCursor = idx + 1; // Keep searching for others
+          } else {
+            searchCursor = idx + 1; // Broken environment, skip
+          }
+        }
+      }
+
+      // Filter for LEAVES: Body must NOT contain any \begin{enumerate|itemize|description}
+      const leaf = candidates.find(c => {
+        return !types.some(t => c.body.includes(`\\begin{${t}}`));
+      });
+
+      return leaf || null;
+    };
+
+    while (loopCount < 500) {
+      const match = findLeafList(content);
       if (!match) break;
       loopCount++;
 
-      const fullMatch = match[0];
-      const innerContent = match[1];
+      // Process Items
+      const { type, fullMatch, body, options } = match;
 
-      // Parse items: Split by \item, filter empty
-      const items = innerContent.split(/\\item/).filter(i => i.trim());
+      const items: { label: string, text: string }[] = [];
+      // Manual Item Splitter
+      const itemParts = body.split(/\\item\b/g);
+      // Note: split[0] is garbage before first item
 
-      // Build HTML
-      const listHtml = `<ol class="latex-enumerate">` +
-        items.map(item => `<li>${parseLatexFormatting(item)}</li>`).join('') +
-        `</ol>`;
+      for (let i = 1; i < itemParts.length; i++) {
+        let part = itemParts[i];
+        let label = '';
 
-      const id = `__ENUMERATE_BLOCK_${placeholders.length}__`;
+        // Check for optional arg [label] 
+        // Iterate char by char to handle nested brackets in label
+        let pCursor = 0;
+        while (pCursor < part.length && /\s/.test(part[pCursor])) pCursor++;
+
+        if (part[pCursor] === '[') {
+          const labelEnd = findBalancedClose(part, pCursor, '[', ']');
+          if (labelEnd !== -1) {
+            label = part.substring(pCursor + 1, labelEnd); // strip brackets
+            part = part.substring(labelEnd + 1);
+          }
+        }
+
+        items.push({ label, text: part });
+      }
+
+      let listHtml = '';
+      if (type === 'enumerate') {
+        // Pass options if needed for advanced styling? For now, we enforce our specific class
+        listHtml = `<ol class="latex-enumerate">` +
+          items.map(i => `<li>${resolvePlaceholders(parseLatexFormatting(i.text))}</li>`).join('') +
+          `</ol>`;
+      } else if (type === 'itemize') {
+        listHtml = `<ul class="latex-itemize">` +
+          items.map(i => `<li>${resolvePlaceholders(parseLatexFormatting(i.text))}</li>`).join('') +
+          `</ul>`;
+      } else if (type === 'description') {
+        listHtml = `<dl class="latex-description">` +
+          items.map(i => `<div class="latex-description-item"><dt>${resolvePlaceholders(parseLatexFormatting(i.label))}</dt><dd>${resolvePlaceholders(parseLatexFormatting(i.text))}</dd></div>`).join('') +
+          `</dl>`;
+      }
+
+      const id = `__LIST_BLOCK_${placeholders.length}__`;
       placeholders.push({ id, html: listHtml });
       content = content.replace(fullMatch, id);
     }
 
-    // Resolve placeholders (Iterative to handle nesting)
+    // Resolve placeholders
     let hasPlaceholder = true;
     let resolveCount = 0;
-    while (hasPlaceholder && resolveCount < 100) {
+    while (hasPlaceholder && resolveCount < 200) {
       hasPlaceholder = false;
       resolveCount++;
       placeholders.forEach(p => {
@@ -896,18 +1031,22 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       });
     }
 
-    // Convert to Trojon Horse Placeholders
-    content = content.replace(/(<ol class="latex-enumerate">[\s\S]*?<\/ol>)/g, (match) => {
+    // Convert to Trojan Horse Placeholders for latex.js safety
+    content = content.replace(/((?:<ol class="latex-enumerate">|<ul class="latex-itemize">|<dl class="latex-description">)[\s\S]*?(?:<\/ol>|<\/ul>|<\/dl>))/g, (match) => {
       return createPlaceholder(match);
     });
 
     return content;
   };
 
-  // --- K. LISTS (Manual Enumerate) ---
-  content = processEnumerate(content); // Manual Parse Enumerate
-  // Itemize: Just strip options, let latex.js handle bullets
-  content = content.replace(/\\begin\{itemize\}\[.*?\]/g, '\\begin{itemize}');
+  // --- L. VERBATIM (Manual Extraction) ---
+  // MOVED UP: Must extract verbatim BEFORE lists to prevent \item inside code from breaking list parser
+  content = content.replace(/\\begin\{verbatim\}([\s\S]*?)\\end\{verbatim\}/g, (m, body) => {
+    return createPlaceholder(`<pre class="latex-verbatim">${body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`);
+  });
+
+  // --- K. LISTS (Unified Manual Parser) ---
+  content = processLists(content);
 
   // --- H. ALGORITHMS ---
   // --- H. ALGORITHMS ---
@@ -932,10 +1071,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   });
   content = content.replace(/\\begin\{algorithm(\*?)\}([\s\S]*?)\\end\{algorithm\1\}/g, '$2');
 
-  // --- L. VERBATIM (Manual Extraction) ---
-  content = content.replace(/\\begin\{verbatim\}([\s\S]*?)\\end\{verbatim\}/g, (m, body) => {
-    return createPlaceholder(`<pre class="latex-verbatim">${body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`);
-  });
+
 
   // --- I. PARBOX (Manual Parser) ---
   content = processParboxes(content);

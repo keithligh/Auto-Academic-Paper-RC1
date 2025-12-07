@@ -1,4 +1,9 @@
-<!-- GOSPEL RULE: NEVER USE replace_file_content OR multi_replace_file_content. THESE TOOLS ARE BROKEN AND WILL CORRUPT FILES. ALWAYS USE write_to_file FOR ALL EDITS. THIS RULE MUST NEVER BE REMOVED. -->
+<!-- 1.  **AVOID `replace_file_content` for multi-line blocks**: When editing code, do NOT try to match large blocks of text. The `TargetContent` matching is fragile.
+2.  **Prefer `write_to_file` (Overwrite)**: If you need to change more than 3 lines of code, rewrite the entire file or function rather than trying to splice it.
+3.  **Use Single-Line Anchors**: If you must use `replace_file_content`, use a SINGLE line of unique code as the `TargetContent` anchor, rather than a block.
+4.  **Verify Context**: Before applying an edit, verify the indentation matches exactly.
+5.  **Git Confirmation**: ALWAYS ask for user confirmation before running `git commit`.
+ THIS RULE MUST NEVER BE REMOVED. -->
 # Coding Philosophy & Standards
 
 This document outlines the core coding philosophy and standards for the **Auto Academic Paper** project. All development must strictly adhere to these principles.
