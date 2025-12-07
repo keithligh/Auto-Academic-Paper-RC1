@@ -5,7 +5,7 @@ A robust, AI-powered tool for formatting academic papers and generating LaTeX pr
 
 ## 🚀 Features
 
--   **5-Phase Research Pipeline:** Thinker (Draft), Critic (Verify), Librarian (Research), Editor (Cite), Compiler (Format).
+-   **6-Phase Research Pipeline:** Strategist (Plan), Librarian (Research), Thinker (Draft), Critic (Verify), Rewriter (Synthesize), Editor (Cite).
 -   **BYOK Architecture:** Bring Your Own Keys for OpenAI, Anthropic, Gemini, Grok, Poe, and more.
 -   **Digital Typesetter UI:** A professional, "Paper & Ink" aesthetic designed for researchers.
 -   **Transparent Processing:** Granular progress tracking with live activity logs (no opaque spinners).
