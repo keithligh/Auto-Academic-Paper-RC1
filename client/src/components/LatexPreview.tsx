@@ -189,22 +189,33 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const isTextHeavy = avgLabelTextPerNode > 30; // Use accurate label-based metric
     const baseComplexity = nodeMatches.length + drawMatches.length + (arrowMatches.length / 2);
 
-    // NEW (v1.5.6): Detect WIDE horizontal diagrams using absolute positioning
-    // Extract X coordinates from "at (x,y)" patterns
-    const atMatches = safeTikz.match(/at\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)/g) || [];
+    // NEW (v1.5.6): Detect WIDE and FLAT diagrams using absolute positioning
+    // Extract ALL (x,y) coordinate pairs from the TikZ code (not just "at" patterns)
+    // This captures: \node at (x,y), \draw (x,y) -- (x,y), \fill (x,y), etc.
+    const allCoordMatches = safeTikz.match(/\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)/g) || [];
     let minX = Infinity, maxX = -Infinity;
-    atMatches.forEach(m => {
-      const coords = m.match(/\(\s*(-?[\d.]+)\s*,/);
+    let minY = Infinity, maxY = -Infinity;
+    allCoordMatches.forEach(m => {
+      const coords = m.match(/\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)/);
       if (coords) {
         const x = parseFloat(coords[1]);
+        const y = parseFloat(coords[2]);
         if (!isNaN(x)) {
           minX = Math.min(minX, x);
           maxX = Math.max(maxX, x);
         }
+        if (!isNaN(y)) {
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
       }
     });
     const horizontalSpan = (maxX !== -Infinity && minX !== Infinity) ? (maxX - minX) : 0;
+    const verticalSpan = (maxY !== -Infinity && minY !== Infinity) ? (maxY - minY) : 0;
     const isWideHorizontal = horizontalSpan > 14; // > 14cm exceeds A4 safe width
+    // NEW (v1.5.7): Detect FLAT diagrams (timeline-style) with extreme aspect ratio
+    const aspectRatio = verticalSpan > 0 ? horizontalSpan / verticalSpan : 0;
+    const isFlat = horizontalSpan > 0 && verticalSpan > 0 && aspectRatio > 3.0;
 
     // REFACTOR (v1.5.5): HYBRID INTENT (Phase 7 + Density Override)
     // We analyze the AI's *intent* based on 'node distance', BUT we fallback to 
@@ -221,9 +232,11 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
 
     // 2. CLASSIFY
-    // Priority: WIDE > node distance > text density > node count
+    // Priority: WIDE > FLAT > node distance > text density > node count
     if (isWideHorizontal) {
-      intent = 'WIDE'; // New intent for horizontal pipelines with absolute positioning
+      intent = 'WIDE'; // Horizontal overflow - must scale down to fit
+    } else if (isFlat) {
+      intent = 'FLAT'; // Timeline-style - needs y-axis boost
     } else if (distMatch) {
       // Explicit intent wins
       if (nodeDist < 2.0) intent = 'COMPACT';
@@ -275,6 +288,38 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // MUST use transform shape to shrink nodes proportionally
       if (!options.includes('transform shape')) extraOpts += ', transform shape';
 
+    } else if (intent === 'FLAT') {
+      // GOAL: Balance extreme aspect ratio (timeline diagrams)
+      // A 5:1 ratio looks compressed; target ~2:1 for visual balance
+      const targetRatio = 2.0;
+      const yBoost = aspectRatio / targetRatio; // e.g., 5:1 / 2:1 = 2.5x boost
+      const yMultiplier = Math.min(3.0, Math.max(1.5, yBoost)); // Clamp between 1.5x and 3x
+      const xMultiplier = 1.5; // 50% horizontal expansion for label spacing
+
+      // Extract existing x/y values from options (if present) and multiply them
+      const existingX = options.match(/x\s*=\s*([\d.]+)/);
+      const existingY = options.match(/y\s*=\s*([\d.]+)/);
+      const baseX = existingX ? parseFloat(existingX[1]) : 1.0;
+      const baseY = existingY ? parseFloat(existingY[1]) : 1.0;
+
+      const newX = (baseX * xMultiplier).toFixed(1);
+      const newY = (baseY * yMultiplier).toFixed(1);
+
+      // Replace existing x/y or add new ones
+      if (existingX) {
+        // Will be replaced in merge logic below
+        extraOpts += `, x=${newX}cm`;
+      } else {
+        extraOpts += `, x=${newX}cm`;
+      }
+      if (existingY) {
+        extraOpts += `, y=${newY}cm`;
+      } else {
+        extraOpts += `, y=${newY}cm`;
+      }
+
+      // NOTE: No font reduction needed - the x/y multipliers provide enough space for labels
+
     } else {
       // MEDIUM
       const scale = nodeMatches.length >= 6 ? 0.8 : 0.9;
@@ -289,8 +334,18 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       extraOpts += ', x=2.2cm, y=1.5cm';
     }
 
+    // FLAT INTENT: Strip old x/y values so new calculated values take precedence
+    let processedOptions = options.trim();
+    if (intent === 'FLAT') {
+      // Remove existing x= and y= values (they'll be replaced with calculated ones)
+      processedOptions = processedOptions.replace(/,?\s*x\s*=\s*[\d.]+\s*(cm)?/gi, '');
+      processedOptions = processedOptions.replace(/,?\s*y\s*=\s*[\d.]+\s*(cm)?/gi, '');
+      // Clean up any double commas or leading/trailing commas
+      processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
+    }
+
     // Merge logic
-    let finalOptions = options.trim();
+    let finalOptions = processedOptions;
     if (!finalOptions) {
       finalOptions = extraOpts ? `[${extraOpts.replace(/^,/, '').trim()}]` : '[]';
     } else if (finalOptions.startsWith('[') && finalOptions.endsWith(']')) {

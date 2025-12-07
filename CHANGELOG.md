@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.7] - 2025-12-07
+### Added
+- **FLAT Intent (TikZ)**: New intent classification for timeline-style diagrams with extreme aspect ratios (> 3:1).
+  - **Detection**: Extracts ALL `(x,y)` coordinate pairs (not just `at` patterns) to calculate true vertical extent.
+  - **Root Cause Fix**: Previous regex only matched `at (x,y)` patterns, missing `\draw (x,y)` coordinates that define vertical extent.
+  - **Trigger**: Aspect ratio (horizontal/vertical) > 3.0 activates FLAT intent.
+  - **Correction**: Multiplier-based expansion: `y × (ratio/2)`, `x × 1.5`, plus `font=\small`.
+  - **Override Behavior**: Strips existing `x=`/`y=` values before injecting calculated ones (TikZ uses first value).
+
+### Changed
+- **Coordinate Extraction**: Now captures ALL `(x,y)` patterns in TikZ code, not just `at (x,y)`, for accurate span/aspect calculations.
+- **Priority Order**: Updated to `WIDE > FLAT > node distance > text density > node count > MEDIUM`.
+- **Documentation**: Updated `TIKZ_HANDLING.md` and `LATEX_PREVIEW_SYSTEM.md` with FLAT intent specifications.
+
 ## [1.5.6] - 2025-12-07
 ### Added
 - **WIDE Intent (TikZ)**: New intent classification for diagrams using absolute positioning (`\node at (x,y)`) that exceed A4 safe width.

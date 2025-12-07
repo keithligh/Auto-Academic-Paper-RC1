@@ -72,7 +72,7 @@ We generate diagrams using AI, which means we don't always know the size. "One s
 
 **Detection Logic:**
 ```
-1. Extract all "at (x,y)" coordinates from the TikZ code
+1. Extract ALL (x,y) coordinate pairs from TikZ code (not just "at" patterns)
 2. Calculate horizontal span: maxX - minX
 3. If span > 14cm → WIDE intent
 ```
@@ -91,25 +91,70 @@ finalScale = max(0.5, scaleFactor)  // Floor at 50%
 **Why `transform shape` is REQUIRED for WIDE:**
 Unlike LARGE (text readability), WIDE diagrams need **proportional shrinking**. If we scale coordinates without scaling nodes, nodes will overlap. `transform shape` ensures text shrinks with the geometry.
 
+#### BB. The FLAT Intent (v1.5.7)
+
+> **Problem Case**: Timeline-style diagrams have extreme **aspect ratios** (e.g., 10cm wide × 2.5cm tall = 4:1). These diagrams look "squashed" and unprofessional. Labels on the timeline become cramped because horizontal space is limited relative to text size.
+
+**The Root Cause Discovery:**
+Initial detection only looked for `at (x,y)` patterns. Timeline diagrams often have:
+- Nodes at y=0: `\node at (1,0)`, `\node at (3,0)` → verticalSpan = 0
+- Draw commands with vertical extent: `\draw (0,0.5) -- (9.5,2.5)` → NOT captured by `at` regex
+
+**The Fix:** Extract **ALL** `(x,y)` coordinate pairs, not just `at (x,y)`:
+```javascript
+const allCoordMatches = safeTikz.match(/\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)/g);
+```
+
+**Detection Logic:**
+```
+1. Extract ALL (x,y) from TikZ body (nodes, draws, fills, paths)
+2. Calculate: horizontalSpan = maxX - minX, verticalSpan = maxY - minY
+3. Calculate: aspectRatio = horizontalSpan / verticalSpan
+4. If aspectRatio > 3.0 → FLAT intent
+```
+
+**Correction Formula (Multiplier-Based):**
+Unlike WIDE (which shrinks), FLAT **expands** the coordinate system:
+```
+targetRatio = 2.0  // Balanced appearance
+yMultiplier = min(3.0, max(1.5, aspectRatio / targetRatio))
+xMultiplier = 1.5  // 50% horizontal expansion for labels
+
+newY = existingY × yMultiplier  // e.g., 1cm × 2.5 = 2.5cm
+newX = existingX × xMultiplier  // e.g., 1cm × 1.5 = 1.5cm
+```
+
+**Why Stripping Old Values is Required:**
+The diagram may have explicit `[x=1cm, y=1cm]`. Simply appending new values doesn't work (TikZ uses first value). We must:
+```javascript
+// Strip old x/y from options before merging
+options = options.replace(/x\s*=\s*[\d.]+\s*(cm)?/g, '');
+options = options.replace(/y\s*=\s*[\d.]+\s*(cm)?/g, '');
+```
+
+**Additional Injection:** `font=\small` reduces label text size to prevent cramping.
+
 #### C. The Execution Rules
 
 | Type | Goal | Scaling Logic | Extra Style Injection |
 | :--- | :--- | :--- | :--- |
 | **WIDE** | Fit to A4 | Dynamic: `14/span × 0.9` (floor 0.5) | **`transform shape`** (REQUIRED) |
+| **FLAT** | Balance Ratio | Multiplier: `y × (ratio/2)`, `x × 1.5` | **`font=\small`**, strip old x/y |
 | **COMPACT** | Fit to A4 | `scale=0.75` (>=8 nodes) / `0.85` | `node distance=1.5cm`, `transform shape` |
 | **LARGE** | Readability | `scale=0.85` (>=6 nodes) / `1.0` | `align=center`*, `node distance=8.4cm` (Text) / `5.0cm` (Node) |
 | **MEDIUM** | Balance | `scale=0.8` (>=6 nodes) / `0.9` | `node distance=2.5cm` |
 
 *Note: `transform shape` is strictly exempt from LARGE to keep text readable.*
 *Note*: `align=center` is injected if `text width` is missing, ensuring multi-line labels render correctly.
-*Note*: WIDE, COMPACT, and MEDIUM all use `transform shape`. Only LARGE exempts it.
+*Note*: WIDE, COMPACT, and MEDIUM all use `transform shape`. FLAT uses `font=\small` instead. Only LARGE exempts text scaling.
 
-#### D. Priority Order (v1.5.6)
+#### D. Priority Order (v1.5.7)
 ```
-WIDE > node distance > text density > node count > MEDIUM (default)
+WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 ```
 
-WIDE takes highest priority because absolute-positioning overflow is a **hard constraint** — the diagram simply won't fit without scaling.
+- **WIDE** takes highest priority (hard overflow constraint)
+- **FLAT** takes second priority (aspect ratio distortion is visually severe)
 
 #### E. The Safety Nets (Hidden Logic)
 1.  **The 5cm Safety Net**: In LARGE mode, if an explicit distance is `< 4.0cm`, it is forcibly boosted to `5.0cm` to prevent cramping.
@@ -117,6 +162,7 @@ WIDE takes highest priority because absolute-positioning overflow is a **hard co
     -   **Injection**: `x=2.2cm, y=1.5cm`
     -   **Reason**: Moves nodes further apart horizontally without affecting the text size.
 3.  **Explicit Coordinate Exemption**: If the diagram already specifies `x=` or `y=` in options, we skip automatic scaling for MEDIUM to respect author intent.
+4.  **FLAT Coordinate Override**: For FLAT intent, existing `x=` and `y=` values are **stripped and replaced** with calculated multiplied values (cannot skip, must fix ratio).
 
 ---
 
@@ -127,4 +173,5 @@ WIDE takes highest priority because absolute-positioning overflow is a **hard co
 3.  **ALWAYS** use the manual bracket parser for extraction (Regex is insufficient).
 4.  **ALWAYS** use `transform shape` for **COMPACT** and **WIDE** diagrams (scales text).
 5.  **NEVER** use `transform shape` for **LARGE** diagrams (keeps text readable).
-6.  **ALWAYS** check for **absolute positioning** (`at (x,y)`) overflow before applying other intents.
+6.  **ALWAYS** extract **ALL** `(x,y)` coordinate pairs (not just `at (x,y)`) for span/aspect calculations.
+7.  **ALWAYS** strip and replace existing `x=`/`y=` values for **FLAT** intent (cannot skip, must fix ratio).

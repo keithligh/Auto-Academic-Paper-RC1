@@ -528,7 +528,8 @@ We adhere to the strict "Phase 7" logic documented in `TIKZ_HANDLING.md`. This s
 
 ### 1. The Classifier (The Intent)
 We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm if node count > 8).
-*   **WIDE** (v1.5.6): Horizontal span > 14cm (from absolute positioning `at (x,y)`). **Takes priority.**
+*   **WIDE** (v1.5.6): Horizontal span > 14cm. **Takes priority.**
+*   **FLAT** (v1.5.7): Aspect ratio > 3:1 (timeline-style). **Second priority.**
 *   **COMPACT** (Pipeline): `dist < 2.0cm`.
 *   **LARGE** (Cycle): `dist >= 2.5cm`.
 *   **MEDIUM**: Everything else.
@@ -538,6 +539,7 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 | Intent | Goal | Action |
 | :--- | :--- | :--- |
 | **WIDE** | **Fit to A4** | Dynamic `scale=(14/span × 0.9)`, `transform shape` |
+| **FLAT** | **Balance Ratio** | Multiplier: `y × (ratio/2)`, `x × 1.5`, `font=\small`, strip old x/y |
 | **COMPACT** | **Fit to A4** | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm` |
 | **LARGE** | **Readability** | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
 | **MEDIUM** | Balance | `scale` (0.8 if ≥6 nodes, else 0.9) + Moderate Dist (1.2x) |
@@ -552,8 +554,16 @@ We discovered that `node distance` is not always a perfect predictor. Some "Cycl
 ### 4. The "Absolute Positioning" Override (v1.5.6)
 Diagrams using `\node at (x,y)` syntax bypass `node distance` entirely. If the horizontal span exceeds A4 safe width (14cm), CSS responsive shrinking causes node overlap.
 
-- **The Fix**: Extract X coordinates, calculate span, apply dynamic scale.
+- **The Fix**: Extract ALL `(x,y)` coordinates (not just `at` patterns), calculate span, apply dynamic scale.
 - **Formula**: `scale = min(1.0, 14/span) × 0.9` with floor at 0.5.
 - **Requirement**: `transform shape` is mandatory to shrink nodes proportionally.
+
+### 5. The "Aspect Ratio" Override (v1.5.7)
+Timeline diagrams often have extreme aspect ratios (e.g., 10cm wide × 2.5cm tall = 4:1). This makes them look "squashed".
+
+- **Root Cause**: Initial coordinate extraction only matched `at (x,y)` patterns, missing `\draw (x,y)` paths that define vertical extent.
+- **The Fix**: Extract ALL `(x,y)` pairs from the TikZ body to calculate true vertical span.
+- **Formula**: `yMultiplier = min(3.0, max(1.5, aspectRatio / 2.0))`, `xMultiplier = 1.5`
+- **Override**: Existing `x=`/`y=` values are stripped and replaced (cannot skip, must fix ratio).
 
 This ensures that "Cycle" diagrams (Large intent) get the massive spacing they need to avoid overlap, while "Pipelines" (Compact intent) are shrunk proportionally.
