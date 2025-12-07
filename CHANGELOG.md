@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.13] - 2025-12-07
+### Fixed
+- **Citation Robustness (The Auditor Fix)**: "Universal Citation Processor" updated to a **Robust Tokenizer**.
+  - **Logic**: No longer assumes comma separators. Now splits content by `/[,\s;]+/` (Commans, Semicolons, Spaces, Newlines).
+  - **Impact**: Correctly parses `(ref_1; ref_2)` or `(ref_1 ref_2)` which previously failed and rendered as raw text.
+  - **Logging**: Added deep transparency logs for every citation match and merge operation.
+
 ## [1.5.12] - 2025-12-07
 ### Refactored
 - **Phase 4: The Peer Reviewer**: Rebranded "The Critic" to "The Peer Reviewer".

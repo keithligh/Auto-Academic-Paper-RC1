@@ -53,50 +53,54 @@ function formatAuthorInfo(name?: string, affiliation?: string): string {
 function compileCitations(text: string, references: { key: string }[]): string {
     // Step 1: Build a set of valid reference keys
     const validKeys = new Set(references.map(r => r.key));
+    console.log(`[Compiler] Processing citations. Valid keys: ${validKeys.size}`);
 
     // Step 2: Replace (ref_X) with \cite{ref_X}
-    // Pattern: ANY parenthesized block starting with ref_X (handles leading space, newlines, separators)
-    // Final Regex: matches `( ref_1...)`
-    let compiled = text.replace(/\(\s*(ref_\d+(?:[^)]*))\)/g, (match, content) => {
-        // Extract all ref keys from the content
-        const keys = content.match(/ref_\d+/g);
-        if (!keys) return match;
+    // STRATEGY: "Parse, don't Regex". Match the block, then tokenize the content.
+    // Regex: Matches "(" followed by whitespace, then "ref_", then ANYTHING ([\s\S]) until ")"
+    let compiled = text.replace(/\(\s*(ref_[\s\S]*?)\)/g, (match, content) => {
+        // CONTENT PARSER: Split by comma, semicolon, or whitespace
+        const tokens = content.split(/[,\s;]+/);
 
-        // Filter for valid keys
-        const valid = keys.filter((k: string) => validKeys.has(k));
+        // Find valid keys in tokens
+        const valid = tokens.filter((t: string) => {
+            const cleanT = t.trim().replace(/[^a-zA-Z0-9_]/g, ''); // Strip punctuation
+            return validKeys.has(cleanT);
+        });
 
         if (valid.length > 0) {
-            // Join valid keys with commas: \cite{ref_1,ref_2}
-            // natbib will handle sorting and compressing: [1, 2] or [1-3]
+            console.log(`[Compiler] Tokenized citations: "${match}" -> \\cite{${valid.join(',')}}`);
             return `\\cite{${valid.join(',')}}`;
         } else {
-            // No valid keys found in group
-            console.warn(`[Compiler] Invalid citation group: ${match}`);
-            return `[?]`;
+            console.warn(`[Compiler] Invalid citation group (No valid keys): ${match}`);
+            return match; // Keep original text if no valid keys found (don't break user text)
         }
     });
 
     // Step 3: Citation Merging - combine adjacent \cite{} commands
     // Converts \cite{ref_1} \cite{ref_2} -> \cite{ref_1,ref_2}
-    // This ensures [1][2] becomes [1, 2] (Best Practice)
     let prev;
+    let loopCount = 0;
     do {
         prev = compiled;
         compiled = compiled.replace(/\\cite\{([^}]+)\}\s*\\cite\{([^}]+)\}/g, (match, keys1, keys2) => {
+            console.log(`[Compiler] Merging adjacent citations: ${match}`);
             return `\\cite{${keys1},${keys2}}`;
         });
-    } while (compiled !== prev);
+        loopCount++;
+    } while (compiled !== prev && loopCount < 10); // Safety break
 
     // Step 4: Citation Repair - detect any hallucinated \cite{} that aren't in our list
     compiled = compiled.replace(/\\cite\{([^}]+)\}/g, (match, key) => {
-        // Handle merged keys like "ref_1,ref_2"
         const keys = key.split(',');
-        const allValid = keys.every((k: string) => validKeys.has(k.trim()));
+        const allValid = keys.every((k: string) => {
+            const cleanK = k.trim();
+            return validKeys.has(cleanK);
+        });
 
         if (allValid) {
-            return match; // Valid, keep it
+            return match;
         } else {
-            // Hallucinated citation - mark as [?]
             console.warn(`[Compiler] Hallucinated citation detected: ${match}`);
             return `[?]`;
         }
