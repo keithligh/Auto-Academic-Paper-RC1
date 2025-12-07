@@ -91,6 +91,49 @@ finalScale = max(0.5, scaleFactor)  // Floor at 50%
 **Why `transform shape` is REQUIRED for WIDE:**
 Unlike LARGE (text readability), WIDE diagrams need **proportional shrinking**. If we scale coordinates without scaling nodes, nodes will overlap. `transform shape` ensures text shrinks with the geometry.
 
+#### BA. The BRACE Intent (v1.7.0)
+
+> **Problem Case**: Diagrams with **decorative braces below the main content** (e.g., timeline labels, phase annotations) use small coordinate scales like `[x=0.8cm, y=0.8cm]`. When brace labels are positioned at negative y-coordinates (below the x-axis), they overlap with x-axis labels and each other due to vertical cramping.
+
+**Example:** The "Infatuation Diagram" has:
+- Coordinate system: `[x=0.8cm, y=0.8cm]`
+- Main content: y from 0 to 7
+- Brace labels: y = -0.7 to -2.0 (below x-axis)
+- Physical depth: `2.0 × 0.8 = 1.6cm` (too cramped for text labels)
+
+**Detection Logic:**
+```
+1. Has brace decorations: decoration={brace
+2. Has negative y-coordinates: minY < 0
+3. Has small y-scale: yScale < 1.0
+→ BRACE intent
+```
+
+**Solution Formula:**
+```javascript
+// Calculate required y-scale to achieve 2.5cm comfortable depth
+negativeExtent = |minY| × yScale  // Current physical depth below x-axis
+targetDepth = 2.5  // cm - comfortable spacing for brace labels
+requiredYScale = targetDepth / |minY|
+
+// Boost y-axis (prioritize vertical space)
+newYScale = max(1.5, min(2.5, requiredYScale))
+
+// Modest x-axis boost for horizontal breathing room
+newXScale = max(1.0, existingXScale × 1.25)
+```
+
+**Key Design Decisions:**
+- **No `transform shape`**: We want text at normal readable size. The boosted coordinate grid provides space naturally.
+- **Strip old x/y**: Must replace existing small scales (like 0.8cm) with calculated larger scales.
+- **Priority**: Takes precedence over FLAT because vertical overlap is a hard failure, while aspect ratio is aesthetic.
+
+**Result:** For the Infatuation Diagram with minY=-2.0, y=0.8cm:
+- Current depth: `2.0 × 0.8 = 1.6cm`
+- Required: `targetDepth / 2.0 = 2.5 / 2.0 = 1.25cm` per unit
+- Applied: `max(1.5, min(2.5, 1.25)) = 1.5cm` per unit
+- New depth: `2.0 × 1.5 = 3.0cm` ✓ Comfortable spacing!
+
 #### BB. The FLAT Intent (v1.5.7)
 
 > **Problem Case**: Timeline-style diagrams have extreme **aspect ratios** (e.g., 10cm wide × 2.5cm tall = 4:1). These diagrams look "squashed" and unprofessional. Labels on the timeline become cramped because horizontal space is limited relative to text size.
@@ -140,22 +183,24 @@ options = options.replace(/y\s*=\s*[\d.]+\s*(cm)?/g, '');
 | Type | Goal | Scaling Logic | Extra Style Injection |
 | :--- | :--- | :--- | :--- |
 | **WIDE** | Fit to A4 | Dynamic: `14/span × 0.9` (floor 0.5) | **`transform shape`** (REQUIRED) |
+| **BRACE** | Vertical Space for Labels | Y-boost: `max(1.5, targetDepth / |minY|)`, X-boost: `xScale × 1.25` | Strip old x/y, **NO** `transform shape` |
 | **FLAT** | Balance Ratio | Multiplier: `y × (ratio/2)`, `x × 1.5` | Strip old x/y |
 | **COMPACT** | Fit to A4 | `scale=0.75` (>=8 nodes) / `0.85` | `node distance=1.5cm`, `transform shape` |
 | **LARGE** | Readability | `scale=0.85` (>=6 nodes) / `1.0` | `align=center`*, `node distance=8.4cm` (Text) / `5.0cm` (Node) |
 | **MEDIUM** | Balance | **Smart Scale**: `1.0` (Fits A4) or `0.8/0.9` | `node distance=2.5cm` |
 
-*Note: `transform shape` is strictly exempt from LARGE to keep text readable.*
+*Note: `transform shape` is strictly exempt from LARGE and BRACE to keep text readable.*
 *Note*: `align=center` is injected if `text width` is missing, ensuring multi-line labels render correctly.
-*Note*: WIDE, COMPACT, and MEDIUM all use `transform shape`. Only LARGE exempts text scaling.
+*Note*: WIDE, COMPACT, and MEDIUM all use `transform shape`. LARGE and BRACE exempt text scaling.
 
-#### D. Priority Order (v1.5.7)
+#### D. Priority Order (v1.7.0)
 ```
-WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
+WIDE > BRACE > FLAT > node distance > text density > node count > MEDIUM (default)
 ```
 
-- **WIDE** takes highest priority (hard overflow constraint)
-- **FLAT** takes second priority (aspect ratio distortion is visually severe)
+- **WIDE** takes highest priority (hard overflow constraint - diagram won't fit on page)
+- **BRACE** takes second priority (vertical overlap causes label illegibility - hard failure)
+- **FLAT** takes third priority (aspect ratio distortion is visually severe but readable)
 
 #### E. The Safety Nets (Hidden Logic)
 1.  **The 5cm Safety Net**: In LARGE mode, if an explicit distance is `< 4.0cm`, it is forcibly boosted to `5.0cm` to prevent cramping.

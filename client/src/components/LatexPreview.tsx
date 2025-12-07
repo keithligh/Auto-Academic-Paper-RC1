@@ -233,12 +233,30 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         }
       }
     });
-    const horizontalSpan = (maxX !== -Infinity && minX !== Infinity) ? (maxX - minX) : 0;
-    const verticalSpan = (maxY !== -Infinity && minY !== Infinity) ? (maxY - minY) : 0;
+
+    // CRITICAL FIX (v1.7.0): Extract x/y scale from options to convert coordinate units to physical cm
+    // Bug: Previous code compared coordinate units (e.g., 9.5) directly to physical cm (14cm)
+    // With x=0.8cm, a span of 9.5 units = 7.6cm physical, not 9.5cm
+    const xScaleMatch = options.match(/\bx\s*=\s*([\d.]+)\s*cm/);
+    const yScaleMatch = options.match(/\by\s*=\s*([\d.]+)\s*cm/);
+    const xScale = xScaleMatch ? parseFloat(xScaleMatch[1]) : 1.0;
+    const yScale = yScaleMatch ? parseFloat(yScaleMatch[1]) : 1.0;
+
+    // Apply scaling to convert coordinate units to physical cm
+    const horizontalSpan = (maxX !== -Infinity && minX !== Infinity) ? ((maxX - minX) * xScale) : 0;
+    const verticalSpan = (maxY !== -Infinity && minY !== Infinity) ? ((maxY - minY) * yScale) : 0;
+
     const isWideHorizontal = horizontalSpan > 14; // > 14cm exceeds A4 safe width
     // NEW (v1.5.7): Detect FLAT diagrams (timeline-style) with extreme aspect ratio
     const aspectRatio = verticalSpan > 0 ? horizontalSpan / verticalSpan : 0;
     const isFlat = horizontalSpan > 0 && verticalSpan > 0 && aspectRatio > 3.0;
+
+    // NEW (v1.7.0): Detect BRACE diagrams (labels below main content causing vertical cramping)
+    // Indicators: 1) Has brace decorations, 2) Has negative y-coordinates, 3) Has small y-scale
+    const hasBraces = safeTikz.includes('decoration={brace') || safeTikz.includes('decoration=\\{brace');
+    const hasNegativeY = minY !== Infinity && minY < 0;
+    const hasSmallYScale = yScale < 1.0;
+    const isBraceLayout = hasBraces && hasNegativeY && hasSmallYScale;
 
     // REFACTOR (v1.5.5): HYBRID INTENT (Phase 7 + Density Override)
     // We analyze the AI's *intent* based on 'node distance', BUT we fallback to 
@@ -255,9 +273,11 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
 
     // 2. CLASSIFY
-    // Priority: WIDE > FLAT > node distance > text density > node count
+    // Priority: WIDE > BRACE > FLAT > node distance > text density > node count
     if (isWideHorizontal) {
       intent = 'WIDE'; // Horizontal overflow - must scale down to fit
+    } else if (isBraceLayout) {
+      intent = 'BRACE'; // Has braces below content - needs y-axis boost to prevent label overlap
     } else if (isFlat) {
       intent = 'FLAT'; // Timeline-style - needs y-axis boost
     } else if (distMatch) {
@@ -333,6 +353,28 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // MUST use transform shape to shrink nodes proportionally
       if (!options.includes('transform shape')) extraOpts += ', transform shape';
 
+    } else if (intent === 'BRACE') {
+      // GOAL: Create vertical space for brace labels below main content
+      // PROBLEM: Diagrams with x=0.8cm, y=0.8cm have cramped grids causing label overlap
+      // SOLUTION: Boost y-axis scale to 1.5-2.0cm to give brace labels breathing room
+
+      // Calculate target y-scale based on negative extent
+      // If labels extend to y=-2 with y=0.8cm, that's -1.6cm physical depth
+      // We want at least 2.5cm depth for comfortable brace label spacing
+      const negativeExtent = Math.abs(minY) * yScale; // Physical depth below x-axis
+      const targetDepth = 2.5; // cm - comfortable depth for brace labels
+      const requiredYScale = negativeExtent > 0 ? (targetDepth / Math.abs(minY)) : 1.5;
+
+      // Boost both x and y proportionally, but prioritize y
+      const newYScale = Math.max(1.5, Math.min(2.5, requiredYScale));
+      const newXScale = Math.max(1.0, xScale * 1.25); // Modest x-boost for horizontal breathing room
+
+      // Strip old x/y and inject new values
+      extraOpts += `, x=${newXScale.toFixed(2)}cm, y=${newYScale.toFixed(2)}cm`;
+
+      // Do NOT use transform shape - we want text to stay at normal readable size
+      // The boosted coordinate grid provides the space naturally
+
     } else if (intent === 'FLAT') {
       // GOAL: Balance extreme aspect ratio (timeline diagrams)
       // A 5:1 ratio looks compressed; target ~2:1 for visual balance
@@ -401,9 +443,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       extraOpts += ', x=2.2cm, y=1.5cm';
     }
 
-    // FLAT INTENT: Strip old x/y values so new calculated values take precedence
+    // FLAT/BRACE INTENT: Strip old x/y values so new calculated values take precedence
     let processedOptions = options.trim();
-    if (intent === 'FLAT') {
+    if (intent === 'FLAT' || intent === 'BRACE') {
       // Remove existing x= and y= values (they'll be replaced with calculated ones)
       processedOptions = processedOptions.replace(/,?\s*x\s*=\s*[\d.]+\s*(cm)?/gi, '');
       processedOptions = processedOptions.replace(/,?\s*y\s*=\s*[\d.]+\s*(cm)?/gi, '');

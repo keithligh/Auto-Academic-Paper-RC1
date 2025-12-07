@@ -562,10 +562,29 @@ If the renderer encounters a catastrophic failure (e.g., `latex.js` throws an ex
 
 We adhere to the strict "Phase 7" logic documented in `TIKZ_HANDLING.md`. This strategy respects the AI's *intent* (expressed via `node distance`) while ensuring fit and readability.
 
+### 0. Critical Bug Fix (v1.7.0): Coordinate Unit Conversion
+
+**The Bug:** Previous versions extracted coordinate spans (e.g., `maxX - minX = 9.5`) and directly compared them to physical cm thresholds (e.g., `horizontalSpan > 14`). This failed when diagrams used explicit coordinate scales like `[x=0.8cm, y=0.8cm]`.
+
+**Example:**
+- Diagram with coordinates 0 to 9.5 and `x=0.8cm`
+- Old code: `horizontalSpan = 9.5` (compared to 14cm threshold)
+- Actual physical width: `9.5 × 0.8 = 7.6cm`
+- Result: Incorrect intent classification
+
+**The Fix:** Extract x/y scale values from options and multiply coordinate spans by these scales before comparison:
+```typescript
+const xScale = options.match(/\bx\s*=\s*([\d.]+)\s*cm/) ? parseFloat(...) : 1.0;
+const horizontalSpan = (maxX - minX) * xScale;  // Now in physical cm!
+```
+
+This fix applies to **all** intent calculations (WIDE, FLAT, BRACE checks).
+
 ### 1. The Classifier (The Intent)
 We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm if node count > 8).
-*   **WIDE** (v1.5.6): Horizontal span > 14cm. **Takes priority.**
-*   **FLAT** (v1.5.7): Aspect ratio > 3:1 (timeline-style). **Second priority.**
+*   **WIDE** (v1.5.6): Horizontal span > 14cm (physical). **Takes priority.**
+*   **BRACE** (v1.7.0): Has braces + negative y-coords + small y-scale. **Second priority.**
+*   **FLAT** (v1.5.7): Aspect ratio > 3:1 (timeline-style). **Third priority.**
 *   **COMPACT** (Pipeline): `dist < 2.0cm`.
 *   **LARGE** (Cycle): `dist >= 2.5cm`.
 *   **MEDIUM**: Everything else.
@@ -575,6 +594,7 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 | Intent | Goal | Action |
 | :--- | :--- | :--- |
 | **WIDE** | **Fit to A4** | Dynamic `scale=(14/span × 0.9)`, `transform shape` |
+| **BRACE** | **Vertical Space** | Y-boost: `max(1.5, 2.5/|minY|)`, X-boost: `xScale × 1.25`, **NO** transform shape |
 | **FLAT** | **Balance Ratio** | Multiplier: `y × (ratio/2)`, `x × 1.5`, strip old x/y |
 | **COMPACT** | **Fit to A4** | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm` |
 | **LARGE** | **Readability** | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
