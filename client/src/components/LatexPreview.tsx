@@ -359,18 +359,32 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     } else if (intent === 'BRACE') {
       // GOAL: Create vertical space for brace labels below main content
       // PROBLEM: Diagrams with x=0.8cm, y=0.8cm have cramped grids causing label overlap
-      // SOLUTION: Boost y-axis scale to 1.5-2.0cm to give brace labels breathing room
+      // SOLUTION: Boost both x and y to prevent horizontal AND vertical cramping
 
-      // Calculate target y-scale based on negative extent
-      // If labels extend to y=-2 with y=0.8cm, that's -1.6cm physical depth
-      // We want at least 2.5cm depth for comfortable brace label spacing
+      // Calculate optimal x-scale to fill A4 width without exceeding it
+      const coordinateWidth = (maxX !== -Infinity && minX !== Infinity) ? (maxX - minX) : 10;
+      const targetWidthCm = 12; // cm - fill most of A4 (14cm) with safety margin
+      const optimalXScale = coordinateWidth > 0 ? (targetWidthCm / coordinateWidth) : 1.5;
+      const newXScale = Math.max(1.2, Math.min(2.0, optimalXScale)); // Floor at 1.2cm for label spacing
+
+      // Calculate optimal y-scale for vertical separation
       const negativeExtent = Math.abs(minY) * yScale; // Physical depth below x-axis
-      const targetDepth = 2.5; // cm - comfortable depth for brace labels
+      const targetDepth = 3.0; // cm - increased from 2.5 for more vertical breathing room
       const requiredYScale = negativeExtent > 0 ? (targetDepth / Math.abs(minY)) : 1.5;
-
-      // Boost both x and y proportionally, but prioritize y
       const newYScale = Math.max(1.5, Math.min(2.5, requiredYScale));
-      const newXScale = Math.max(1.0, xScale * 1.25); // Modest x-boost for horizontal breathing room
+
+      // Debug logging
+      console.log('[BRACE Intent]', {
+        coordinateWidth,
+        optimalXScale,
+        newXScale,
+        minY,
+        negativeExtent,
+        requiredYScale,
+        newYScale,
+        originalXScale: xScale,
+        originalYScale: yScale
+      });
 
       // Strip old x/y and inject new values
       extraOpts += `, x=${newXScale.toFixed(2)}cm, y=${newYScale.toFixed(2)}cm`;
