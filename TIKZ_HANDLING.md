@@ -163,7 +163,7 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
     -   Average text/node > 30 chars
     -   **AND** `horizontalSpan < 7` (Index-based/Small)
     -   **Reason**: Prevents "Explosion" of physical layouts (e.g., width 10) while saving dense index layouts (width 1-2).
-3.  **Intelligent Explicit Scaling (v1.6.3 upgrade)**: If a diagram specifies explicit `x=` or `y=` values, the Intent Engine respects the user's geometry. For **ALL INTENTS** (including **LARGE**), we **enforce** `transform shape` to ensure text shrinks proportionally with the grid. This overrides the default "readability" exemption for Large diagrams to prevent overlap when the grid is manually shrunk.
+3.  **Maximize Space Override (v1.6.4 upgrade)**: For **LARGE** diagrams (Text Heavy), we prioritize physical space over user intent. If the AI provides restrictive coordinates (e.g., `x=0.8cm`), we **STRIP** them and inject calculated values (`optimalUnit = 14cm / horizontalSpan`) to force the diagram to expand to the full width of the view. We also enforce `font=\small` to reduce content density. This solves the "Density Equation" by expanding Space while shrinking Content.
 4.  **FLAT Coordinate Override**: For FLAT intent, existing `x=` and `y=` values are **stripped and replaced** with calculated multiplied values (cannot skip, must fix ratio).
 
 ---

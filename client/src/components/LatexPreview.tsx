@@ -282,19 +282,29 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       if (!options.includes('node distance')) extraOpts += ', node distance=1.5cm';
 
     } else if (intent === 'LARGE') {
-      // GOAL: Readability
-      // Magic Number from Doc: 8.4cm for text-heavy expansions
-      const scale = nodeMatches.length >= 6 ? 0.85 : 1.0;
-      // EXEMPTION: Don't scale if diagram has explicit x= or y= coordinates (already sized)
-      if (!options.includes('scale=') && !options.includes('x=') && !options.includes('y=')) extraOpts += `, scale=${scale}`;
+      // GOAL: Readability & Maximize Spacing
+      // PROBLEM: AI often sets tiny grids (x=0.8cm) which cause text overlap.
+      // SOLUTION (v1.6.4): Ignore AI's grid. Force expansion to fill A4 width (14cm).
 
-      // FIX (v1.6.3): Even for LARGE diagrams, if explicit x/y coordinates are used (e.g. x=0.8cm),
-      // we must enforce proportional text scaling to prevent overlap.
-      const hasExplicitScale = options.includes('x=') || options.includes('y=');
-      if (hasExplicitScale && !options.includes('transform shape')) {
-        extraOpts += ', transform shape';
+      let optimalUnit = 1.0;
+      if (horizontalSpan > 0) {
+        // Calculate unit size to fill 14cm width
+        // e.g. Span 10 -> Unit 1.4cm
+        optimalUnit = Math.min(2.5, 14 / horizontalSpan); // Cap at 2.5cm to avoid explosion
+      } else {
+        // Fallback if span unknown
+        optimalUnit = 1.5;
       }
 
+      // Override/Inject generic optimal settings
+      // We purposefully IGNORE existing x=/y= because they are likely the cause of the overlap.
+      extraOpts += `, x=${optimalUnit.toFixed(2)}cm, y=${optimalUnit.toFixed(2)}cm`;
+
+      // Ensure font is small enough to fit
+      if (!options.includes('font=')) extraOpts += ', font=\\small';
+
+      // RESTORED (v1.6.4): Support Relative/Cycling Diagrams
+      // For diagrams using 'node distance' (not absolute coords), we must inject spacious defaults.
       if (!options.includes('node distance')) {
         // If we forced LARGE due to text density, we use the proven magic number
         const targetDist = isTextHeavy ? 8.4 : 5.0;
@@ -306,6 +316,11 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
       // Mandatory for Large
       if (!options.includes('text width')) extraOpts += ', every node/.append style={align=center}';
+
+      // Remove explicit scale if we are handling it via x/y
+      // But keep transform shape if checking for safety? 
+      // Actually, with expanded grid, we usually DON'T want transform shape (keep text standard size)
+      // So we do nothing else.
 
     } else if (intent === 'WIDE') {
       // GOAL: Fit wide horizontal pipeline to A4 width
