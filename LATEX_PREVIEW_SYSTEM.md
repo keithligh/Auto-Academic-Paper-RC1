@@ -12,15 +12,15 @@ Client-side libraries like `latex.js` are fundamentally broken for real-world ac
 3. **Missing Critical Features**: It has zero support for **TikZ** (diagrams), **tabularx** (tables), or **BibTeX** (citations).
 4. **Silent Failures**: When it fails, it often throws obscure JavaScript errors ("undefined is not a function") rather than helpful LaTeX compiler errors.
 
-## The Solution: "The Trojan Horse" Strategy
+## The Solution: "The Hybrid Encapsulation" Strategy
 
-The secret to our stability is that **we lie to `latex.js`**. We treat it not as a LaTeX engine, but as a dumb text formatter.
+The secret to our stability is that **we abstract the complexity from `latex.js`**. We treat it not as a LaTeX engine, but as a dumb text formatter.
 
-We do not trust it with *anything* complex. Instead, we use a multi-stage **Trojan Horse** pipeline:
+We do not trust it with *anything* complex. Instead, we use a multi-stage **Hybrid Encapsulation** pipeline:
 
 1. **Sanitization (The Shield)**: We aggressively strip the document of anything that would crash `latex.js` (like the preamble).
-2. **Extraction (The Heist)**: We identify complex elements (Math, TikZ, Tables) and **steal them** from the document before `latex.js` sees them.
-3. **Placeholder Injection (The Trojan Horse)**: We replace these elements with unique **Placeholder IDs** (e.g., `LATEXPREVIEWTIKZBLOCK1`). `latex.js` happily renders these as simple text.
+2. **Extraction (The Protocol)**: We identify complex elements (Math, TikZ, Tables) and **extract them** from the document before `latex.js` sees them.
+3. **Placeholder Injection (The Hybrid Container)**: We replace these elements with unique **Placeholder IDs** (e.g., `LATEXPREVIEWTIKZBLOCK1`). `latex.js` happily renders these as simple text.
 4. **Surgical Re-Injection (The Reveal)**: After rendering, we use a `TreeWalker` to hunt down our placeholders in the DOM and swap them with high-fidelity outputs from specialized renderers (KaTeX, TikZJax, HTML Tables).
 
 ---
@@ -29,7 +29,7 @@ We do not trust it with *anything* complex. Instead, we use a multi-stage **Troj
 
 The logic is encapsulated in `client/src/components/LatexPreview.tsx`.
 
-### 1. The "Nuclear" Preamble Replacement
+### 1. The "Strict Bootloader" Preamble Replacement
 
 Professional LaTeX preambles are full of packages that crash browser parsers. We strip the **entire** preamble and replace it with a minimal, safe version.
 
@@ -54,7 +54,7 @@ Professional LaTeX preambles are full of packages that crash browser parsers. We
 \begin{document}
 ```
 
-**Critically**, we do **NOT** include `\usepackage{amsmath}` or other standard packages in this fake preamble, because `latex.js` attempts to load them via `require()` calls that fail in the browser environment. We rely on KaTeX (for math) and our custom logic to handle those features.
+**Critically**, we do **NOT** include `\usepackage{amsmath}` or other standard packages in this bootloader preamble, because `latex.js` attempts to load them via `require()` calls that fail in the browser environment. We rely on KaTeX (for math) and our custom logic to handle those features.
 
 ### Critical: Extraction Order
 
@@ -62,21 +62,68 @@ Professional LaTeX preambles are full of packages that crash browser parsers. We
 
 TikZ must be extracted **BEFORE** math because TikZJax handles math natively. If we extract math first, TikZ node labels will contain placeholder text like `LATEXPREVIEWMATH10` instead of actual formulas.
 
-**Correct order:**
+**Top-level extraction order:**
 1. TikZ & Images
-2. Math (KaTeX)
+2. Math (KaTeX) - see sub-order below
 3. Tables
 4. Bibliography
 5. Everything else
+
+**Math extraction sub-order (CRITICAL):**
+
+Within the Math extraction phase, we must extract in this specific order:
+1. **Structured environments** (`align*`, `equation*`, `gather*`, `multline*`) - FIRST
+2. **Standalone display math** (`\[...\]`) - SECOND
+3. **Inline math** (`$...$`) - THIRD
+
+**Rationale**: If `\[...\]` is extracted before `align*`, and an `align*` environment contains a `\\[4pt]` row spacing (which looks like display math to a naive regex), the inner block gets extracted first, leaving placeholders inside the align* content. When KaTeX tries to render the align* environment, it sees "LATEXPREVIEWMATH0" as LaTeX code and fails. By extracting structured environments first, we preserve their integrity.
 
 ### 2. Math Rendering (KaTeX)
 
 `latex.js` has poor math support. We use **KaTeX**, which is the gold standard for web-based math.
 
-- **Extraction**: Regex finds `\begin{equation}`, `\[...\]`, `\begin{align}`, `\begin{gather}`.
-- **Placeholder**: Replaced with `LATEXPREVIEWMATHBLOCK{N}`.
-- **Rendering**: The math string is rendered to HTML string using `katex.renderToString()`.
+- **Extraction**: Regex finds structured environments (`\begin{equation*}`, `\begin{align*}`, `\begin{gather*}`, `\begin{multline*}`), then standalone display math (`\[...\]`), then inline math (`$...$`).
+- **CRITICAL (v1.5.4)**: We pass the **COMPLETE** environment match (including `\begin{align*}...\end{align*}` tags) to KaTeX, NOT just the body content. KaTeX needs the environment tags to properly parse alignment characters (`&`) and line breaks (`\\`).
+- **Placeholder**: Replaced with `LATEXPREVIEWMATH{N}`.
+- **Rendering**: The math string is rendered to HTML string using `katex.renderToString()` with `throwOnError: false` for graceful degradation.
 - **Injection**: After `latex.js` finishes, we walk the DOM, find the placeholder text, and replace its parent node with the KaTeX HTML.
+
+#### Math Sizing Strategy (Two-Layer System)
+
+We use a **two-layer scaling system** to ensure math fits within the A4 page width without becoming unreadable:
+
+**Layer 1: Pre-Render Heuristic Scaling (v1.6.0)**
+
+Applied during `createMathBlock()` before KaTeX renders to HTML:
+
+| Math Type | Detection | Scaling Action |
+|-----------|-----------|----------------|
+| **Multi-line environments** | Has `\\` line breaks OR `\begin{align*}` | **NO SCALING** (grows vertically, not horizontally) |
+| **Long single-line** | `length * 0.4 > 50em` | `transform: scale(X)` where `X = max(0.55, 50/estimatedWidth)` |
+| **Normal equations** | Default | No scaling applied |
+
+**Layer 2: Post-Render DOM-Based Responsive Scaling**
+
+Applied after the DOM is built, using actual rendered dimensions:
+
+```typescript
+if (el.scrollWidth > el.clientWidth) {
+  const scale = Math.max(0.55, el.clientWidth / el.scrollWidth);
+  el.style.transform = `scale(${scale})`;
+  el.style.width = `${100 / scale}%`;
+}
+```
+
+This catches any equations that overflow despite Layer 1, including:
+- Multi-line environments with very wide individual lines
+- Equations with many subscripts/superscripts
+- Matrix environments with many columns
+
+**Key Design Decisions:**
+- **Minimum scale floor**: 0.55x (55%) to prevent microscopic text
+- **No interactive scaling**: No hover effects or zoom - just correct sizing
+- **Transform over zoom**: CSS `transform: scale()` works reliably; `zoom` causes reflow bugs
+- **Width compensation**: `width: (100/scale)%` maintains document flow
 
 ### 3. Diagram Rendering (TikZ via Iframe)
 
@@ -197,7 +244,7 @@ Regex is insufficient for nested braces in LaTeX. To handle `\parbox`, we implem
 - **Why**: This allows us to correctly extract the width and content arguments even if the content contains other braces, commands, or environments.
 - **Heuristic**: It converts LaTeX lengths like `0.5\textwidth` directly to CSS `width: 50%`.
 
-### Vertical Rhythm Strategy (The "Lobotomized Owl")
+### Vertical Rhythm Strategy (The "Structural Owl")
 
 We use a specific CSS selector strategy to manage vertical rhythm without complex calculations.
 
@@ -213,7 +260,7 @@ AI models often hallucinate a "References" section header *before* the bibliogra
 
 - **The Fix**: A specific regex `(?:\\(?:section|subsection|...)\*?\s*\{\s*(?:References|Bibliography|Works Cited)\s*\})` aggressively hunts down and removes these redundant headers before rendering.
 
-### The "Nuclear" Fallback
+### The "System Stability" Fallback
 
 If the AI fails to generate a `\begin{document}`, the system doesn't crash.
 
@@ -252,7 +299,7 @@ When we inject a block element (like a `<div>` for a chart) into the DOM, `latex
 
 `latex.js` crashes if it sees `\begin{CJK}` because it tries to load non-existent font mappings.
 
-- **The Hack**: We use regex to strip the *environment tags* (`\begin{CJK...}`, `\end{CJK}`) but **leave the content intact**.
+- **The Override**: We use regex to strip the *environment tags* (`\begin{CJK...}`, `\end{CJK}`) but **leave the content intact**.
 - **The Result**:
   - **Preview**: The browser's native font fallback mechanism handles the Chinese/Japanese characters perfectly.
   - **LaTeX Source**: The tags remain (on the server), ensuring compatibility with standard LaTeX compilers.
@@ -261,7 +308,7 @@ When we inject a block element (like a `<div>` for a chart) into the DOM, `latex
 
 `latex.js` has a built-in hyphenation engine that is often too aggressive for academic text, leading to awkward breaks.
 
-- **The Config**: We explicitly instantiate the generator with `{ hyphenate: false }`. This forces the browser to handle text wrapping, which is generally superior and more predictable.
+- **The Configuration**: We explicitly instantiate the generator with `{ hyphenate: false }`. This forces the browser to handle text wrapping, which is generally superior and more predictable.
 
 ---
 
@@ -276,8 +323,8 @@ We **only** trust `latex.js` with the simplest, most fundamental text formatting
 1. **Core Document Structure**: parsing `\section`, `\subsection`, `\paragraph`.
 2. **Basic Text Tokens**: parsing bold (`\textbf`), italic (`\textit`), underline (`\underline`), and monospace (`\texttt`).
 3. **Standard Paragraphs**: handling line breaks and paragraph spacing.
-4. **Simple Lists**: standard `itemize` and `enumerate` (without complex option arguments).
-5. **The "Lobotomized" Preamble**: A fake, hardcoded preamble (`\documentclass{article}`) that we inject.
+4. **Simple Lists**: standard `itemize` and `enumerate`. Note: We **strip** optional arguments (sanitize) before passing them to `latex.js`.
+5. **The "Strict Bootloader" Preamble**: A minimal, hardcoded preamble (`\documentclass{article}`) that we inject.
 
 ### What `latex.js` is FORBIDDEN from Touching (The Danger Zone)
 
@@ -385,7 +432,7 @@ This is crucial for aligning equations and table columns precisely as the author
 
 ## 18. Honest Hacks & Known Limitations
 
-In the spirit of the "Lobotomized Owl," we document our brute-force solutions here. We do not pretend these are "parsers" or "architectures"; they are hacks that work.
+In the spirit of "Software Reality," we document our localized solutions here. We do not pretend these are "parsers"; they are specific compatibility bridges.
 
 ### 1. Parbox "Parser" is Relative-Only
 
@@ -407,7 +454,7 @@ The `parseLatexFormatting` function used for Tables and Parboxes uses **non-recu
 
 We do not import `latex.js` as a module because the NPM package is unstable.
 
-- **The Hack**: We load it via `<script>` tag in `index.html`.
+- **The Workaround**: We load it via `<script>` tag in `index.html`.
 - **The Code**: We rely on `declare const latexjs: any;` in `LatexPreview.tsx`. We completely bypass TypeScript's safety features for the core renderer.
 
 ### 4. Silent Markdown Stripping
@@ -415,7 +462,7 @@ We do not import `latex.js` as a module because the NPM package is unstable.
 Users often paste AI output that includes markdown code fences.
 
 - **The Fix**: We use a brute-force regex replacement at the very start of the pipeline.
-- **The Hack**: `content.replace(/^```latex\s*/i, '')`. We silently modify the user's input before processing, assuming any leading backticks are garbage.
+- **The Sanatizer**: `content.replace(/^```latex\s*/i, '')`. We silently modify the user's input before processing, assuming any leading backticks are garbage.
 
 ---
 
@@ -435,11 +482,17 @@ We pre-process specific unicode characters, **BUT WE DO NOT APPLY GLOBAL TYPOGRA
 
 ## 20. Final Architectures (v1.5.2 Refinements)
 
-### Math Auto-Scaling (The "Clean Transform" Strategy)
-We abandoned `zoom` (reflow bugs) and `interactive` scaling (visual clutter).
-*   **Mechanism**: If `width > 50em`, apply `transform: scale(0.X)` and `width: (100/0.X)%`.
-*   **UX**: No hover effects. No magnifying glass. Just a correctly scaled equation that fits the page.
-*   **Fallback**: If even 0.55x scale isn't enough, we show a native horizontal scrollbar.
+### Math Auto-Scaling (Summary - see Section 2 for full details)
+
+We use a **two-layer scaling system** (see "Math Sizing Strategy" in Section 2):
+
+1. **Pre-Render (Layer 1)**: Heuristic-based scaling for long single-line equations. Multi-line environments (`align*`, `gather*`) are **exempt** because they grow vertically, not horizontally.
+
+2. **Post-Render (Layer 2)**: DOM-based `scrollWidth > clientWidth` check catches any overflows that escape Layer 1.
+
+*   **Min Scale**: 0.55x floor to prevent microscopic text
+*   **Method**: `transform: scale()` + `width: (100/scale)%` (not `zoom`, which causes reflow bugs)
+*   **UX**: No hover effects. No magnifying glass. Just correct sizing.
 
 ### Header Handling (Valid LaTeX Injection)
 We previously injected HTML `<br>` tags to style `\paragraph`. This leaked into `latex.js`.

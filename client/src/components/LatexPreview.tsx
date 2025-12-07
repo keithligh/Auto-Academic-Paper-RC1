@@ -108,18 +108,23 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         macros: { "\\eqref": "\\href{#1}{#1}", "\\label": "" }
       });
 
-      // STRATEGY: Auto-scale long equations to fit container (Auditor Suggestion)
+      // STRATEGY: Auto-scale long SINGLE-LINE equations to fit container
+      // CRITICAL: Do NOT scale multi-line environments (align*, gather*, etc.)
+      // because they grow VERTICALLY, not horizontally. The length-based
+      // heuristic would over-shrink them.
       if (displayMode) {
-        // Heuristic: Average char width in KaTeX is ~0.5em.
-        // A4 Printable area width is approx 45-50em.
-        const estimatedWidthEm = mathContent.length * 0.4; // Conservative estimate
-        const maxEm = 50;
+        const lineCount = (mathContent.match(/\\\\/g) || []).length;
+        const isMultiLine = lineCount > 0 || mathContent.includes('\\begin{align');
 
-        if (estimatedWidthEm > maxEm) {
-          const scale = Math.max(0.55, maxEm / estimatedWidthEm); // Floor at 0.55x
-          // REVERT: User confirmed 'transform' works for fitting, 'zoom' does not.
-          // Restoring transform logic with calculated width.
-          html = `<div class="katex-autoscale" style="transform: scale(${scale.toFixed(2)}); transform-origin: left center; width: ${(100 / scale).toFixed(1)}%;">${html}</div>`;
+        if (!isMultiLine) {
+          // Only apply to single-line equations
+          const estimatedWidthEm = mathContent.length * 0.4;
+          const maxEm = 50;
+
+          if (estimatedWidthEm > maxEm) {
+            const scale = Math.max(0.55, maxEm / estimatedWidthEm);
+            html = `<div class="katex-autoscale" style="transform: scale(${scale.toFixed(2)}); transform-origin: left center; width: ${(100 / scale).toFixed(1)}%;">${html}</div>`;
+          }
         }
       }
 
@@ -491,8 +496,21 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   content = content.replace(/\\includegraphics\[.*?\]\{.*?\}/g, () => createPlaceholder(`<div class="latex-placeholder-box image">[Image]</div>`));
 
   // --- B. MATH (KaTeX) ---
+  // CRITICAL FIX: Extraction order matters!
+  // 1. Structured environments (align*, equation*, etc.) MUST be extracted FIRST
+  //    because they may contain \\[4pt] row spacing that looks like display math
+  // 2. Standalone \[...\] display math SECOND
+  // 3. Inline $...$ THIRD
+
+  // STEP 1: Extract structured math environments FIRST
+  content = content.replace(/\\begin\{(equation|align|gather|multline)(\*?)\}([\s\S]*?)\\end\{\1\2\}/g, (m, env, star, math) => {
+    return createMathBlock(m, true);
+  });
+
+  // STEP 2: Extract standalone display math \[...\] SECOND
   content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, math) => createMathBlock(math, true));
-  content = content.replace(/\\begin\{(equation|align|gather|multline)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, (m, env, math) => createMathBlock(m, true));
+
+  // STEP 3: Extract inline math $...$ THIRD
   content = content.replace(/(?<!\\)\$([^$]+)(?<!\\)\$/g, (m, math) => createMathBlock(math, false));
 
   // --- C. BIBLIOGRAPHY (Two-Pass) ---
