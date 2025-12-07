@@ -528,6 +528,7 @@ We adhere to the strict "Phase 7" logic documented in `TIKZ_HANDLING.md`. This s
 
 ### 1. The Classifier (The Intent)
 We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm if node count > 8).
+*   **WIDE** (v1.5.6): Horizontal span > 14cm (from absolute positioning `at (x,y)`). **Takes priority.**
 *   **COMPACT** (Pipeline): `dist < 2.0cm`.
 *   **LARGE** (Cycle): `dist >= 2.5cm`.
 *   **MEDIUM**: Everything else.
@@ -536,9 +537,10 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 
 | Intent | Goal | Action |
 | :--- | :--- | :--- |
+| **WIDE** | **Fit to A4** | Dynamic `scale=(14/span × 0.9)`, `transform shape` |
 | **COMPACT** | **Fit to A4** | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm` |
 | **LARGE** | **Readability** | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
-| **MEDIUM** | Balance | Adjust | `scale` (0.8 if ≥6 nodes, else 0.9) + Moderate Dist (1.2x) |
+| **MEDIUM** | Balance | `scale` (0.8 if ≥6 nodes, else 0.9) + Moderate Dist (1.2x) |
 
 ### 3. The "Hybrid" Density Override (v1.5.5)
 We discovered that `node distance` is not always a perfect predictor. Some "Cycle" diagrams use `node distance=2cm` (Medium) but pack 50+ words of text into nodes.
@@ -546,5 +548,12 @@ We discovered that `node distance` is not always a perfect predictor. Some "Cycl
 - **The Fix**: We calculate `avgLabelTextPerNode`.
 - **Rule**: If `avgLabelTextPerNode > 30` (Text Heavy), we **FORCE** the `LARGE` intent rules (Spacing Boost) regardless of the original `node distance`.
 - **Global Hoist**: This ensures that even "Compact" diagrams with paragraphs of text get the `x=2.2cm` breathing room they need.
+
+### 4. The "Absolute Positioning" Override (v1.5.6)
+Diagrams using `\node at (x,y)` syntax bypass `node distance` entirely. If the horizontal span exceeds A4 safe width (14cm), CSS responsive shrinking causes node overlap.
+
+- **The Fix**: Extract X coordinates, calculate span, apply dynamic scale.
+- **Formula**: `scale = min(1.0, 14/span) × 0.9` with floor at 0.5.
+- **Requirement**: `transform shape` is mandatory to shrink nodes proportionally.
 
 This ensures that "Cycle" diagrams (Large intent) get the massive spacing they need to avoid overlap, while "Pipelines" (Compact intent) are shrunk proportionally.

@@ -63,23 +63,60 @@ We generate diagrams using AI, which means we don't always know the size. "One s
 2.  **Implicit Fallback (Density)**: If no distance is set:
     *   **Text Heavy** (>30 chars/node) -> **LARGE**
     *   **Node Heavy** (>=8 nodes) -> **COMPACT**
+3.  **NEW (v1.5.6) - Absolute Positioning Override**: If using `at (x,y)` syntax:
+    *   **Horizontal Span > 14cm** -> **WIDE** (takes priority over all other intents)
 
-#### B. The Execution Rules
+#### B. The WIDE Intent (v1.5.6)
+
+> **Problem Case**: Diagrams that use **absolute positioning** (`\node at (0,0)`, `\node at (4,0)`, etc.) instead of `node distance` are not detected by the node-distance heuristics. If these diagrams span too wide (e.g., 5 nodes at 4cm intervals = 16cm total), they overflow the A4 content width (~14cm) and get responsively shrunk by CSS, causing node overlap.
+
+**Detection Logic:**
+```
+1. Extract all "at (x,y)" coordinates from the TikZ code
+2. Calculate horizontal span: maxX - minX
+3. If span > 14cm → WIDE intent
+```
+
+**The Math:**
+-   A4 paper width: 210mm
+-   Standard margins: 25mm each side
+-   **Safe content width**: 160mm ≈ 16cm, but we use **14cm** as target for safety buffer
+
+**Scaling Formula:**
+```
+scaleFactor = min(1.0, 14 / horizontalSpan) × 0.9
+finalScale = max(0.5, scaleFactor)  // Floor at 50%
+```
+
+**Why `transform shape` is REQUIRED for WIDE:**
+Unlike LARGE (text readability), WIDE diagrams need **proportional shrinking**. If we scale coordinates without scaling nodes, nodes will overlap. `transform shape` ensures text shrinks with the geometry.
+
+#### C. The Execution Rules
 
 | Type | Goal | Scaling Logic | Extra Style Injection |
 | :--- | :--- | :--- | :--- |
+| **WIDE** | Fit to A4 | Dynamic: `14/span × 0.9` (floor 0.5) | **`transform shape`** (REQUIRED) |
 | **COMPACT** | Fit to A4 | `scale=0.75` (>=8 nodes) / `0.85` | `node distance=1.5cm`, `transform shape` |
 | **LARGE** | Readability | `scale=0.85` (>=6 nodes) / `1.0` | `align=center`*, `node distance=8.4cm` (Text) / `5.0cm` (Node) |
 | **MEDIUM** | Balance | `scale=0.8` (>=6 nodes) / `0.9` | `node distance=2.5cm` |
 
 *Note: `transform shape` is strictly exempt from LARGE to keep text readable.*
 *Note*: `align=center` is injected if `text width` is missing, ensuring multi-line labels render correctly.
+*Note*: WIDE, COMPACT, and MEDIUM all use `transform shape`. Only LARGE exempts it.
 
-#### C. The Safety Nets (Hidden Logic)
+#### D. Priority Order (v1.5.6)
+```
+WIDE > node distance > text density > node count > MEDIUM (default)
+```
+
+WIDE takes highest priority because absolute-positioning overflow is a **hard constraint** — the diagram simply won't fit without scaling.
+
+#### E. The Safety Nets (Hidden Logic)
 1.  **The 5cm Safety Net**: In LARGE mode, if an explicit distance is `< 4.0cm`, it is forcibly boosted to `5.0cm` to prevent cramping.
 2.  **The Goldilocks Protocol**: For diagrams that are **Text Heavy** (lots of explanations), we apply a **Global Coordinate Boost** to prevent overlapping:
     -   **Injection**: `x=2.2cm, y=1.5cm`
     -   **Reason**: Moves nodes further apart horizontally without affecting the text size.
+3.  **Explicit Coordinate Exemption**: If the diagram already specifies `x=` or `y=` in options, we skip automatic scaling for MEDIUM to respect author intent.
 
 ---
 
@@ -88,5 +125,6 @@ We generate diagrams using AI, which means we don't always know the size. "One s
 1.  **NEVER** let `latex.js` see `\begin{tikzpicture}`.
 2.  **NEVER** pass Unicode characters to TikZJax.
 3.  **ALWAYS** use the manual bracket parser for extraction (Regex is insufficient).
-4.  **ALWAYS** use `transform shape` for Compact diagrams (scales text).
-5.  **NEVER** use `transform shape` for Large diagrams (keeps text readable).
+4.  **ALWAYS** use `transform shape` for **COMPACT** and **WIDE** diagrams (scales text).
+5.  **NEVER** use `transform shape` for **LARGE** diagrams (keeps text readable).
+6.  **ALWAYS** check for **absolute positioning** (`at (x,y)`) overflow before applying other intents.

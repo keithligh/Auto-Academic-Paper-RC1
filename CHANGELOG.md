@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.6] - 2025-12-07
+### Added
+- **WIDE Intent (TikZ)**: New intent classification for diagrams using absolute positioning (`\node at (x,y)`) that exceed A4 safe width.
+  - **Detection**: Extracts X coordinates from `at (x,y)` patterns, calculates horizontal span.
+  - **Trigger**: Horizontal span > 14cm activates WIDE intent (takes priority over all other intents).
+  - **Scaling**: Dynamic `scale = min(1.0, 14/span) × 0.9` with floor at 0.5.
+  - **Requirement**: `transform shape` is mandatory for proportional shrinking.
+- **Explicit Coordinate Exemption**: MEDIUM and LARGE intents now skip automatic scaling if `x=` or `y=` are explicitly set in TikZ options.
+
+### Changed
+- **Documentation**: Updated `TIKZ_HANDLING.md` and `LATEX_PREVIEW_SYSTEM.md` with WIDE intent specifications.
+
 ## [1.5.5] - 2025-12-06
 ### Added
 - **Hybrid Intent Logic**: Refactored TikZ classification (Phase 7) to use a "Hybrid" approach.

@@ -189,6 +189,23 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const isTextHeavy = avgLabelTextPerNode > 30; // Use accurate label-based metric
     const baseComplexity = nodeMatches.length + drawMatches.length + (arrowMatches.length / 2);
 
+    // NEW (v1.5.6): Detect WIDE horizontal diagrams using absolute positioning
+    // Extract X coordinates from "at (x,y)" patterns
+    const atMatches = safeTikz.match(/at\s*\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)/g) || [];
+    let minX = Infinity, maxX = -Infinity;
+    atMatches.forEach(m => {
+      const coords = m.match(/\(\s*(-?[\d.]+)\s*,/);
+      if (coords) {
+        const x = parseFloat(coords[1]);
+        if (!isNaN(x)) {
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+        }
+      }
+    });
+    const horizontalSpan = (maxX !== -Infinity && minX !== Infinity) ? (maxX - minX) : 0;
+    const isWideHorizontal = horizontalSpan > 14; // > 14cm exceeds A4 safe width
+
     // REFACTOR (v1.5.5): HYBRID INTENT (Phase 7 + Density Override)
     // We analyze the AI's *intent* based on 'node distance', BUT we fallback to 
     // text density if the distance is missing (to catch implicit "Large" layout).
@@ -204,7 +221,10 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
 
     // 2. CLASSIFY
-    if (distMatch) {
+    // Priority: WIDE > node distance > text density > node count
+    if (isWideHorizontal) {
+      intent = 'WIDE'; // New intent for horizontal pipelines with absolute positioning
+    } else if (distMatch) {
       // Explicit intent wins
       if (nodeDist < 2.0) intent = 'COMPACT';
       else if (nodeDist >= 2.5) intent = 'LARGE';
@@ -229,7 +249,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // GOAL: Readability
       // Magic Number from Doc: 8.4cm for text-heavy expansions
       const scale = nodeMatches.length >= 6 ? 0.85 : 1.0;
-      if (!options.includes('scale=')) extraOpts += `, scale=${scale}`;
+      // EXEMPTION: Don't scale if diagram has explicit x= or y= coordinates (already sized)
+      if (!options.includes('scale=') && !options.includes('x=') && !options.includes('y=')) extraOpts += `, scale=${scale}`;
 
       if (!options.includes('node distance')) {
         // If we forced LARGE due to text density, we use the proven magic number
@@ -243,12 +264,22 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // Mandatory for Large
       if (!options.includes('text width')) extraOpts += ', every node/.append style={align=center}';
 
+    } else if (intent === 'WIDE') {
+      // GOAL: Fit wide horizontal pipeline to A4 width
+      // Calculate scale factor: target 14cm max width for A4 content area
+      const targetWidth = 14; // cm - safe A4 content width
+      const scaleFactor = Math.min(1.0, targetWidth / horizontalSpan);
+      const scale = Math.max(0.5, scaleFactor * 0.9); // Floor at 0.5x, apply 0.9 buffer
 
+      if (!options.includes('scale=')) extraOpts += `, scale=${scale.toFixed(2)}`;
+      // MUST use transform shape to shrink nodes proportionally
+      if (!options.includes('transform shape')) extraOpts += ', transform shape';
 
     } else {
       // MEDIUM
       const scale = nodeMatches.length >= 6 ? 0.8 : 0.9;
-      if (!options.includes('scale=')) extraOpts += `, scale=${scale}`;
+      // EXEMPTION: Don't scale if diagram has explicit x= or y= coordinates (already sized)
+      if (!options.includes('scale=') && !options.includes('x=') && !options.includes('y=')) extraOpts += `, scale=${scale}`;
       if (!options.includes('node distance')) extraOpts += ', node distance=2.5cm';
     }
 
