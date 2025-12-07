@@ -114,11 +114,24 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // heuristic would over-shrink them.
       if (displayMode) {
         const lineCount = (mathContent.match(/\\\\/g) || []).length;
-        const isMultiLine = lineCount > 0 || mathContent.includes('\\begin{align');
+        // CRITICAL FIX: Skip auto-scaling for ALL structured math environments
+        // They either grow vertically (align) or the wrapper tags inflate char count (equation)
+        const isStructuredEnv = /\\begin\{(equation|align|gather|multline)/.test(mathContent);
+        const isMultiLine = lineCount > 0 || isStructuredEnv;
 
         if (!isMultiLine) {
           // Only apply to single-line equations
-          const estimatedWidthEm = mathContent.length * 0.4;
+
+          // IMPROVED HEURISTIC: Strip LaTeX commands that inflate length without width
+          // e.g. \mathrm{Integration} (20 chars) -> Integration (11 chars)
+          let roughContent = mathContent
+            .replace(/\\mathrm\{([^}]+)\}/g, '$1')
+            .replace(/\\text\{([^}]+)\}/g, '$1')
+            .replace(/\\textbf\{([^}]+)\}/g, '$1')
+            .replace(/\\(left|right|big|Big|bigg|Bigg)[lrv]?/g, '')
+            .replace(/\\[a-zA-Z]+/g, 'C'); // Replace other macros with 1 char proxy
+
+          const estimatedWidthEm = roughContent.length * 0.45; // Slightly bumped factor for safety
           const maxEm = 50;
 
           if (estimatedWidthEm > maxEm) {

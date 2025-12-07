@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.8] - 2025-12-07
+### Fixed
+- **Tiny Equation Bug**: Equations using verbose commands (`\mathrm`, `\text`) were being incorrectly shrunk by auto-scaling.
+  - **Fix**: Auto-scaling heuristic now strips `\mathrm`, `\text`, `\left`, `\right`, etc. before counting characters.
+- **Environment Inflation**: `\begin{equation}` wrapper tags were inflating character count, triggering unwanted scaling.
+  - **Fix**: Explicitly skipped auto-scaling for all structured math environments (`equation`, `align`, `gather`).
+- **Equation Scrollbars**: Removed unwanted scrollbars from display math.
+  - **Fix**: Changed `overflow-x: auto` to `hidden` in CSS; rely on auto-scaling for long equations.
+
 ## [1.5.7] - 2025-12-07
 ### Added
 - **FLAT Intent (TikZ)**: New intent classification for timeline-style diagrams with extreme aspect ratios (> 3:1).

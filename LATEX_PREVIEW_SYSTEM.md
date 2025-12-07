@@ -567,3 +567,28 @@ Timeline diagrams often have extreme aspect ratios (e.g., 10cm wide × 2.5cm tal
 - **Override**: Existing `x=`/`y=` values are stripped and replaced (cannot skip, must fix ratio).
 
 This ensures that "Cycle" diagrams (Large intent) get the massive spacing they need to avoid overlap, while "Pipelines" (Compact intent) are shrunk proportionally.
+
+## 22. Mathematical Precision & KaTeX Handling (v1.5.8)
+
+We use **KaTeX** for rendering mathematics, prioritizing speed and "just works" display over 100% LaTeX feature parity.
+
+### 1. The Auto-Scaling Heuristic (The "Tiny Equation" Fix)
+Equations that are wider than the page (A4 width) must be scaled down to prevent overflow. However, naive character counting leads to "Tiny Equations" where short rendered math gets shrunk because the source code is verbose.
+
+-   **The Problem**: `\mathrm{Integration}` is ~20 characters in code but only ~11 characters wide visually.
+-   **The Solution**: We apply a **Strip-First Heuristic** before calculating length.
+    -   Removes `\mathrm{...}`, `\text{...}`, `\textbf{...}`.
+    -   Removes sizing commands `\left`, `\right`, `\big`.
+    -   *Result*: `estimatedWidthEm` is based on "visual density", not "code verbosity".
+
+### 2. Structured Environment Protection
+We **NEVER** auto-scale structured environments (`\begin{equation}`, `align`, `gather`, `multline`) based on character count.
+
+-   **Reason**: The wrapper tags (`\begin{equation}...`) inflate the character count by ~50 chars, causing the heuristic to incorrectly flag short equations as "too long".
+-   **Reason 2**: Multiline environments (`align`) grow *vertically*, so horizontal character count is a poor proxy for width.
+
+### 3. The "No Scrollbar" Policy
+A4 papers do not have scrollbars.
+
+-   **CSS Rule**: `.katex-display { overflow-x: hidden; }`
+-   **Outcome**: We rely entirely on the auto-scaling logic to fit content. If an equation is truly too wide, it will be scaled down. It will never generate a scrollbar.
