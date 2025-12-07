@@ -491,9 +491,40 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   content = content.replace(/\\includegraphics\[.*?\]\{.*?\}/g, () => createPlaceholder(`<div class="latex-placeholder-box image">[Image]</div>`));
 
   // --- B. MATH (KaTeX) ---
+  // CRITICAL FIX: Extract align*/equation/gather FIRST (they're structured environments)
+  // Then extract standalone \[...\] blocks
+  // This prevents \[...\] inside align* from being extracted first and breaking the structure
+
+  // DEBUG: Log all align* environments found
+  console.log('=== MATH EXTRACTION DEBUG ===');
+  console.log('Content length before math extraction:', content.length);
+  const alignMatches = content.match(/\\begin\{align\*?\}/g);
+  console.log('Number of \\begin{align*} found:', alignMatches?.length || 0);
+
+  // STEP 1: Extract structured math environments (align*, equation*, etc.)
+  content = content.replace(/\\begin\{(equation|align|gather|multline)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, (m, env, math) => {
+    console.log(`Extracting ${env} environment, full match length:`, m.length);
+    console.log(`First 100 chars:`, m.substring(0, 100));
+    console.log(`Last 50 chars:`, m.substring(m.length - 50));
+    return createMathBlock(m, true);
+  });
+
+  console.log('Content length after align*/equation extraction:', content.length);
+  const remainingAlign = content.match(/\\begin\{align\*?\}/g);
+  console.log('Remaining \\begin{align*} after extraction:', remainingAlign?.length || 0);
+  if (remainingAlign && remainingAlign.length > 0) {
+    console.error('ERROR: align* environments were NOT extracted!');
+    const idx = content.indexOf('\\begin{align');
+    console.log('Remaining align* context:', content.substring(idx, idx + 200));
+  }
+
+  // STEP 2: Extract standalone display math \[...\]
   content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, math) => createMathBlock(math, true));
-  content = content.replace(/\\begin\{(equation|align|gather|multline)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, (m, env, math) => createMathBlock(m, true));
+
+  // STEP 3: Extract inline math $...$
   content = content.replace(/(?<!\\)\$([^$]+)(?<!\\)\$/g, (m, math) => createMathBlock(math, false));
+
+  console.log('=== END DEBUG ===');
 
   // --- C. BIBLIOGRAPHY (Two-Pass) ---
   let nextCitationId = 1;
@@ -788,6 +819,13 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 `;
 
   const finalLatex = safePreamble + content + '\n\\end{document}';
+
+  // FINAL SAFETY CHECK: Ensure no align* leaked to latex.js
+  if (finalLatex.includes('\\begin{align')) {
+    console.error('CRITICAL: align* environment leaked to latex.js!');
+    const idx = finalLatex.indexOf('\\begin{align');
+    console.log('Leaked content:', finalLatex.substring(idx, idx + 300));
+  }
 
   return { sanitized: finalLatex, blocks, bibliographyHtml };
 }
