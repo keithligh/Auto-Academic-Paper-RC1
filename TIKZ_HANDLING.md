@@ -163,7 +163,7 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
     -   Average text/node > 30 chars
     -   **AND** `horizontalSpan < 7` (Index-based/Small)
     -   **Reason**: Prevents "Explosion" of physical layouts (e.g., width 10) while saving dense index layouts (width 1-2).
-3.  **Explicit Coordinate Exemption**: If the diagram already specifies `x=` or `y=` in options, we skip automatic scaling for MEDIUM to respect author intent.
+3.  **Intelligent Explicit Scaling (v1.6 upgrade)**: If diagram specifies explicit `x=` or `y=` values, the Intent Engine evaluates the geometry. For **MEDIUM** and **COMPACT** diagrams, we **enforce** `transform shape` to ensure text shrinks proportionally with the grid (preventing overlap). For **LARGE** diagrams, we *exempt* `transform shape` to prioritize readability.
 4.  **FLAT Coordinate Override**: For FLAT intent, existing `x=` and `y=` values are **stripped and replaced** with calculated multiplied values (cannot skip, must fix ratio).
 
 ---

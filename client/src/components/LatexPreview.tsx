@@ -277,8 +277,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // GOAL: Fit to A4
       const scale = nodeMatches.length >= 8 ? 0.75 : 0.85;
       if (!options.includes('scale=')) extraOpts += `, scale=${scale}`;
-      // EXEMPTION: Don't add transform shape if diagram has explicit x= or y= (already scaled)
-      if (!options.includes('transform shape') && !options.includes('x=') && !options.includes('y=')) extraOpts += ', transform shape';
+      // EXEMPTION REMOVED (v1.6): Explicit coordinates should still scale text proportionally in Compact mode
+      if (!options.includes('transform shape')) extraOpts += ', transform shape';
       if (!options.includes('node distance')) extraOpts += ', node distance=1.5cm';
 
     } else if (intent === 'LARGE') {
@@ -357,6 +357,14 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
       // EXEMPTION: Don't scale if diagram has explicit x= or y= coordinates (already sized)
       if (!options.includes('scale=') && !options.includes('x=') && !options.includes('y=')) extraOpts += `, scale=${scale}`;
+
+      // NEW (v1.6): Intelligent Explicit Scaling covering Un-encountered Situations
+      // If user provides explicit coordinates (x=, y=), we must enforce proportional scaling 
+      // (transform shape) to prevent "Huge Text / Tiny Grid" overlap.
+      const hasExplicitScale = options.includes('x=') || options.includes('y=');
+      if (hasExplicitScale && !options.includes('transform shape')) {
+        extraOpts += ', transform shape';
+      }
 
       // Only inject default distance if not provided
       if (!options.includes('node distance')) extraOpts += ', node distance=2.5cm';
@@ -642,6 +650,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   // STEP 2: Extract standalone display math \[...\] SECOND
   content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, math) => createMathBlock(math, true));
 
+  // STEP 2.5: Extract inline math \(...\) (Standard LaTeX)
+  content = content.replace(/\\\(([\s\S]*?)\\\)/g, (m, math) => createMathBlock(math, false));
+
   // STEP 3: Extract inline math $...$ THIRD
   content = content.replace(/(?<!\\)\$([^$]+)(?<!\\)\$/g, (m, math) => createMathBlock(math, false));
 
@@ -722,11 +733,50 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     return res;
   };
 
+  // HELPER: Robust Cell Splitter (Manual Character Walker)
+  // "Scorched Earth" Policy: No regex for structural parsing.
+  const splitCells = (row: string): string[] => {
+    const cells: string[] = [];
+    let currentCell = '';
+    let depth = 0;
+    let i = 0;
+
+    while (i < row.length) {
+      const char = row[i];
+
+      if (char === '\\') {
+        // Escape detected: treat next char as literal (even if it is & or { or })
+        currentCell += char;
+        if (i + 1 < row.length) {
+          currentCell += row[i + 1];
+          i++; // skip next char
+        }
+      } else if (char === '{') {
+        depth++;
+        currentCell += char;
+      } else if (char === '}') {
+        if (depth > 0) depth--;
+        currentCell += char;
+      } else if (char === '&' && depth === 0) {
+        // Split Point
+        cells.push(currentCell);
+        currentCell = '';
+      } else {
+        currentCell += char;
+      }
+      i++;
+    }
+    cells.push(currentCell); // Push last cell
+    return cells;
+  };
+
   // MOVED UP: Must process Standard Tables BEFORE Standalone Tables
   content = content.replace(/\\begin\{table(\*?)\}(\[.*?\])?([\s\S]*?)\\end\{table\1\}/g, (m, star, pos, inner) => {
     let caption = '';
     const captionMatch = inner.match(/\\caption\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/);
     if (captionMatch) caption = `<div class="table-caption"><strong>Table:</strong> ${parseLatexFormatting(captionMatch[1])}</div>`;
+
+
 
     // === HELPER: Manual Tabular Parser ===
     const parseTabular = (inner: string): string | null => {
@@ -825,7 +875,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
           .replace(/\\toprule/g, '').replace(/\\midrule/g, '').replace(/\\bottomrule/g, '');
         if (!r) return;
         tableHtml += '<tr>';
-        r.split('&').forEach(cell => {
+        splitCells(r).forEach(cell => {
           tableHtml += `<td>${resolvePlaceholders(parseLatexFormatting(cell.trim()))}</td>`;
         });
         tableHtml += '</tr>';
@@ -851,7 +901,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         .replace(/\\toprule/g, '').replace(/\\midrule/g, '').replace(/\\bottomrule/g, '');
       if (!r) return;
       tableHtml += '<tr>';
-      r.split('&').forEach((cell: string) => {
+      splitCells(r).forEach((cell: string) => {
         tableHtml += `<td>${resolvePlaceholders(parseLatexFormatting(cell.trim()))}</td>`;
       });
       tableHtml += '</tr>';

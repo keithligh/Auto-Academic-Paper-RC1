@@ -189,5 +189,10 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
 -   **Event Loop**: DOM measurements must use `requestAnimationFrame` to guarantee execution *after* the browser paint cycle, eliminating race conditions.
 -   **Constraint**: All `latex.js` generation must be synchronous.
 
+### 11. Robust Manual Parsing (The "Scorched Earth" Policy)
+-   **Regex Forbidden**: For nested or recursive structures (Lists, Tables, Parboxes), Regex is strictly forbidden.
+-   **Character Walkers**: We use manual state-machine parsers/character-walkers that track brace depth and escape characters.
+-   **Reason**: To guarantee 100% no-fallback rendering for complex user input (e.g., code blocks inside lists, or escaped ampersands in tables).
+
 *Last Updated: 2025-12-07*
 *Version: 4.0 (6-Phase Research-First Pipeline)*

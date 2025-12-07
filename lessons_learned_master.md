@@ -176,3 +176,12 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 - **The Root Cause**: You cannot use JS to "expand" an element if CSS is explicitly clamping it.
 - **The Fix**: `max-width: none !important` in the CSS for scalable classes.
 - **The Lesson**: **Code is Law, but CSS is Parliament.** If you want JS to control layout, you must explicitly repeal the CSS laws (max-width) first.
+
+## 23. The "Scorched Earth" Table Parsing Lesson
+- **Incident**: A user's table contained the string `Arts \& culture`. The regex-based parser `row.split('&')` naively split this into two cells, breaking the table layout.
+- **Lesson**: **NEVER USE REGEX FOR STRUCTURAL PARSING OF LATEX**. Even simple tasks like "split by delimiter" fail when escapes (`\&`) and groups (`{ & }`) are involved.
+- **Solution**: We extended the "Scorched Earth" manual character-walker policy (originally for Lists) to Table Cells. We iterate character-by-character, tracking brace depth and escape status. This is the **ONLY** robust way to parse user-generated LaTeX.
+
+## 24. The "Callback Scope" Trap
+- **Incident**: We defined a helper function `splitCells` inside the `parseTabular` callback, but tried to call it from `parseStandaloneTabular` in the outer scope, leading to `ReferenceError: splitCells is not defined`.
+- **Lesson**: **ALWAYS Define Shared Helpers at the Top Scope**. In complex monolithic renderers like `LatexPreview.tsx`, helper functions (parsers, sanitizers) must be hoisted to the top level of the component or extraction function to ensure they are available to all sub-routines. Do not trap utility logic inside specific environment handlers.

@@ -74,7 +74,8 @@ TikZ must be extracted **BEFORE** math because TikZJax handles math natively. If
 Within the Math extraction phase, we must extract in this specific order:
 1. **Structured environments** (`align*`, `equation*`, `gather*`, `multline*`) - FIRST
 2. **Standalone display math** (`\[...\]`) - SECOND
-3. **Inline math** (`$...$`) - THIRD
+3. **Standard Inline math** (`\(...\)`) - THIRD (v1.6.2 addition)
+4. **Legacy Inline math** (`$...$`) - FOURTH
 
 **Rationale**: If `\[...\]` is extracted before `align*`, and an `align*` environment contains a `\\[4pt]` row spacing (which looks like display math to a naive regex), the inner block gets extracted first, leaving placeholders inside the align* content. When KaTeX tries to render the align* environment, it sees "LATEXPREVIEWMATH0" as LaTeX code and fails. By extracting structured environments first, we preserve their integrity.
 
@@ -82,7 +83,7 @@ Within the Math extraction phase, we must extract in this specific order:
 
 `latex.js` has poor math support. We use **KaTeX**, which is the gold standard for web-based math.
 
-- **Extraction**: Regex finds structured environments (`\begin{equation*}`, `\begin{align*}`, `\begin{gather*}`, `\begin{multline*}`), then standalone display math (`\[...\]`), then inline math (`$...$`).
+- **Extraction**: Regex finds structured environments (`\begin{equation*}`, `\begin{align*}`, `\begin{gather*}`, `\begin{multline*}`), then standalone display math (`\[...\]`), then standard inline (`\(...\)`), then legacy inline (`$...$`).
 - **CRITICAL (v1.5.4)**: We pass the **COMPLETE** environment match (including `\begin{align*}...\end{align*}` tags) to KaTeX, NOT just the body content. KaTeX needs the environment tags to properly parse alignment characters (`&`) and line breaks (`\\`).
 - **Placeholder**: Replaced with `LATEXPREVIEWMATH{N}`.
 - **Rendering**: The math string is rendered to HTML string using `katex.renderToString()` with `throwOnError: false` for graceful degradation.
@@ -152,7 +153,10 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
   2. **Standalone Tabulars**: Use the same parser to handle tables not wrapped in a float.
   3. **Fallback**: Only after the above are attempted do we "nuke" remaining `tabularx`/`longtable` environments into placeholders.
 - **Extraction**: Regex parses standard `tabular` and `tabularx` blocks.
-- **Transformation**: We manually parse rows (`\\`) and cells (`&`). We apply basic text formatting to cell contents.
+- **Transformation**:
+  - We use a **Manual Character-Walker (Scorched Earth)** to parse Rows (`\\`) and Cells (`&`).
+  - **Why**: Simple regex (`split('&')`) failed on escaped ampersands (`\&`) and brace-protected groups. The manual walker tracks brace depth and escape characters statefully.
+  - We apply basic text formatting to cell contents.
 - **Output**: We generate a standard HTML `<table>`.
 - **Injection**: `latex.js` sees a placeholder; we swap it for our HTML table.
 - **Math Safety (v1.5.4)**: Inner math `LATEXPREVIEWMATH` placeholders are recursively resolved via `resolvePlaceholders()` during cell parsing to ensure formulas appear correctly inside table cells.
