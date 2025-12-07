@@ -121,9 +121,9 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Change**: We moved Phase 4 from a simple "Evidence Mapper" to a "Senior Principle Investigator" role.
 -   **The Lesson**: Do not just build utility agents. Build **Role-Based Agents**. Ask "What would a human expert do here?" (Nature/Science criteria), not just "What can the LLM do?".
 
-## 15. The "Universal Processor" Pivot (Citation System)
--   **The Fail Pattern**: We spent days patching regexes for `(ref_1)`, then `(ref_1 )`, then `(ref_1, ref_2)`. We were "Active Fixing" symptoms.
--   **The Structural Fix**: We replaced the regex patches with a **Two-Pass Universal Processor**:
-    1.  **Tokenizer**: "Find anything intent-like `(ref_...)` and tokenize it." (Anti-Fragile).
+## 15. The "Universal Processor" Pivot (Parser vs Regex)
+-   **The Fail Pattern**: We spent days patching regexes for `(ref_1)`, then `(ref_1, ref_2)`, then `(ref_1; ref_2)`. We were "Active Fixing" symptoms. Regexes are fragile because they assume a specific structure (e.g., comma separators).
+-   **The Structural Fix**: We replaced the regex patches with a **Robust Tokenizer**:
+    1.  **Tokenizer**: "Find anything intent-like `(ref_...)` and split it by *any* separator." (Anti-Fragile).
     2.  **Merger**: "Systematically merge tokens `[1][2]` -> `[1, 2]`." (Best Practice).
--   **The Lesson**: If you are writing your 3rd regex fix for the same feature, you need a **Parser**, not a patch.
+-   **The Lesson**: If you are writing your 3rd regex fix for the same feature because of a new separator (`;` vs `,`), you need a **Parser**, not a patch. Parsers discover structure; Regexes demand it.

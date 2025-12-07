@@ -166,12 +166,12 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
   7. **List Options**: `itemize` and `enumerate` MUST have optional arguments (`[...]`) stripped.
 - `latex.js` is strictly limited to being a "dumb text formatter".
 
-### 9. Universal Citation Processor (v1.5.11)
--   **Anti-Fragile Tokenizer**: Captures *any* parenthesized reference Intent `(ref_...)` regardless of spacing/newlines.
+### 9. Universal Citation Processor (v1.5.13)
+-   **Robust Tokenizer**: Captures citation blocks `(ref_...)` and **parses** them by splitting on any separator (comma, space, semicolon).
 -   **Systemic Merger**: Recursively merges adjacent citations `[1][2]` -> `[1, 2]`.
 -   **Format**: Mainstream Formal Academic (IEEE/Nature).
 -   **Implementation**:
-  -   **Server**: Two-pass regex logic in `latexGenerator.ts`.
+  -   **Server**: Two-pass Parser logic in `latexGenerator.ts`.
   -   **Client**: Custom grouper `[${validNums.join(', ')}]` for preview.
 - **Streaming:** Real-time progress updates via `onProgress` callbacks and throttled logging.
 - **Resilience:**
