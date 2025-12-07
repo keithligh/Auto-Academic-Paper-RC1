@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.6] - 2025-12-07
+### Fixed
+- **KaTeX align* Environment Rendering**: Fixed critical bug where `\begin{align*}` environments were not rendering.
+  - **Root Cause**: KaTeX's `renderToString()` does NOT support outer environments like `align*`, `gather*` directly.
+  - **Fix**: Convert `align*` → `aligned`, `gather*` → `gathered` (KaTeX-supported inner environments).
+  - **Impact**: Multi-line aligned equations now render correctly in display mode without red error text.
+
 ## [1.5.5] - 2025-12-06
 ### Added
 - **Hybrid Intent Logic**: Refactored TikZ classification (Phase 7) to use a "Hybrid" approach.

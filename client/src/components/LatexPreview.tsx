@@ -492,7 +492,26 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
   // --- B. MATH (KaTeX) ---
   content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, math) => createMathBlock(math, true));
-  content = content.replace(/\\begin\{(equation|align|gather|multline)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, (m, env, math) => createMathBlock(m, true));
+  // KaTeX does NOT support \begin{align*} directly. We need to convert to supported inner environments.
+  content = content.replace(/\\begin\{(equation|align|gather|multline)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, (m, env, math) => {
+    // Map outer environments to KaTeX-supported inner environments
+    const envMap: Record<string, string> = {
+      'equation': 'equation',  // equation is fine as-is
+      'align': 'aligned',      // align* -> aligned
+      'gather': 'gathered',    // gather* -> gathered
+      'multline': 'multline'   // multline works in KaTeX
+    };
+    const innerEnv = envMap[env] || env;
+
+    // For align/gather, convert to inner environment for KaTeX
+    if (env === 'align' || env === 'gather') {
+      // Strip the environment wrapper and rewrap with inner environment
+      return createMathBlock(`\\begin{${innerEnv}}${math}\\end{${innerEnv}}`, true);
+    } else {
+      // For equation and multline, pass the entire match
+      return createMathBlock(m, true);
+    }
+  });
   content = content.replace(/(?<!\\)\$([^$]+)(?<!\\)\$/g, (m, math) => createMathBlock(math, false));
 
   // --- C. BIBLIOGRAPHY (Two-Pass) ---
