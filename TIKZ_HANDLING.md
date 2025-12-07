@@ -132,21 +132,22 @@ options = options.replace(/x\s*=\s*[\d.]+\s*(cm)?/g, '');
 options = options.replace(/y\s*=\s*[\d.]+\s*(cm)?/g, '');
 ```
 
-**Additional Injection:** `font=\small` reduces label text size to prevent cramping.
+
+**Additional Injection:** None. (Space expansion handles labels sufficiently).
 
 #### C. The Execution Rules
 
 | Type | Goal | Scaling Logic | Extra Style Injection |
 | :--- | :--- | :--- | :--- |
 | **WIDE** | Fit to A4 | Dynamic: `14/span × 0.9` (floor 0.5) | **`transform shape`** (REQUIRED) |
-| **FLAT** | Balance Ratio | Multiplier: `y × (ratio/2)`, `x × 1.5` | **`font=\small`**, strip old x/y |
+| **FLAT** | Balance Ratio | Multiplier: `y × (ratio/2)`, `x × 1.5` | Strip old x/y |
 | **COMPACT** | Fit to A4 | `scale=0.75` (>=8 nodes) / `0.85` | `node distance=1.5cm`, `transform shape` |
 | **LARGE** | Readability | `scale=0.85` (>=6 nodes) / `1.0` | `align=center`*, `node distance=8.4cm` (Text) / `5.0cm` (Node) |
 | **MEDIUM** | Balance | `scale=0.8` (>=6 nodes) / `0.9` | `node distance=2.5cm` |
 
 *Note: `transform shape` is strictly exempt from LARGE to keep text readable.*
 *Note*: `align=center` is injected if `text width` is missing, ensuring multi-line labels render correctly.
-*Note*: WIDE, COMPACT, and MEDIUM all use `transform shape`. FLAT uses `font=\small` instead. Only LARGE exempts text scaling.
+*Note*: WIDE, COMPACT, and MEDIUM all use `transform shape`. Only LARGE exempts text scaling.
 
 #### D. Priority Order (v1.5.7)
 ```

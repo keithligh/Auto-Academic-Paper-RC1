@@ -539,7 +539,7 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 | Intent | Goal | Action |
 | :--- | :--- | :--- |
 | **WIDE** | **Fit to A4** | Dynamic `scale=(14/span × 0.9)`, `transform shape` |
-| **FLAT** | **Balance Ratio** | Multiplier: `y × (ratio/2)`, `x × 1.5`, `font=\small`, strip old x/y |
+| **FLAT** | **Balance Ratio** | Multiplier: `y × (ratio/2)`, `x × 1.5`, strip old x/y |
 | **COMPACT** | **Fit to A4** | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm` |
 | **LARGE** | **Readability** | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
 | **MEDIUM** | Balance | `scale` (0.8 if ≥6 nodes, else 0.9) + Moderate Dist (1.2x) |

@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Detection**: Extracts ALL `(x,y)` coordinate pairs (not just `at` patterns) to calculate true vertical extent.
   - **Root Cause Fix**: Previous regex only matched `at (x,y)` patterns, missing `\draw (x,y)` coordinates that define vertical extent.
   - **Trigger**: Aspect ratio (horizontal/vertical) > 3.0 activates FLAT intent.
-  - **Correction**: Multiplier-based expansion: `y × (ratio/2)`, `x × 1.5`, plus `font=\small`.
+  - **Correction**: Multiplier-based expansion: `y × (ratio/2)`, `x × 1.5`.
   - **Override Behavior**: Strips existing `x=`/`y=` values before injecting calculated ones (TikZ uses first value).
 
 ### Changed
