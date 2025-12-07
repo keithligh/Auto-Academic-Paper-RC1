@@ -169,6 +169,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
     let safeTikz = tikzCode.replace(/[^\x00-\x7F]/g, '');
 
+    // CRITICAL (v1.7.0): Detect braces BEFORE polyfill removes decoration syntax
+    const hasBracesBeforePolyfill = safeTikz.includes('decoration={brace') || safeTikz.includes('decoration=\\{brace');
+
     // GEOMETRIC POLYFILL: Manual Bezier Braces for TikZJax
     // TikZJax cannot handle decoration={brace}, so we draw it manually.
     safeTikz = safeTikz.replace(
@@ -253,10 +256,10 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
     // NEW (v1.7.0): Detect BRACE diagrams (labels below main content causing vertical cramping)
     // Indicators: 1) Has brace decorations, 2) Has negative y-coordinates, 3) Has small y-scale
-    const hasBraces = safeTikz.includes('decoration={brace') || safeTikz.includes('decoration=\\{brace');
+    // NOTE: Use hasBracesBeforePolyfill detected earlier (line 173) before polyfill removes decoration syntax
     const hasNegativeY = minY !== Infinity && minY < 0;
     const hasSmallYScale = yScale < 1.0;
-    const isBraceLayout = hasBraces && hasNegativeY && hasSmallYScale;
+    const isBraceLayout = hasBracesBeforePolyfill && hasNegativeY && hasSmallYScale;
 
     // REFACTOR (v1.5.5): HYBRID INTENT (Phase 7 + Density Override)
     // We analyze the AI's *intent* based on 'node distance', BUT we fallback to 
