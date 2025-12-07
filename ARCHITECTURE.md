@@ -184,5 +184,10 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
   - **Client:** `sanitizeLatexForBrowser` in `client/src/components/LatexPreview.tsx` (Trojan Horse Architecture).
   - 
 
+### 10. Synchronous Rendering Stability (v1.6.0)
+-   **No Timers**: `setTimeout` is strictly forbidden for core rendering logic (`render`, `scaling`, `layout`).
+-   **Event Loop**: DOM measurements must use `requestAnimationFrame` to guarantee execution *after* the browser paint cycle, eliminating race conditions.
+-   **Constraint**: All `latex.js` generation must be synchronous.
+
 *Last Updated: 2025-12-07*
 *Version: 4.0 (6-Phase Research-First Pipeline)*

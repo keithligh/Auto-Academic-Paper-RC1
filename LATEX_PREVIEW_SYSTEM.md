@@ -102,28 +102,31 @@ Applied during `createMathBlock()` before KaTeX renders to HTML:
 | **Long single-line** | `length * 0.4 > 50em` | `transform: scale(X)` where `X = max(0.55, 50/estimatedWidth)` |
 | **Normal equations** | Default | No scaling applied |
 
-**Layer 2: Post-Render DOM-Based Responsive Scaling**
+**Layer 2: Post-Render Deterministic Scaling (v1.6.1)**
 
-Applied after the DOM is built, using actual rendered dimensions:
+Applied synchronously after the DOM is built (via `requestAnimationFrame`), using actual rendered dimensions.
+
+**Scope**: Applies to **Both** `.katex-display` (Math) and `.table-wrapper` (HTML Tables).
 
 ```typescript
+// Synchronous check (No setTimeout races)
 if (el.scrollWidth > el.clientWidth) {
-  const scale = Math.max(0.55, el.clientWidth / el.scrollWidth);
-  el.style.transform = `scale(${scale})`;
-  el.style.width = `${100 / scale}%`;
+  // SAFETY BUFFER: Multiply by 0.98 to prevent pixel-perfect clipping
+  const scale = Math.max(0.55, (el.clientWidth / el.scrollWidth) * 0.98);
+  
+  if (scale < 1) {
+    el.style.transform = `scale(${scale})`;
+    el.style.width = `${(100 / scale)}%`; // Expand physical width
+    el.style.overflowX = 'hidden'; // UX: Hide scrollbar since it fits now
+  }
 }
 ```
 
-This catches any equations that overflow despite Layer 1, including:
-- Multi-line environments with very wide individual lines
-- Equations with many subscripts/superscripts
-- Matrix environments with many columns
-
 **Key Design Decisions:**
-- **Minimum scale floor**: 0.55x (55%) to prevent microscopic text
-- **No interactive scaling**: No hover effects or zoom - just correct sizing
-- **Transform over zoom**: CSS `transform: scale()` works reliably; `zoom` causes reflow bugs
-- **Width compensation**: `width: (100/scale)%` maintains document flow
+- **Safety Buffer (98%)**: Exact mathematical fits often get clipped by browser pixel rounding when `overflow: hidden` is applied. The 2% buffer ensures breathing room.
+- **Unified Logic**: We treat large HTML tables exactly like large equations.
+- **Visual vs Physical**: `transform: scale` shrinks the *visual* size, while `width: 1XX%` expands the *layout* size to match.
+- **Scrollbar Elimination**: Once scaled, the scrollbar is redundant and ugly, so we force `overflow-x: hidden`.
 
 ### 3. Diagram Rendering (TikZ via Iframe)
 
@@ -277,6 +280,19 @@ AI models often hallucinate a "References" section header *before* the bibliogra
 ### The "System Stability" Fallback
 
 If the AI fails to generate a `\begin{document}`, the system doesn't crash.
+
+### 13. Code Block Handling & Pipeline Ordering
+
+To support `verbatim` and `lstlisting` environments without corruption from the math parser, we enforced a strict **Processing Order**.
+
+**Strategy:**
+1.  **Extraction Order (Critical)**: Code blocks are extracted **Step A.2 (Pre-Math)**.
+    *   *Why*: If Math extraction (`$...$`) runs first, it sees `$var$` inside code blocks as inline math, destroying the code logic and replacing it with a placeholder (`LATEXPREVIEWMATH39`).
+    *   *Fix*: By extracting code blocks first, we convert them to safe HTML placeholders that the Math regex ignores.
+2.  **Unified Styling**:
+    *   `verbatim` and `lstlisting` are mapped to the `.latex-verbatim` CSS class.
+    *   This class shares identical styling with `.algorithm-wrapper` (Background, Border, Monospace, scrolling), ensuring all code-like elements look consistent and "enclosed".
+3.  **HTML Escaping**: Content inside code blocks is manually escaped (`<` -> `&lt;`) to prevent browser rendering issues.
 
 - **The Safety Net**: It detects the absence of the tag and automatically wraps the entire content in a standard `article`.
 
@@ -638,3 +654,15 @@ Logic: "Recursively merge adjacent `\cite{}` commands into a single group."
 -   **Output**: `\cite{ref_1,ref_2}`
 -   **Benefit**: This guarantees compliance with standard academic formatting (e.g., `[1, 2]`) even if the AI output separate blocks. This is a **structural enforcement** of style, not just a fix.
 
+## 24. Render Stability: The Move to Synchronous Execution (v1.6.0)
+
+For a long time, the preview renderer used `setTimeout(..., 50)` hacks to "wait for the DOM". This introduced race conditions where the scaling logic would run before the elements existed (rendering correct but unscaled) or after the user navigated away (React errors).
+
+### The Fix: Synchronous Logic
+We removed all artificial delays.
+
+1.  **Render Phase**: `latex.js` generator runs synchronously. HTML strings are generated instantly.
+2.  **Injection Phase**: `TreeWalker` substitution happens in the same tick.
+3.  **Measurement Phase**: Scaling logic is wrapped in `requestAnimationFrame`. This is the *browser-native* way to say "Run this code immediately after the next paint, when layout metrics are valid."
+
+**Rule**: **NEVER use `setTimeout` for layout logic.** Always use `requestAnimationFrame` or `useLayoutEffect`.

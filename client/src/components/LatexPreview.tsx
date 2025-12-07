@@ -5,7 +5,7 @@
  * VERIFIED: Includes all "Secrets" from the documentation.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import katex from 'katex';
 import '@/styles/latex-katex.css';
 import '@/styles/latex-article.css';
@@ -615,8 +615,17 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     content = content.substring(0, startIdx) + placeholder + content.substring(endIdx + endTag.length);
   }
 
+
+
   content = content.replace(/\\begin\{forest\}([\s\S]*?)\\end\{forest\}/g, () => createPlaceholder(`<div class="latex-placeholder-box">[Tree Diagram]</div>`));
   content = content.replace(/\\includegraphics\[.*?\]\{.*?\}/g, () => createPlaceholder(`<div class="latex-placeholder-box image">[Image]</div>`));
+
+  // --- A.2 CODE BLOCKS (Verbatim/LstListing) ---
+  // MOVED UP: Must be BEFORE Math to prevent $var$ in code being treated as math.
+  // UPDATE: Added support for lstlisting and optional arguments.
+  content = content.replace(/\\begin\{(verbatim|lstlisting)\}(?:\[.*?\])?([\s\S]*?)\\end\{\1\}/g, (m, type, body) => {
+    return createPlaceholder(`<pre class="latex-verbatim">${body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`);
+  });
 
   // --- B. MATH (KaTeX) ---
   // CRITICAL FIX: Extraction order matters!
@@ -1039,11 +1048,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     return content;
   };
 
-  // --- L. VERBATIM (Manual Extraction) ---
-  // MOVED UP: Must extract verbatim BEFORE lists to prevent \item inside code from breaking list parser
-  content = content.replace(/\\begin\{verbatim\}([\s\S]*?)\\end\{verbatim\}/g, (m, body) => {
-    return createPlaceholder(`<pre class="latex-verbatim">${body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`);
-  });
+
 
   // --- K. LISTS (Unified Manual Parser) ---
   content = processLists(content);
@@ -1243,32 +1248,46 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
           containerRef.current!.appendChild(bibEl);
         }
 
-        // FEATURE: Responsive Math (Scale-to-Fit like TikZ)
-        // We look for equations that overflow and shrink them (transform) to fit.
-        // This is "responsive" in the sense of fitting the A4 page width.
-        const mathBlocks = containerRef.current!.querySelectorAll('.katex-display');
-        mathBlocks.forEach((block) => {
-          const el = block as HTMLElement;
-          // Reset previous scaling
-          el.style.transform = '';
-          el.style.width = '';
-          el.style.transformOrigin = 'left center'; // transform scale originates from center by default
+        // LAYER 2 SCALING (Restored inside Render Loop)
+        // Must run HERE because this render function is async (setTimeout 50ms).
+        // If we use useLayoutEffect, it runs too early (before these nodes exist).
+        requestAnimationFrame(() => {
+          if (!containerRef.current) return;
+          // FIX: Include .table-wrapper to scale standard HTML tables too!
+          const elements = containerRef.current.querySelectorAll('.katex-display, .table-wrapper');
+          console.log('Detected Scalable Blocks:', elements.length);
 
-          if (el.scrollWidth > el.clientWidth) {
-            const scale = el.clientWidth / el.scrollWidth;
-            // We cap the shrink at 50% to prevent unreadable microscopic text.
-            const safeScale = Math.max(scale, 0.55);
+          elements.forEach((el) => {
+            const element = el as HTMLElement;
+            // Reset to measure true width
+            element.style.transform = '';
+            element.style.width = '';
+            element.style.transformOrigin = 'left center';
 
-            if (safeScale < 1) {
-              el.style.transform = `scale(${safeScale})`;
-              // When we scale down, the element still occupies original width in flow unless we adjust width.
-              // However, since it's shrinking, we increase the width percentage to ensure the scaled version fills the container?
-              // Actually, simply scaling it down makes it fit visually. 
-              // To handle flow correctly with transform, we often need to adjust margins or width.
-              // According to LATEX_PREVIEW_SYSTEM.md: "width: (100/0.X)%"
-              el.style.width = `${(100 / safeScale)}%`;
+            // DEBUG: Trace Scaling Logic
+            console.log('Checking KaTeX Block:', { scroll: element.scrollWidth, client: element.clientWidth });
+
+            if (element.scrollWidth > element.clientWidth) {
+              // Calculate scale (Floor at 0.55x to match docs)
+              // FIX: Add 2% safety buffer to prevent clipping with overflow: hidden
+              const scale = Math.max(0.55, (element.clientWidth / element.scrollWidth) * 0.98);
+              console.log('Overflow Detected. Scaling:', scale);
+
+              if (scale < 1) {
+                element.style.transform = `scale(${scale})`;
+                // element.style.width = `${(100 / scale)}%`; 
+                // Correction: When scaling down, we don't necessarily need to expand the width 
+                // unless we want it to take up more space?
+                // Actually, if we scale down, the visual width shrinks. 
+                // If we want it to still occupy the "full width" of the container (so it's centered or left aligned properly without gap?), 
+                // we might need width adjustment.
+                // But the doc says: "width: (100/scale)%"
+                // Let's stick to the doc.
+                element.style.width = `${(100 / scale)}%`;
+                element.style.overflowX = 'hidden';
+              }
             }
-          }
+          });
         });
 
       } catch (err: any) {
@@ -1277,8 +1296,10 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
       }
     };
 
-    const timeoutId = setTimeout(render, 50);
-    return () => clearTimeout(timeoutId);
+    // FIX: Remove artificial delay (setTimeout) to eliminate race conditions.
+    // latex.js is synchronous, so we render immediately.
+    // Reference: User Request "eliminate race condition at root source"
+    render();
 
   }, [latexContent]);
 

@@ -153,3 +153,26 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Fix**: Abandoned regex. Implemented a **Manual Character-Walker** that counts brace balance `depth++ / depth--`.
 -   **The Rule**: **If "Fallback" is unacceptable, Regex is unacceptable.** To guarantee coverage of unknown edge cases (like code blocks inside lists), you must use a stateful parser (Character Walker) and explicitly order your pipeline (Verbatim -> Structure -> Text).
 
+## 20. Pipeline Ordering (The Corruption Trap)
+-   **The Failure**: SQL code `$amount` was rendered as `$LATEXPREVIEWMATH39$`, corrupting the code listing.
+-   **The Root Cause**: Order of Operations. The Math Extractor (`$...$`) ran *before* the Verbatim Extractor. It aggressively claimed the dollar signs inside the code as math.
+-   **The Fix**: Physically reordered the pipeline. **Code blocks are extracted Step 1**, converting them to safe HTML placeholders. Math is extracted Step 2.
+-   **The Lesson**: **Ambiguous syntax requires strict precedence.** If two features use the same symbols (`$` for math, `$variable` for code), the one that *encloses* the other (Code Block) MUST be processed first.
+
+## 21. The Race Condition Trap (`setTimeout` is Gambling)
+- **The Failure**: Scaling logic wrapped in `setTimeout(..., 50)` caused flakey results. Sometimes equations scaled, sometimes they stayed huge.
+- **The Insight**: A timeout is not a guarantee. It is a bet. You are betting the CPU will be free in 50ms. If React is busy, or the DOM is slow, you lose the bet.
+- **The Fix**: **Synchronous Execution**. Removed `setTimeout`. Logic runs in `useLayoutEffect` or `requestAnimationFrame` which are tied to the browser's event loop, not the clock.
+- **The Lesson**: **Never bet on time.** Bet on events. Timeouts in rendering logic are "Heisenbugs" waiting to happen.
+
+## 22. The Clipping Trap (Exact Math vs Browser Reality)
+- **The Failure**: Auto-scaling calculated `100/scale` precisely. But `overflow: hidden` clipped the right edge of wide formulas.
+- **The Root Cause**: Sub-pixel rendering differences between browsers meant "Exact" was technically "Too Tight".
+- **The Fix**: **The 2% Safety Buffer**. Factor in `* 0.98` to the scale.
+- **The Lesson**: **Pixels aren't integers.** When forcing layout via `transform`, always leave a margin for error. "Perfect" fit usually looks broken.
+
+## 23. The "Unstoppable Force" CSS (Layout Conflicts)
+- **The Failure**: JS said `width: 125%`. CSS said `max-width: 100%`. The browser obeyed CSS, so the element couldn't expand to fit the lower scale.
+- **The Root Cause**: You cannot use JS to "expand" an element if CSS is explicitly clamping it.
+- **The Fix**: `max-width: none !important` in the CSS for scalable classes.
+- **The Lesson**: **Code is Law, but CSS is Parliament.** If you want JS to control layout, you must explicitly repeal the CSS laws (max-width) first.

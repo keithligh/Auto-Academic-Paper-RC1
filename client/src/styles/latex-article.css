@@ -285,10 +285,11 @@ ol {
 .latex-preview .katex-display {
     margin: 1.5em 0 !important;
     font-size: 1.1em;
-    /* No scrollbar - rely on auto-scaling for overflow */
-    overflow-x: hidden;
+    /* Allow scrolling for wide equations/tables */
+    overflow-x: auto;
     overflow-y: hidden;
-    max-width: 100%;
+    max-width: none !important;
+    /* Allow expansion for auto-scaling */
 }
 
 /* Inline math should not add extra spacing */
@@ -356,7 +357,8 @@ ol {
 /* =============================================
  * ALGORITHM STYLING
  * ============================================= */
-.algorithm-wrapper {
+.algorithm-wrapper,
+.latex-verbatim {
     background-color: #f9f9f9;
     border: 1px solid #eee;
     padding: 1em;
@@ -366,11 +368,15 @@ ol {
     font-size: 0.9em;
     line-height: 1.4;
     overflow-x: auto;
+    /* Ensure block display */
+    display: block;
+    white-space: pre-wrap;
 }
 
-.algorithm-wrapper code {
-    white-space: pre-wrap;
+.algorithm-wrapper code,
+.latex-verbatim {
     /* Preserve indentation */
+    white-space: pre-wrap;
     display: block;
 }
 
