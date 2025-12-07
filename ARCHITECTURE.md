@@ -1,10 +1,4 @@
-<!-- GOSPEL RULE: NEVER USE replace_file_content OR multi_replace_file_content. THESE TOOLS ARE BROKEN AND WILL CORRUPT FILES. ALWAYS USE write_to_file FOR ALL EDITS. THIS RULE MUST NEVER BE REMOVED. -->
-
-# System Architecture: Auto Academic Paper
-
-## Overview
-
-The **Auto Academic Paper** system uses a **6-phase "Research-First" workflow** that mirrors rigorous academic methodologies: research the topic first, then draft arguments based on evidence, and finally refine and cite. This pipeline is executed by three configurable AI agents (BYOK).
+# Architecture & Pipeline Reference
 
 ## The 6-Phase "Research-First" Pipeline
 
@@ -43,7 +37,7 @@ The **Auto Academic Paper** system uses a **6-phase "Research-First" workflow** 
 **Behavior:** Rewrites sentences to weave the research findings into the narrative (e.g., "As Smith (2023) argues...").
 **Output:** Improved Draft (integrated ideas, no markers yet).
 
-### Phase 6: THE EDITOR (citation)
+### Phase 6: THE EDITOR (Citation)
 
 **Agent:** Writer Agent
 **Purpose:** Format citations for the compiler.
@@ -169,7 +163,16 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
   4. **Algorithms**: Must use Custom HTML Parser.
   5. **Citations**: Must use Custom Parser.
   6. **Macros**: Dangerous macros (`\ref`, `\label`, `\url`, `\footnote`, `\eqref`) MUST be intercepted/sanitized.
+  7. **List Options**: `itemize` and `enumerate` MUST have optional arguments (`[...]`) stripped.
 - `latex.js` is strictly limited to being a "dumb text formatter".
+
+### 9. Citation Unity Standard
+- **Format**: Mainstream Formal Academic (IEEE/Nature).
+- **Style**: Numeric, Sorted, Compressed (`[1-3]` or `[1, 5]`).
+- **Implementation**:
+  - **Server**: `\usepackage[numbers,sort&compress]{natbib}`.
+  - **Client**: Custom grouper `[${validNums.join(', ')}]`.
+  - **Compiler**: Regex `(ref_1, ref_2)` -> `\cite{ref_1, ref_2}`.
 
 ---
 

@@ -130,7 +130,7 @@ export async function generateLatex(
 \\usepackage{hyperref}
 \\usepackage{amsthm}
 \\usepackage[margin=1in]{geometry}
-\\usepackage[numbers]{natbib}
+\\usepackage[numbers,sort&compress]{natbib}
 \\usepackage{listings}
 \\usepackage{algorithm}
 \\usepackage{algpseudocode}
