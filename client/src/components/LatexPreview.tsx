@@ -261,6 +261,19 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const hasSmallYScale = yScale < 1.0;
     const isBraceLayout = hasBracesBeforePolyfill && hasNegativeY && hasSmallYScale;
 
+    // DEBUG: Log detection conditions
+    console.log('[BRACE Detection]', {
+      hasBracesBeforePolyfill,
+      hasNegativeY,
+      hasSmallYScale,
+      isBraceLayout,
+      minY,
+      maxY,
+      xScale,
+      yScale,
+      options: options.substring(0, 100)
+    });
+
     // REFACTOR (v1.5.5): HYBRID INTENT (Phase 7 + Density Override)
     // We analyze the AI's *intent* based on 'node distance', BUT we fallback to 
     // text density if the distance is missing (to catch implicit "Large" layout).
@@ -292,6 +305,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       if (isTextHeavy) intent = 'LARGE'; // Text-heavy = Cycle = Large
       else if (nodeMatches.length >= 8) intent = 'COMPACT'; // Many nodes = Pipeline = Compact
     }
+
+    // DEBUG: Log selected intent
+    console.log('[TikZ Intent]', intent, { nodeMatches: nodeMatches.length, isTextHeavy, horizontalSpan, verticalSpan });
 
     // 3. EXECUTE RULES (The Table)
     let extraOpts = '';
