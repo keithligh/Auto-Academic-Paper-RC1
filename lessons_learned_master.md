@@ -115,3 +115,15 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **Rule 2**: If applying variations of the same fix (`scale=1.5`, `1.8`, `2`...), I am in a **bandaid loop**. Pause and question the approach.
 -   **Rule 3**: When the user suggests a direction (like "iframe container"), INVESTIGATE that path before dismissing it.
 
+
+## 14. The "World Class" Pivot (Peer Reviewer Refactor)
+-   **The Insight**: A "Critic" who only checks citations is just a spellchecker. A "Peer Reviewer" evaluates **Novelty, Rigor, and Significance**.
+-   **The Change**: We moved Phase 4 from a simple "Evidence Mapper" to a "Senior Principle Investigator" role.
+-   **The Lesson**: Do not just build utility agents. Build **Role-Based Agents**. Ask "What would a human expert do here?" (Nature/Science criteria), not just "What can the LLM do?".
+
+## 15. The "Universal Processor" Pivot (Citation System)
+-   **The Fail Pattern**: We spent days patching regexes for `(ref_1)`, then `(ref_1 )`, then `(ref_1, ref_2)`. We were "Active Fixing" symptoms.
+-   **The Structural Fix**: We replaced the regex patches with a **Two-Pass Universal Processor**:
+    1.  **Tokenizer**: "Find anything intent-like `(ref_...)` and tokenize it." (Anti-Fragile).
+    2.  **Merger**: "Systematically merge tokens `[1][2]` -> `[1, 2]`." (Best Practice).
+-   **The Lesson**: If you are writing your 3rd regex fix for the same feature, you need a **Parser**, not a patch.

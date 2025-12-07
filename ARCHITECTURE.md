@@ -23,12 +23,12 @@
 **Behavior:** Writes the content, structuring arguments around the known evidence from Phase 2. Generates `enhancements` (diagrams, tables).
 **Output:** Draft JSON (No in-text citations yet).
 
-### Phase 4: THE CRITIC (Verification)
+### Phase 4: THE PEER REVIEWER (Critique)
 
-**Agent:** Strategist Agent
-**Purpose:** Identify claims that are still weak or unsupported.
-**Behavior:** Scans the draft for assertions needing stronger backing or specific citations.
-**Output:** A list of `Claims` needing evidence.
+**Agent:** Librarian Agent (Senior PI Role)
+**Purpose:** Conduct a "Nature/Science" caliber review (Verification + Novelty + Rigor).
+**Behavior:** Verifies claims against evidence, audits for logical flow, and assesses novelty/significance.
+**Output:** A structured `ReviewReport` (Supported, Unverified, Novelty Check, Critique).
 
 ### Phase 5: THE REWRITER (Synthesis)
 
@@ -58,15 +58,15 @@ The system is designed around "Bring Your Own Key" (BYOK) with three distinct ag
 
 2. **Strategist Agent:**
    
-   * **Role:** Analysis (Phase 1), Critique (Phase 4).
+   * **Role:** Analysis (Phase 1).
    * **Recommended Models:** o1-preview, Claude 3.5 Sonnet.
    * **Capabilities:** Logic, planning, skepticism.
 
 3. **Librarian Agent:**
    
-   * **Role:** Research (Phase 2).
+   * **Role:** Research (Phase 2), Peer Review (Phase 4).
    * **Recommended Models:** Perplexity, Gemini 2.5 (via Poe).
-   * **Capabilities:** **MUST** have internet access.
+   * **Capabilities:** **MUST** have internet access (for Research and Novelty checks).
 
 ---
 
@@ -166,20 +166,13 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
   7. **List Options**: `itemize` and `enumerate` MUST have optional arguments (`[...]`) stripped.
 - `latex.js` is strictly limited to being a "dumb text formatter".
 
-### 9. Citation Unity Standard
-- **Format**: Mainstream Formal Academic (IEEE/Nature).
-- **Style**: Numeric, Sorted, Compressed (`[1-3]` or `[1, 5]`).
-- **Implementation**:
-  - **Server**: `\usepackage[numbers,sort&compress]{natbib}`.
-  - **Client**: Custom grouper `[${validNums.join(', ')}]`.
-  - **Compiler**: Regex `(ref_1, ref_2)` -> `\cite{ref_1, ref_2}`.
-
----
-
-Technical Implementation
-
-- **Backend:** Node.js / Express
-- **AI Service:** `server/ai/service.ts` orchestrates the pipeline.
+### 9. Universal Citation Processor (v1.5.11)
+-   **Anti-Fragile Tokenizer**: Captures *any* parenthesized reference Intent `(ref_...)` regardless of spacing/newlines.
+-   **Systemic Merger**: Recursively merges adjacent citations `[1][2]` -> `[1, 2]`.
+-   **Format**: Mainstream Formal Academic (IEEE/Nature).
+-   **Implementation**:
+  -   **Server**: Two-pass regex logic in `latexGenerator.ts`.
+  -   **Client**: Custom grouper `[${validNums.join(', ')}]` for preview.
 - **Streaming:** Real-time progress updates via `onProgress` callbacks and throttled logging.
 - **Resilience:**
   - **Timeouts:** 3-minute timeout for critical AI steps (Critic).
