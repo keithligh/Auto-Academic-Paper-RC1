@@ -170,11 +170,24 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 `latex.js` does not support the `algorithm` or `algpseudocode` packages.
 
 - **Extraction**: Regex finds `\begin{algorithmic}` blocks.
-- **Transformation**:
+- **Transformation (Order Matters)**:
+  1.  **Format Text**: The body is passed through `parseLatexFormatting` *first* to handle bold/italic and math restoration.
+  2.  **Inject HTML**: structure tags (`<br>`, `<strong>`) are injected *after* formatting to prevent them from being escaped.
   - Keywords (`\State`, `\If`, `\For`) are replaced with bold HTML equivalents.
-  - Indentation is preserved via `<pre>` blocks.
+  - Indentation is preserved via `<pre>` or `code` blocks.
   - Math inside algorithms is parsed via our custom formatter.
-- **Output**: A styled code block mimicking the look of academic algorithms.
+- **Output**: A styled code block (`.algorithm-wrapper`) mimicking the look of academic algorithms.
+- **CSS Requirement**: This relies on `.algorithm-wrapper` being defined in `latex-article.css`.
+
+### 6b. Verbatim & Code Blocks (The "Raw" Zone)
+
+`latex.js` crashes on `verbatim` environments because it cannot handle raw unformatted text blocks that ignore LaTeX syntax.
+
+- **Extraction**: Regex finds `\begin{verbatim}` blocks.
+- **Transformation**: 
+  - **HTML Escaping**: We strictly escape special characters (`<` -> `&lt;`) to prevent XSS and rendering glitches.
+  - **Styling**: We wrap the content in a `<pre class="latex-verbatim">` block.
+- **Output**: A monospaced code block that preserves whitespace exactly as typed.
 
 ### 7. Advanced Layout & CSS
 
@@ -200,6 +213,10 @@ To ensure consistent rendering in **manually parsed blocks** (Tables, Algorithms
     - `\bullet` -> `&#8226;`
     - `\times` -> `&times;`
     - `\checkmark` -> `&#10003;`
+    - `\approx` -> `&#8776;` (≈)
+    - `\,` -> `&thinsp;` (Thin Space)
+    - `{:}` -> `:` (Strips brace protection)
+    - `\/` -> `/` (Converts escaped slash to forward slash)
 
 ### 9. Environment Normalization
 
@@ -323,22 +340,24 @@ We **only** trust `latex.js` with the simplest, most fundamental text formatting
 1. **Core Document Structure**: parsing `\section`, `\subsection`, `\paragraph`.
 2. **Basic Text Tokens**: parsing bold (`\textbf`), italic (`\textit`), underline (`\underline`), and monospace (`\texttt`).
 3. **Standard Paragraphs**: handling line breaks and paragraph spacing.
-4. **Simple Lists**: standard `itemize` and `enumerate`. Note: We **strip** optional arguments (sanitize) before passing them to `latex.js`.
-5. **The "Strict Bootloader" Preamble**: A minimal, hardcoded preamble (`\documentclass{article}`) that we inject.
+4.  **Simple Itemize**: standard `itemize` (bullets). We **strip** optional arguments.
+5.  **The "Strict Bootloader" Preamble**: A minimal, hardcoded preamble (`\documentclass{article}`) that we inject.
 
 ### What `latex.js` is FORBIDDEN from Touching (The Danger Zone)
 
 We **intercept and remove/replace** these elements because they trigger crashes:
 
-1. **The Real Preamble**: 100% stripped. No `\usepackage`, no custom macros.
-2. **Math**: All `$..$` and `\[..\]` are extracted. `latex.js` sees only placeholders.
-3. **Tables**: `tabular`, `tabularx`, `longtable` are all intercepted. `latex.js` sees only placeholders.
-4. **TikZ Diagrams**: `tikzpicture` is intercepted. `latex.js` sees only placeholders.
-5. **Algorithms**: `algorithmic` environments are intercepted. `latex.js` sees only placeholders.
-6. **Complex Envs**: `theorem`, `proof`, `lemma` are flattened to text/bold headers. `latex.js` sees only text.
-7. **Images**: `\includegraphics` is deleted/replaced. `latex.js` sees only placeholders.
-8. **Forest Trees**: `forest` environments are deleted/replaced. `latex.js` sees only placeholders.
-9. **BibTeX**: `bibliography` commands are intercepted or stripped.
+1.  **The Real Preamble**: 100% stripped. No `\usepackage`, no custom macros.
+2.  **Math**: All `$..$` and `\[..\]` are extracted. `latex.js` sees only placeholders.
+3.  **Tables**: `tabular`, `tabularx`, `longtable` are all intercepted.
+4.  **Enumerated Lists**: `enumerate` is manually parsed to `<ol>` to guarantee "1." numbering style which `latex.js` fails to render reliably.
+5.  **TikZ Diagrams**: `tikzpicture` is intercepted.
+6.  **Algorithms**: `algorithmic` environments are intercepted.
+7.  **Complex Envs**: `theorem`, `proof`, `lemma` are flattened.
+8.  **Images**: `\includegraphics` is deleted/replaced.
+9.  **Forest Trees**: `forest` environments are deleted/replaced.
+10. **Verbatim Blocks**: `verbatim` environments are intercepted.
+11. **BibTeX**: `bibliography` commands are intercepted.
 
 **Summary**: If it's not simple text or a heading, `latex.js` is **not allowed to see it**.
 

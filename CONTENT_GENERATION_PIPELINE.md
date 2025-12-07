@@ -36,7 +36,7 @@ graph TD
     
     subgraph "Phase 4: The Peer Reviewer (Verification)"
         Phase4["Librarian Agent"] -->|Review Report| Report
-        Note4["Logic: Verifies draft against library. Maps supported claims."]
+        Note4["Logic: Verifies draft, checks Novelty, Rigor, and Significance."]
     end
     
     Report --> Phase5
@@ -111,12 +111,13 @@ You may structure your arguments knowing this evidence exists, but do NOT insert
 ### Phase 4: The Peer Reviewer (Verification)
 **Agent:** Librarian (Role: Senior PI)
 **Input:** Draft + **Available References** (The Card Catalog).
-**Output:** `Review Report` (Supported Claims, Unverified Claims, Critique).
+**Output:** `Review Report` (Supported Claims, Unverified Claims, **Novelty Check**, **Critique**).
 **Logic:**
 1.  **Verification:** Reads the draft *alongside* the library.
 2.  **Mapping:** Identifies claims explicitly supported by specific papers (`supported_claims`).
 3.  **Auditing:** Flags claims that sound factual but lack evidence (`unverified_claims`).
-4.  **No Hallucinations:** Prevents the system from asking for citations that don't exist.
+4.  **Novelty & Rigor:** Evaluates the significance of the contribution and the logical soundness of the arguments (`novelty_check`, `critique`).
+5.  **No Hallucinations:** Prevents the system from asking for citations that don't exist.
 
 ### Phase 5: The Rewriter (Synthesis)
 **Agent:** Writer

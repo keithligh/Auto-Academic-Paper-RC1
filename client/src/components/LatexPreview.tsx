@@ -91,7 +91,12 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       .replace(/\\bullet/g, '&#8226;')
       .replace(/~/g, '&nbsp;')
       .replace(/\\times/g, '&times;')
-      .replace(/\\checkmark/g, '&#10003;');
+      .replace(/\\checkmark/g, '&#10003;')
+      .replace(/\\approx/g, '&#8776;') // U+2248 ≈
+      .replace(/\\,/g, '&thinsp;')
+      .replace(/\{:\}/g, ':') // Strips {:} to : (Literal brace match)
+      .replace(/\\:/g, ':') // Handle \: if present
+      .replace(/\\\//g, '/'); // Convert escaped slash \/ to /
 
     // 5. Restore Math
     return protectedText.replace(/__MATH_PROTECT_(\d+)__/g, (m, idx) => mathPlaceholders[parseInt(idx)]);
@@ -849,17 +854,88 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
   );
 
+  // === HELPER: Recursively process Enumerate environments ===
+  const processEnumerate = (content: string): string => {
+    let placeholders: { id: string, html: string }[] = [];
+    // Regex targets "Leaf" nodes (enumerate blocks containing no other enumerate starts)
+    const leafRegex = /\\begin\{enumerate\}((?:(?!\\begin\{enumerate\}).)*?)\\end\{enumerate\}/s;
+
+    let loopCount = 0;
+    while (loopCount < 100) { // Safety break
+      const match = content.match(leafRegex);
+      if (!match) break;
+      loopCount++;
+
+      const fullMatch = match[0];
+      const innerContent = match[1];
+
+      // Parse items: Split by \item, filter empty
+      const items = innerContent.split(/\\item/).filter(i => i.trim());
+
+      // Build HTML
+      const listHtml = `<ol class="latex-enumerate">` +
+        items.map(item => `<li>${parseLatexFormatting(item)}</li>`).join('') +
+        `</ol>`;
+
+      const id = `__ENUMERATE_BLOCK_${placeholders.length}__`;
+      placeholders.push({ id, html: listHtml });
+      content = content.replace(fullMatch, id);
+    }
+
+    // Resolve placeholders (Iterative to handle nesting)
+    let hasPlaceholder = true;
+    let resolveCount = 0;
+    while (hasPlaceholder && resolveCount < 100) {
+      hasPlaceholder = false;
+      resolveCount++;
+      placeholders.forEach(p => {
+        if (content.includes(p.id)) {
+          content = content.replace(p.id, p.html);
+          hasPlaceholder = true;
+        }
+      });
+    }
+
+    // Convert to Trojon Horse Placeholders
+    content = content.replace(/(<ol class="latex-enumerate">[\s\S]*?<\/ol>)/g, (match) => {
+      return createPlaceholder(match);
+    });
+
+    return content;
+  };
+
+  // --- K. LISTS (Manual Enumerate) ---
+  content = processEnumerate(content); // Manual Parse Enumerate
+  // Itemize: Just strip options, let latex.js handle bullets
+  content = content.replace(/\\begin\{itemize\}\[.*?\]/g, '\\begin{itemize}');
+
   // --- H. ALGORITHMS ---
-  content = content.replace(/\\begin\{algorithmic\}([\s\S]*?)\\end\{algorithmic\}/g, (m, body) => {
-    const formatted = body
-      .replace(/\\State/g, '<br><strong>State</strong> ')
-      .replace(/\\If\{([^{}]*)\}/g, '<br><strong>If</strong> $1 <strong>then</strong>')
-      .replace(/\\EndIf/g, '<br><strong>EndIf</strong>')
-      .replace(/\\For\{([^{}]*)\}/g, '<br><strong>For</strong> $1 <strong>do</strong>')
-      .replace(/\\EndFor/g, '<br><strong>EndFor</strong>');
-    return createPlaceholder(`<div class="algorithm-wrapper"><code>${parseLatexFormatting(formatted)}</code></div>`);
+  // --- H. ALGORITHMS ---
+  content = content.replace(/\\begin\{algorithmic\}(?:\[.*?\])?([\s\S]*?)\\end\{algorithmic\}/g, (m, body) => {
+    // 1. Process Content FIRST (Math restoration, HTML escaping of user text)
+    // We must do this before injecting our own HTML tags (<br>, <strong>), otherwise they get escaped!
+    let formatted = parseLatexFormatting(body);
+
+    // 2. Inject Algorithm Structure (Case-Insensitive)
+    formatted = formatted
+      .replace(/\\State/gi, '<br><strong>State</strong> ')
+      .replace(/\\If\{([^{}]*)\}/gi, '<br><strong>If</strong> $1 <strong>then</strong>')
+      .replace(/\\EndIf/gi, '<br><strong>EndIf</strong>')
+      .replace(/\\For\{([^{}]*)\}/gi, '<br><strong>For</strong> $1 <strong>do</strong>')
+      .replace(/\\EndFor/gi, '<br><strong>EndFor</strong>')
+      .replace(/\\Else/gi, '<br><strong>Else</strong>')
+      .replace(/\\While\{([^{}]*)\}/gi, '<br><strong>While</strong> $1 <strong>do</strong>')
+      .replace(/\\EndWhile/gi, '<br><strong>EndWhile</strong>');
+
+    // 3. Resolve Math Placeholders (Recursively)
+    return createPlaceholder(`<div class="algorithm-wrapper"><code>${resolvePlaceholders(formatted)}</code></div>`);
   });
   content = content.replace(/\\begin\{algorithm(\*?)\}([\s\S]*?)\\end\{algorithm\1\}/g, '$2');
+
+  // --- L. VERBATIM (Manual Extraction) ---
+  content = content.replace(/\\begin\{verbatim\}([\s\S]*?)\\end\{verbatim\}/g, (m, body) => {
+    return createPlaceholder(`<pre class="latex-verbatim">${body.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`);
+  });
 
   // --- I. PARBOX (Manual Parser) ---
   content = processParboxes(content);

@@ -161,9 +161,10 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
   2. **TikZ**: Must use Iframe Isolation.
   3. **Tables**: Must use Custom HTML Parser.
   4. **Algorithms**: Must use Custom HTML Parser.
-  5. **Citations**: Must use Custom Parser.
-  6. **Macros**: Dangerous macros (`\ref`, `\label`, `\url`, `\footnote`, `\eqref`) MUST be intercepted/sanitized.
-  7. **List Options**: `itemize` and `enumerate` MUST have optional arguments (`[...]`) stripped.
+  5. **Enumerate**: Must use Custom HTML Parser (Leaf-First Recursion).
+  6. **Citations**: Must use Custom Parser.
+  7. **Macros**: Dangerous macros (`\ref`, `\label`, `\url`, `\footnote`, `\eqref`) MUST be intercepted/sanitized.
+  8. **Itemize Options**: `itemize` MUST have optional arguments (`[...]`) stripped.
 - `latex.js` is strictly limited to being a "dumb text formatter".
 
 ### 9. Universal Citation Processor (v1.5.13)

@@ -211,6 +211,14 @@ export class AIService {
             // Phase 6: Editor (Insert citation markers)
             await this.phase6_Editor(ctx);
 
+            // Phase 6: Editor (Insert citation markers)
+            await this.phase6_Editor(ctx);
+
+            // Merge reviewReport into final response for persistence
+            if (ctx.finalDraft && ctx.reviewReport) {
+                (ctx.finalDraft as any).reviewReport = ctx.reviewReport;
+            }
+
             return ctx.finalDraft!;
 
         } catch (error: any) {
@@ -540,8 +548,15 @@ Return ONLY the JSON.`;
 
             const supportedCount = ctx.reviewReport?.supported_claims?.length || 0;
             const unverifiedCount = ctx.reviewReport?.unverified_claims?.length || 0;
+            const novelty = ctx.reviewReport?.novelty_check ? ctx.reviewReport.novelty_check.substring(0, 100) + "..." : "N/A";
 
-            await this.log(`[PeerReviewer] Review complete: ${supportedCount} verified, ${unverifiedCount} unverified.`, { phase: "Phase 4: Peer Review", step: "Complete", progress: 58, details: `${supportedCount} verified claims` });
+            await this.log(`[PeerReviewer] Review complete: ${supportedCount} verified, ${unverifiedCount} unverified.`, { phase: "Phase 4: Peer Review", step: "Review Complete", progress: 58, details: `${supportedCount} verified` });
+            if (ctx.reviewReport?.novelty_check) {
+                await this.log(`[PeerReviewer] Novelty Check: ${ctx.reviewReport.novelty_check}`, { phase: "Phase 4: Peer Review", step: "Novelty Analysis", progress: 58 });
+            }
+            if (ctx.reviewReport?.critique) {
+                await this.log(`[PeerReviewer] Critique: ${ctx.reviewReport.critique.substring(0, 200)}...`, { phase: "Phase 4: Peer Review", step: "Critique", progress: 58 });
+            }
         }, {
             retries: 2,
             onFailedAttempt: async (error: any) => {

@@ -19,7 +19,13 @@ export const documentAnalysisSchema = z.object({
     title: z.string(),
     venue: z.string(),
     year: z.number()
-  })).optional()
+  })).optional(),
+  reviewReport: z.object({
+    supported_claims: z.array(z.any()),
+    unverified_claims: z.array(z.any()),
+    novelty_check: z.string().optional(),
+    critique: z.string().optional()
+  }).optional()
 });
 
 export type DocumentAnalysis = z.infer<typeof documentAnalysisSchema>;

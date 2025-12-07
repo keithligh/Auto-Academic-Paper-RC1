@@ -126,4 +126,24 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Structural Fix**: We replaced the regex patches with a **Robust Tokenizer**:
     1.  **Tokenizer**: "Find anything intent-like `(ref_...)` and split it by *any* separator." (Anti-Fragile).
     2.  **Merger**: "Systematically merge tokens `[1][2]` -> `[1, 2]`." (Best Practice).
+    2.  **Merger**: "Systematically merge tokens `[1][2]` -> `[1, 2]`." (Best Practice).
 -   **The Lesson**: If you are writing your 3rd regex fix for the same feature because of a new separator (`;` vs `,`), you need a **Parser**, not a patch. Parsers discover structure; Regexes demand it.
+
+## 16. The "Ghost Architecture" (Documentation vs Reality)
+-   **The Failure**: The documentation claimed algorithms were "styled code blocks", but the CSS (`.algorithm-wrapper`) **never existed**.
+-   **The Bandaid Trap**: When a feature looked broken, I intuitively tried to "patch" it without checking if the foundation existed.
+-   **The Root Cause**: A "Documentation/Code Gap". I assumed `latex-article.css` was complete because the *docs* said it was.
+-   **The Lesson**: **Don't Trust the Docs over the Code.** Before fixing a "style bug", verify the style class actually exists in the CSS file. If `grep` returns nothing, you aren't fixing a bug; you are implementing a missing feature.
+
+## 17. The CSS Reset Collision (Tailwind vs Manual Styles)
+-   **The Failure**: My manual list styles (`.latex-enumerate`) were being ignored. Numbers were invisible.
+-   **The Root Cause**: Tailwind's "Preflight" (reset.css) forces `ol { list-style: none; }` globally. This selector, while low specificity, combined with other utility classes or browser weirdness, was winning.
+-   **The Fix**: Aggressive use of `!important` in the component stylesheet (`latex-article.css`).
+-   **The Lesson**: **Frameworks are invasive.** When mixing a "Clean Slate" framework (Tailwind) with a "Legacy Style" component (LaTeX Preview), you must explicitly and aggressively override the framework's resets. Implicit specificity is often not enough.
+
+## 18. The "Dumb Formatter" Reality (Trojan Horse Redux)
+-   **The Insight**: `latex.js` is not a LaTeX engine; it is a text renderer that crashes on anything complex.
+-   **The Pattern**: We tried to "fix" its list rendering. It failed ("1Text" jamming).
+-   **The Shift**: We stopped trying to fix `latex.js` and instead **removed the feature from it**.
+-   **The Rule**: **If a library fails at a task twice, remove the task from the library.** Don't patch the library; patch the pipeline to bypass the library.
+

@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.14] - 2025-12-07
+### Fixed
+- **List Numbering (Enumerate)**: `latex.js` was rendering `enumerate` lists as "1Text" without dots or spacing.
+  - **Fix**: Implemented **Manual Leaf-First Recursive Parser** in `LatexPreview.tsx`.
+  - **Strategy**: Extracts `\begin{enumerate}` blocks, converts them to HTML `<ol>`, and bypasses `latex.js` entirely.
+  - **Styling**: Added aggressive `!important` overrides in `latex-article.css` to defeat Tailwind's global property resets.
+- **Algorithm Styling**: Algorithms were rendering as unstyled text because the CSS class was missing.
+  - **Fix**: Added `.algorithm-wrapper` styles to `latex-article.css`.
+  - **Logic**: Updated parser to rely on this class for grey background framing.
+
 ## [1.5.13] - 2025-12-07
 ### Fixed
 - **Citation Robustness (The Auditor Fix)**: "Universal Citation Processor" updated to a **Robust Tokenizer**.

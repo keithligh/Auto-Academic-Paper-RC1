@@ -235,25 +235,37 @@
     /* Align with text */
 }
 
-.list .item {
+.list .item,
+.enumerate .item {
     display: flex;
     align-items: baseline;
     margin-bottom: 0.5em;
     list-style: none;
 }
 
-.list .item>.itemlabel {
+
+
+/* Ensure the content takes up the rest of the space */
+.list .item>*:not(.itemlabel),
+.enumerate .item>*:not(.itemlabel) {
+    flex: 1;
+}
+
+/* Fix for Enumerate: Add dot and ensure spacing */
+.enumerate .item>.itemlabel::after {
+    content: ".";
+}
+
+/* Broaden selector to ensure Enumerate is caught even if .list is missing */
+.list .item>.itemlabel,
+.enumerate .item>.itemlabel {
     flex: 0 0 2em;
     /* Fixed width for the bullet */
-    margin-right: 0.5em;
+    margin-right: 0.5em !important;
+    /* Force gap */
     font-weight: bold;
     text-align: right;
     /* Aligns bullet properly */
-}
-
-/* Ensure the content takes up the rest of the space */
-.list .item>*:not(.itemlabel) {
-    flex: 1;
 }
 
 /* Handle nested lists indent */
@@ -339,4 +351,54 @@ ol {
 .latex-preview .katex-display::-webkit-scrollbar-thumb:hover,
 .katex-autoscale:hover::-webkit-scrollbar-thumb:hover {
     background: #555;
+}
+
+/* =============================================
+ * ALGORITHM STYLING
+ * ============================================= */
+.algorithm-wrapper {
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    padding: 1em;
+    margin: 1.5em 0;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    line-height: 1.4;
+    overflow-x: auto;
+}
+
+.algorithm-wrapper code {
+    white-space: pre-wrap;
+    /* Preserve indentation */
+    display: block;
+}
+
+/* =============================================
+ * MANUAL ENUMERATE STYLING
+ * ============================================= */
+ol.latex-enumerate {
+    list-style-type: decimal !important;
+    list-style-position: inside !important;
+    /* Prevent clipping */
+    margin: 1em 0 !important;
+    padding-left: 1em !important;
+    /* Ensure visibility */
+    display: block !important;
+}
+
+ol.latex-enumerate li {
+    display: list-item !important;
+    /* Override resets */
+    list-style-type: inherit !important;
+    margin-bottom: 0.5em !important;
+    padding-left: 0.5em !important;
+    /* Standard browser list rendering: "1. Text" */
+}
+
+ol.latex-enumerate ol.latex-enumerate {
+    list-style-type: lower-alpha !important;
+    /* Nested: a, b */
+    margin: 0.5em 0 !important;
+    padding-left: 1.5em !important;
 }
