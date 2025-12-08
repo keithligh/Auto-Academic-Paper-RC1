@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 @layer base {
+
   :root {
     /* "Paper & Ink" Color System - STRICT LIGHT MODE */
     --background: 0 0% 100%;
@@ -58,6 +59,8 @@
     @apply border-border;
   }
 
+
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     /* Paper texture hint */
@@ -82,4 +85,15 @@
 
 .ink-text {
   @apply text-primary font-serif;
+}
+
+/* Ensure dialog/modal portals also inherit the scaled font-size */
+[data-radix-portal],
+[role="dialog"] {
+  font-size: inherit;
+}
+
+/* Hide scrollbar but keep scrolling */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

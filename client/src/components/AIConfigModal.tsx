@@ -53,8 +53,8 @@ export function AIConfigModal({ trigger }: { trigger?: React.ReactNode }) {
                     </Button>
                 )}
             </DialogTrigger>
-            <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0 gap-0">
-                <DialogHeader className="p-6 pb-4 border-b">
+            <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+                <DialogHeader className="p-6 pb-4 border-b space-y-3">
                     <div className="flex items-center justify-between">
                         <div>
                             <DialogTitle className="text-2xl font-serif">AI Agent Configuration</DialogTitle>
@@ -62,54 +62,87 @@ export function AIConfigModal({ trigger }: { trigger?: React.ReactNode }) {
                                 Configure the "Bring Your Own Key" (BYOK) settings for each agent in the pipeline.
                             </DialogDescription>
                         </div>
-                        <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" onClick={resetConfig} className="text-muted-foreground">
-                                Reset Defaults
-                            </Button>
-                            <Button onClick={() => verifyConnection()} disabled={isVerifying}>
-                                {isVerifying ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                                Verify All
-                            </Button>
-                        </div>
+                        <Button variant="ghost" size="sm" onClick={resetConfig} className="text-muted-foreground">
+                            Reset Defaults
+                        </Button>
+                    </div>
+                    {/* Privacy Note - Single row for space efficiency */}
+                    <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md text-blue-800 text-sm">
+                        <Info className="w-4 h-4 flex-shrink-0" />
+                        <span><strong>100% Local:</strong> This app runs entirely on your machine. No remote servers. Only LLM API calls go online. Use Ollama for fully offline mode.</span>
                     </div>
                 </DialogHeader>
 
-                <div className="flex-1 overflow-hidden flex">
+                <div className="flex-1 flex overflow-hidden">
                     <Tabs value={activeTab} onValueChange={setActiveTab} orientation="vertical" className="flex-1 flex h-full">
                         <div className="w-64 border-r bg-muted/30 p-4 flex flex-col gap-2">
+                            {/* Verification Status Summary */}
+                            {(() => {
+                                const verifiedCount = [
+                                    config.writer.isVerified,
+                                    config.strategist.isVerified,
+                                    config.librarian.isVerified
+                                ].filter(Boolean).length;
+                                const allVerified = verifiedCount === 3;
+                                return (
+                                    <div className={`mb-4 p-3 rounded-lg border ${allVerified ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            {allVerified ? (
+                                                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                                            ) : (
+                                                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                                            )}
+                                            <span className={`text-sm font-semibold ${allVerified ? 'text-green-700' : 'text-amber-700'}`}>
+                                                {allVerified ? 'Ready to Use' : `${verifiedCount}/3 Verified`}
+                                            </span>
+                                        </div>
+                                        {!allVerified && (
+                                            <p className="text-[10px] text-amber-600 leading-tight">
+                                                Test each provider below before processing documents.
+                                            </p>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
                             <TabsList className="flex flex-col h-auto bg-transparent gap-2 w-full">
-                                <TabsTrigger value="writer" className="w-full justify-start px-4 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                                <TabsTrigger value="writer" className="w-full justify-between px-4 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
                                     <div className="text-left">
                                         <div className="font-semibold">The Writer</div>
                                         <div className="text-xs text-muted-foreground">Drafting & Editing</div>
                                     </div>
+                                    {config.writer.isVerified ? (
+                                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                        <XCircle className="w-4 h-4 text-muted-foreground/50" />
+                                    )}
                                 </TabsTrigger>
-                                <TabsTrigger value="strategist" className="w-full justify-start px-4 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                                <TabsTrigger value="strategist" className="w-full justify-between px-4 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
                                     <div className="text-left">
                                         <div className="font-semibold">The Strategist</div>
                                         <div className="text-xs text-muted-foreground">Critique & Planning</div>
                                     </div>
+                                    {config.strategist.isVerified ? (
+                                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                        <XCircle className="w-4 h-4 text-muted-foreground/50" />
+                                    )}
                                 </TabsTrigger>
-                                <TabsTrigger value="librarian" className="w-full justify-start px-4 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                                <TabsTrigger value="librarian" className="w-full justify-between px-4 py-3 data-[state=active]:bg-background data-[state=active]:shadow-sm">
                                     <div className="text-left">
                                         <div className="font-semibold">The Librarian</div>
                                         <div className="text-xs text-muted-foreground">Research & Fact Check</div>
                                     </div>
+                                    {config.librarian.isVerified ? (
+                                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                        <XCircle className="w-4 h-4 text-muted-foreground/50" />
+                                    )}
                                 </TabsTrigger>
                             </TabsList>
-
-                            <div className="mt-auto">
-                                <Alert className="bg-blue-50 border-blue-200 text-blue-800">
-                                    <Info className="w-4 h-4" />
-                                    <AlertTitle className="text-xs font-bold">Privacy Note</AlertTitle>
-                                    <AlertDescription className="text-[10px] leading-tight mt-1">
-                                        API keys are stored locally in your browser. They are never sent to our servers, only directly to the AI providers.
-                                    </AlertDescription>
-                                </Alert>
-                            </div>
                         </div>
 
-                        <div className="flex-1 p-6 overflow-y-auto">
+                        <div className="flex-1 p-6 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                             {/* STRATEGIST TAB */}
                             <TabsContent value="strategist" className="mt-0 space-y-6">
                                 <div className="flex items-center justify-between mb-4">

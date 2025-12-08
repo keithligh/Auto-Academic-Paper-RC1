@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2025-12-08 (Aggressive Typography & Layout Refinement)
+### Changed
+- **Aggressive Typography Upgrade ("125% Scale")**: Replaced the "Global 115% Hack" with a native component-level redesign.
+  - **Problem**: "Tiny UI" was unreadable. Global CSS zoom (`html { font-size: 115% }`) was rejected as a "dirty patch".
+  - **Solution**: Manually shifted all typography codes up by 2 steps.
+    - **Baseline**: `text-lg` (18px) is the new minimum for inputs/buttons.
+    - **Hero**: `text-8xl` (96px) for commanding presence.
+    - **Impact**: Achieves "Ctrl-+ twice" impact natively without browser zoom side-effects.
+- **Upload Zone "Squashed" Dimensions**: Recalibrated the center interaction area.
+  - **Metric**: `min-h-[360px]` → `min-h-[240px]` (height reduction).
+  - **Metric**: `max-w-4xl` → `max-w-3xl` (width reduction).
+  - **Reasoning**: The aggressive fonts made the container feel "too vast". Squashing it balances the visual weight of the large text.
+- **Layout Unification**: Removed the separator between Upload Zone and Features.
+  - **Metric**: Removed `border-t`, reduced padding `pt-10` → `pt-4`.
+  - **Result**: A cohesive single-view experience without artificial dividers.
+
+### Fixed
+- **Responsive Header Logo**: Restored functionality to abbreviate "Auto Academic Paper" to "AAP" on mobile.
+  - **Implementation**: `md:hidden` utility classes (no JS).
+- **Hero Alignment**: Fixed "Leaning Left" visual bug by enforcing `flex-col items-center` on the Hero container.
+
+## [1.7.0] - 2025-12-08 (Responsive AI Configuration)
+### Added
+- **Responsive AI Configuration Page**: Converted the AI Config modal to a dedicated `/config` page route.
+  - **Problem**: Modal dialogs are not mobile-friendly.
+  - **Solution**: Full-page design with accordion-style sections.
+- **"Same as Writer" Toggle**: Added switch in Strategist section to copy Writer's settings.
+### Removed
+- **AIConfigModal Usage**: Replaced with `/config` navigation.
+
 ## [1.6.26] - 2025-12-08
 ### Fixed
 - **TikZ Brace Polyfill (Vertical Artifacts)**: The manual brace polyfill (v1.6.21) assumed all braces were horizontal, applying Y-axis offsets. Vertical braces were rendered as straight lines or distorted loops (the "Vertical Line" artifact).

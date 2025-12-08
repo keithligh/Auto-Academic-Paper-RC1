@@ -261,3 +261,65 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
     2.  Verify the diff includes ONLY intended changes.
     3.  Test immediately after commit.
 - **The Lesson**: File editing is inherently destructive. Complex functions are fragile. Double-check diffs.
+
+### Lesson 33: The "Modal is Not Mobile-Friendly" Pattern (v1.7.0)
+- **Context**: The AI Configuration dialog was implemented as a modal popup. On mobile devices, this was a poor UX: cramped, hard to scroll, awkward touch targets.
+- **The User's Insight**: "Popups are not responsive. Very seldom do people use desktop now."
+- **The Solution**: Convert the modal to a dedicated `/config` page route.
+  - **Mobile Layout**: Accordion-style expandable cards (stacked vertically).
+  - **Desktop Layout**: Same accordion pattern in a centered container.
+  - **Reuse Context**: The existing `useAIConfig()` hook works identically on both modal and page.
+- **The Lesson**: **Modals are for Confirmations, Not Forms.** Complex configuration UIs should be full pages. Modals are appropriate for simple yes/no dialogs, not multi-step forms with dropdowns and inputs.
+
+### Lesson 34: The "Viewport Centering" Pattern (v1.7.0)
+- **Context**: The landing page content was pushed to the top, leaving excess whitespace at the bottom (visible on 1920×1080 screens).
+- **The Anti-Pattern (Bandaid)**: Hide scrollbar with CSS (`overflow: hidden`) while not fixing the layout.
+- **The Correct Solution**: Flexbox-based vertical centering.
+  - **Pattern**: 
+    ```css
+    main {
+      padding-top: 4rem;    /* fixed header offset */
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .content-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    ```
+  - **Key Insight**: Use `h-screen` on main container, `flex-1 justify-center` on inner wrapper.
+- **The Lesson**: **Don't hide layout problems; solve them structurally.** Vertical centering with Flexbox is a standard pattern. Use it instead of arbitrary padding/margin adjustments.
+
+### Lesson 35: The "Proper Spacing Reduction" Philosophy (v1.7.0)
+- **Context**: The scrollbar appeared because total content height exceeded viewport. The temptation was to simply hide it.
+- **The Anti-Pattern (Bandaid)**: `overflow: hidden`, `scrollbar-hide`, `scrollbarWidth: none`.
+- **The User's Stance**: "I hate bandaids and dirty patches."
+- **The Correct Solution**: Reduce actual content spacing to fit viewport:
+  - Hero margin: `mb-12` → `mb-6`
+  - Upload zone height: `min-h-[220px]` → `min-h-[180px]`
+  - Container spacing: `space-y-8` → `space-y-4`
+  - Feature cards gap: `gap-6` → `gap-4`
+  - Remove decorative separators (border-t)
+- **The Lesson**: **Fix the content, not the symptom.** If there's a scrollbar, the content is too tall. Reduce the content height. Hiding the scrollbar is like putting tape over a "Check Engine" light.
+
+### Lesson 36: The "Zoom Hack" Trap (or "Global vs Component Scaling")
+- **Context**: The user complained the UI was "tiny". The quick fix was `html { font-size: 115% }`.
+- **The Failure**: The user rejected this as a "dirty patch". Scaling everything globally creates pixelation, breaks 3rd party components (portals), and feels "cheap".
+- **The Insight**: When a user wants "Big UI", they want "Professional Big" (Design System choices), not "Zoomed In" (Browser hack).
+- **The Solution**: **Aggressive Component Scaling**.
+    - Shift the baseline: `text-sm` is banned. `text-lg` (18px) is the new normal.
+    - Component Resizing: Buttons go from `h-10` to `h-12` or `h-14`.
+- **The Lesson**: **Do not mimic the browser zoom.** Re-design the system tokens. It takes more work (changing 50 classes), but the result has "Dignity" and sharpness that a zoom hack lacks.
+
+### Lesson 37: The "Visual Weight" Paradox (The Squash Technique)
+- **Context**: After making fonts huge (`text-2xl`), the container felt "too big" and empty.
+- **The Instinct**: Reducing the font size back down using `text-xl` or `text-base`.
+- **The Mistake**: The user *wanted* the big text, but hated the big *box*.
+- **The Solution**: **Squash the Container.**
+    - Keep text large (`text-2xl`, `text-lg`).
+    - Drastically reduce padding/height (`360px` -> `240px`).
+- **The Insight**: Large typography needs *less* surrounding whitespace to feel balanced than small typography. Small text needs whitespace to breathe; large text *is* the structure.
+- **The Lesson**: **If it feels "too big", shrink the box, not the text.** High-Visibility UI combines Massive Fonts with Compact Containers.

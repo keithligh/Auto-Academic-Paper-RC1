@@ -194,5 +194,22 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
 -   **Character Walkers**: We use manual state-machine parsers/character-walkers that track brace depth and escape characters.
 -   **Reason**: To guarantee 100% no-fallback rendering for complex user input (e.g., code blocks inside lists, or escaped ampersands in tables).
 
-*Last Updated: 2025-12-07*
-*Version: 4.0 (6-Phase Research-First Pipeline)*
+### 12. Local-First Architecture (v1.7.0)
+-   **No Remote Servers**: The entire application runs locally on the user's machine. There is no "our servers".
+-   **External Calls**: Only LLM API calls leave the machine (to OpenAI, Anthropic, Poe, etc.).
+-   **Fully Offline Option**: Users can configure Ollama (local LLM) for complete offline operation.
+-   **Data Privacy**: API keys are stored in browser localStorage, never transmitted to any server except the configured AI providers.
+
+---
+
+## Client-Side Routing (v1.7.0)
+
+| Route | Component | Purpose |
+|-------|-----------|---------|
+| `/` | `LandingPage` | Upload zone, file staging, job configuration |
+| `/config` | `ConfigPage` | AI provider configuration (responsive accordion layout) |
+| `/processing/:id` | `ProcessingPage` | Live progress console during AI processing |
+| `/result/:id` | `ResultPage` | LaTeX preview with download options |
+
+*Last Updated: 2025-12-08*
+*Version: 5.0 (Local-First + Responsive UI)*

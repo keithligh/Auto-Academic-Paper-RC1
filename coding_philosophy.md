@@ -54,11 +54,18 @@ This document outlines the core coding philosophy and standards for the **Auto A
 ### 8. LOCAL-FIRST ARCHITECTURE
 **Ensure all data persistence is local and self-contained.**
 - **SQLite**: Use `better-sqlite3` with WAL mode for robust local data storage.
+
 ### 9. THE "CODE IS LAW" RULE (LATEX.JS CONTAINMENT)
 **Never Trust Latex.js with Complex Logic.**
 - **Strict Containment:** `latex.js` is a dumb text formatter. It must NEVER parse Math, TikZ, Tables, Algorithms, or Citations.
 - **The Trojan Horse:** Complex elements must be extracted, sanitized, and re-injected.
 - **Why**: `latex.js` is fragile. Trusting it with complex macros leads to crashes. We verify; we do not trust.
+
+### 10. INTENTIONAL DESIGN (NO GUESSWORK)
+**Precision over Force.**
+- **Don't Guess**: Never "try things" blindly. Understand the tokens (CSS, API, Logic) before applying changes.
+- **Language of Control**: Use precise terms ("Refactor", "Resize", "Recalibrate") instead of vague descriptors.
+- **Trust the Engineer**: The user expects a surgeon, not a butcher. Cut exactly where needed.
 
 
 ## 5. TOOL USAGE PROTOCOL (THE GOSPEL RULE)
