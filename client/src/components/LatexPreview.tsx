@@ -298,20 +298,30 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
       // Override/Inject generic optimal settings
       // We purposefully IGNORE existing x=/y= because they are likely the cause of the overlap.
-      extraOpts += `, x=${optimalUnit.toFixed(2)}cm, y=${optimalUnit.toFixed(2)}cm`;
+      // FIX (v1.6.6): Use smaller y value to prevent vertical offsets (like title positioning) from expanding too much
+      // FIX (v1.6.7): Reduced y from 1.0cm to 0.6cm for tighter title spacing
+      // FIX (v1.6.8): Aggressively reduced y to 0.35cm to eliminate massive title spacing
+      const xUnit = optimalUnit;
+      const yUnit = horizontalSpan > 0 ? optimalUnit : 0.35; // Use 0.35cm for y when using relative positioning
+      extraOpts += `, x=${xUnit.toFixed(2)}cm, y=${yUnit.toFixed(2)}cm`;
 
       // Ensure font is small enough to fit
       if (!options.includes('font=')) extraOpts += ', font=\\small';
 
       // RESTORED (v1.6.4): Support Relative/Cycling Diagrams
       // For diagrams using 'node distance' (not absolute coords), we must inject spacious defaults.
+      // FIX (v1.6.5): Use consistent targetDist calculation for both branches
+      const targetDist = isTextHeavy ? 8.4 : 5.0;
+
       if (!options.includes('node distance')) {
         // If we forced LARGE due to text density, we use the proven magic number
-        const targetDist = isTextHeavy ? 8.4 : 5.0;
         extraOpts += `, node distance=${targetDist}cm`;
       } else {
-        // If AI set a distance, we allow it but boost it if it's clearly too small for a cycle
-        if (nodeDist < 4.0) extraOpts += ', node distance=5cm';
+        // If AI set a distance, we allow it but boost it if it's too small
+        // Use same targetDist as above to ensure text-heavy diagrams get 8.4cm, not just 5cm
+        if (nodeDist < targetDist) {
+          extraOpts += `, node distance=${targetDist}cm`;
+        }
       }
 
       // Mandatory for Large
@@ -411,10 +421,26 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
     }
 
+    // LARGE INTENT: Strip node distance if we're overriding it (v1.6.5)
+    if (intent === 'LARGE') {
+      const targetDist = isTextHeavy ? 8.4 : 5.0;
+      const distMatch = options.match(/node distance\s*=\s*([\d\.]+)/);
+      if (distMatch) {
+        const existingDist = parseFloat(distMatch[1]);
+        if (existingDist < targetDist) {
+          // Remove old node distance value (it'll be replaced with targetDist)
+          processedOptions = processedOptions.replace(/,?\s*node distance\s*=\s*[\d.]+\s*(cm)?/gi, '');
+          // Clean up any double commas or leading/trailing commas
+          processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
+        }
+      }
+    }
+
     // Merge logic
     let finalOptions = processedOptions;
-    if (!finalOptions) {
-      finalOptions = extraOpts ? `[${extraOpts.replace(/^,/, '').trim()}]` : '[]';
+    // FIX (v1.6.5): Handle empty brackets after stripping (e.g., "[]" after removing node distance)
+    if (!finalOptions || finalOptions === '[]' || finalOptions.trim() === '[]') {
+      finalOptions = extraOpts ? `[${extraOpts.replace(/^,\s*/, '').trim()}]` : '[]';
     } else if (finalOptions.startsWith('[') && finalOptions.endsWith(']')) {
       finalOptions = finalOptions.slice(0, -1) + extraOpts + ']';
     } else {
