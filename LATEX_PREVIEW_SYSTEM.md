@@ -160,6 +160,11 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 - **Output**: We generate a standard HTML `<table>`.
 - **Injection**: `latex.js` sees a placeholder; we swap it for our HTML table.
 - **Math Safety (v1.5.4)**: Inner math `LATEXPREVIEWMATH` placeholders are recursively resolved via `resolvePlaceholders()` during cell parsing to ensure formulas appear correctly inside table cells.
+- **AI Double-Escape Chain Fix (v1.5.16)**: The AI sometimes generates `\&` (escaped ampersand) in table cells. The JSON escaping pipeline can double this to `\\&`, which the row splitter mistakenly interpreted as a row break (`\\`) followed by a column separator (`&`).
+  - **Root Cause**: `AI → \& → JSON escape → \\& → fixAIJsonEscaping → \\\\& → JSON.parse → \\&` (final string contains backslash-ampersand, but `smartSplitRows` saw `\\` as row break).
+  - **Fix**: `smartSplitRows()` now distinguishes between **Row Breaks** (`\\` followed by whitespace, newline, `[`, or end-of-string) and **Escaped Commands** (`\\X` where X is any character). This is a **structural parser** fix, not a regex bandaid.
+  - **Universal**: Handles ALL double-escaped LaTeX commands (`\\textit`, `\\textbf`, `\\%`, `\\$`, `\\#`) that pass through the AI/JSON chain.
+- **Thousand Separator Fix (v1.5.16)**: `{,}` (LaTeX thousand separator, e.g., `105{,}000`) is now converted to `,` in `parseLatexFormatting()`.
 
 
 ### 5. Bibliography Injection
@@ -670,3 +675,23 @@ We removed all artificial delays.
 3.  **Measurement Phase**: Scaling logic is wrapped in `requestAnimationFrame`. This is the *browser-native* way to say "Run this code immediately after the next paint, when layout metrics are valid."
 
 **Rule**: **NEVER use `setTimeout` for layout logic.** Always use `requestAnimationFrame` or `useLayoutEffect`.
+
+## 25. Client-Side Citation Rendering (v1.5.15)
+
+The server-side citation processor (`latexGenerator.ts`) outputs `\cite{ref_1,ref_2}` syntax. The client-side renderer (`LatexPreview.tsx`) must convert this to IEEE-style brackets.
+
+### The Problem (v1.5.14)
+The client renderer was producing `[1][2]` instead of `[1, 2]`.
+
+### Root Cause
+The citation handler was joining individual bracket labels with an empty string instead of grouping them into a single bracket.
+
+### The Fix
+Rewrote the `\cite{}` handler to:
+1.  Parse the comma-separated keys: `\cite{ref_1,ref_2}` → `['ref_1', 'ref_2']`
+2.  Look up each key in the `citationMap` to get the numeric ID.
+3.  Collect all valid IDs into a single array.
+4.  Join them with `, ` and wrap in a single bracket pair: `[1, 2]`.
+
+**Result**: `\cite{ref_1,ref_2}` now correctly renders as `[1, 2]` (IEEE/Nature style).
+

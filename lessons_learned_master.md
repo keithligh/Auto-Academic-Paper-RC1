@@ -185,3 +185,20 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 ## 24. The "Callback Scope" Trap
 - **Incident**: We defined a helper function `splitCells` inside the `parseTabular` callback, but tried to call it from `parseStandaloneTabular` in the outer scope, leading to `ReferenceError: splitCells is not defined`.
 - **Lesson**: **ALWAYS Define Shared Helpers at the Top Scope**. In complex monolithic renderers like `LatexPreview.tsx`, helper functions (parsers, sanitizers) must be hoisted to the top level of the component or extraction function to ensure they are available to all sub-routines. Do not trap utility logic inside specific environment handlers.
+
+## 25. The "AI JSON Double-Escape Chain" (v1.5.16)
+- **Incident**: Table cells containing escaped ampersands (e.g., "Fear \& Greed") were being split incorrectly across rows and columns, corrupting the table layout.
+- **Root Cause Analysis**:
+  1. AI generates LaTeX: `Fear \& Greed`
+  2. AI sends invalid JSON with `\&` (not a valid JSON escape sequence)
+  3. `fixAIJsonEscaping()` detects this and doubles the backslash: `\\&` (now valid JSON)
+  4. `JSON.parse()` converts `\\&` to the JavaScript string `\&` (backslash + ampersand)
+  5. The table row splitter `smartSplitRows()` sees `\` followed by `\` and interprets it as a row break `\\`
+  6. **Result**: Table row breaks where there should be none.
+- **The Failed Fix**: We initially tried to modify `fixAIJsonEscaping()` to NOT double-escape LaTeX characters. This **BROKE** the system because `fixAIJsonEscaping()` is essential for error recovery when AI sends malformed JSON.
+- **The Correct Fix**: We fixed it at the **consumption point**. `smartSplitRows()` now uses a **structural parser** that distinguishes between:
+  - **Row Break**: `\\` followed by whitespace, newline, `[`, or end-of-string
+  - **Escaped Command**: `\\X` where X is any character (normalizes to `\X`)
+- **Lesson**: **FIX AT CONSUMPTION, NOT GENERATION.** When dealing with AI output that passes through multiple escaping layers, do not try to "clean up" the intermediate representation. Fix the interpretation at the final consumer, using a stateful parser that understands context.
+- **Lesson 2**: **NEVER BREAK ERROR RECOVERY.** Functions like `fixAIJsonEscaping()` exist for robustness. Do not "optimize" them without understanding ALL the cases they protect against.
+
