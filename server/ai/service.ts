@@ -418,6 +418,7 @@ CRITICAL INSTRUCTIONS:
 - GENERATE ENHANCEMENTS: Add scholarly elements (diagrams, formulas, theorems, etc.).
 - NO NESTED SECTIONS: Do NOT use \\section commands inside the "content" field.
 - NO SECTION NUMBERING: Use "Introduction", NOT "1. Introduction".
+- ABSTRACT LENGTH: The abstract MUST be exactly 150-200 words. No shorter, no longer.
 - NO COLORS: Do NOT use \\textcolor or \\color.
 - Output valid JSON matching the schema.`;
 
@@ -426,7 +427,7 @@ CRITICAL INSTRUCTIONS:
 OUTPUT SCHEMA:
 {
   "title": "String",
-  "abstract": "String",
+  "abstract": "String (MUST be 150-200 words)",
   "sections": [{ "name": "String (NO NUMBERS)", "content": "LaTeX String (NO CITATIONS)" }],
   "references": [],
   "enhancements": [{ "type": "String", "title": "String", "description": "String", "content": "LaTeX", "location": "String", "reasoning": "String" }]
@@ -755,7 +756,7 @@ TASK:
 OUTPUT SCHEMA:
 {
   "title": "String",
-  "abstract": "String",
+  "abstract": "String (MUST be 150-200 words)",
   "sections": [{ "name": "String", "content": "LaTeX String (REWRITTEN)" }],
   "references": [],
   "enhancements": [preserve existing]
