@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.16] - 2025-12-08
+### Fixed
+- **Table Thousand Separators**: Numbers like `105{,}000` were rendering with literal `{,}` instead of `105,000`.
+  - **Root Cause**: Missing handler for LaTeX thousand separator pattern.
+  - **Fix**: Added `{,}` → `,` replacement in `parseLatexFormatting()`.
+- **Table `\&` Corruption**: Cells containing escaped ampersands (e.g., "Fear \& Greed") were being split incorrectly across rows and columns.
+  - **Root Cause Chain**: AI generates `\&` → JSON escaping doubles it → `fixAIJsonEscaping` doubles again → Result is `\\&` (row break + column sep).
+  - **Fix**: Added pre-normalization in `splitCells()` to convert `\\&` → `\&` before parsing. This is **robust** because it handles any AI that produces double-escaped ampersands.
+  - **Universal**: Applies to all future tables regardless of AI model or escaping behavior.
+
+## [1.5.15] - 2025-12-08
+### Fixed
+- **IEEE Citation Grouping**: Citations were rendering as `[1][2]` instead of `[1, 2]`.
+  - **Root Cause**: The client-side citation renderer was joining individual bracket labels with an empty string.
+  - **Fix**: Rewrote the `\cite{}` handler in `LatexPreview.tsx` to group all valid citation numbers into a single bracket pair.
+  - **Result**: `\cite{ref_1,ref_2}` now correctly renders as `[1, 2]` (IEEE/Nature style).
+
 ## [1.5.14] - 2025-12-07
 ### Fixed
 - **List Numbering (Enumerate)**: `latex.js` was rendering `enumerate` lists as "1Text" without dots or spacing.

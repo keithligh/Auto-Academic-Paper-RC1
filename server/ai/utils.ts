@@ -1,5 +1,10 @@
 /**
  * Fix JSON escaping issues from AI responses.
+ * 
+ * IMPORTANT: This function operates on RAW JSON strings, before JSON.parse().
+ * When AI outputs invalid escape sequences (like \& or \% for LaTeX),
+ * we double the backslash to make it valid JSON. This ensures:
+ * - `\&` (invalid) becomes `\\&` (valid) which parses to `\&` (correct)
  */
 export function fixAIJsonEscaping(jsonString: string): string {
     let result = '';
@@ -18,9 +23,12 @@ export function fixAIJsonEscaping(jsonString: string): string {
             if (char === '\\' && !escape) {
                 const nextChar = i < jsonString.length - 1 ? jsonString[i + 1] : '';
                 if (['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'].includes(nextChar)) {
+                    // Valid JSON escape sequence - mark as escaped
                     escape = true;
                     result += char;
                 } else {
+                    // Invalid JSON escape (like \& \% \#) - double the backslash to fix
+                    // This turns \& into \\& which is valid JSON, parsing to \&
                     result += '\\\\';
                     escape = false;
                 }
@@ -32,6 +40,7 @@ export function fixAIJsonEscaping(jsonString: string): string {
     }
     return result;
 }
+
 
 /**
  * Sanitize AI-generated LaTeX for the server-side compiler.

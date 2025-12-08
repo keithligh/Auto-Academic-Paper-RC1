@@ -100,6 +100,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       .replace(/\\approx/g, '&#8776;') // U+2248 ≈
       .replace(/\\,/g, '&thinsp;')
       .replace(/\{:\}/g, ':') // Strips {:} to : (Literal brace match)
+      .replace(/\{,\}/g, ',') // Strips {,} to , (LaTeX thousand separator)
       .replace(/\\:/g, ':') // Handle \: if present
       .replace(/\\\//g, '/'); // Convert escaped slash \/ to /
 
@@ -168,6 +169,12 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
     let safeTikz = tikzCode.replace(/[^\x00-\x7F]/g, '');
+
+    // FIX (v1.6.10): Escape ampersands in TikZ code using simpler direct approach
+    // LaTeX interprets & as alignment tab in tables. In TikZ node text, we need \&
+    // Direct pattern replacements (order matters!)
+    safeTikz = safeTikz.replace(/\\\\&/g, '\\\\ \\&'); // \\& → \\ \& (linebreak + space + escaped ampersand)
+    safeTikz = safeTikz.replace(/([^\\])&/g, '$1\\&'); // raw & → \& (but not already escaped)
 
     // GEOMETRIC POLYFILL: Manual Bezier Braces for TikZJax
     // TikZJax cannot handle decoration={brace}, so we draw it manually.
@@ -298,20 +305,30 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
       // Override/Inject generic optimal settings
       // We purposefully IGNORE existing x=/y= because they are likely the cause of the overlap.
-      extraOpts += `, x=${optimalUnit.toFixed(2)}cm, y=${optimalUnit.toFixed(2)}cm`;
+      // FIX (v1.6.6): Use smaller y value to prevent vertical offsets (like title positioning) from expanding too much
+      // FIX (v1.6.7): Reduced y from 1.0cm to 0.6cm for tighter title spacing
+      // FIX (v1.6.8): Aggressively reduced y to 0.35cm to eliminate massive title spacing
+      const xUnit = optimalUnit;
+      const yUnit = horizontalSpan > 0 ? optimalUnit : 0.35; // Use 0.35cm for y when using relative positioning
+      extraOpts += `, x=${xUnit.toFixed(2)}cm, y=${yUnit.toFixed(2)}cm`;
 
       // Ensure font is small enough to fit
       if (!options.includes('font=')) extraOpts += ', font=\\small';
 
       // RESTORED (v1.6.4): Support Relative/Cycling Diagrams
       // For diagrams using 'node distance' (not absolute coords), we must inject spacious defaults.
+      // FIX (v1.6.5): Use consistent targetDist calculation for both branches
+      const targetDist = isTextHeavy ? 8.4 : 5.0;
+
       if (!options.includes('node distance')) {
         // If we forced LARGE due to text density, we use the proven magic number
-        const targetDist = isTextHeavy ? 8.4 : 5.0;
         extraOpts += `, node distance=${targetDist}cm`;
       } else {
-        // If AI set a distance, we allow it but boost it if it's clearly too small for a cycle
-        if (nodeDist < 4.0) extraOpts += ', node distance=5cm';
+        // If AI set a distance, we allow it but boost it if it's too small
+        // Use same targetDist as above to ensure text-heavy diagrams get 8.4cm, not just 5cm
+        if (nodeDist < targetDist) {
+          extraOpts += `, node distance=${targetDist}cm`;
+        }
       }
 
       // Mandatory for Large
@@ -411,10 +428,26 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
     }
 
+    // LARGE INTENT: Strip node distance if we're overriding it (v1.6.5)
+    if (intent === 'LARGE') {
+      const targetDist = isTextHeavy ? 8.4 : 5.0;
+      const distMatch = options.match(/node distance\s*=\s*([\d\.]+)/);
+      if (distMatch) {
+        const existingDist = parseFloat(distMatch[1]);
+        if (existingDist < targetDist) {
+          // Remove old node distance value (it'll be replaced with targetDist)
+          processedOptions = processedOptions.replace(/,?\s*node distance\s*=\s*[\d.]+\s*(cm)?/gi, '');
+          // Clean up any double commas or leading/trailing commas
+          processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
+        }
+      }
+    }
+
     // Merge logic
     let finalOptions = processedOptions;
-    if (!finalOptions) {
-      finalOptions = extraOpts ? `[${extraOpts.replace(/^,/, '').trim()}]` : '[]';
+    // FIX (v1.6.5): Handle empty brackets after stripping (e.g., "[]" after removing node distance)
+    if (!finalOptions || finalOptions === '[]' || finalOptions.trim() === '[]') {
+      finalOptions = extraOpts ? `[${extraOpts.replace(/^,\s*/, '').trim()}]` : '[]';
     } else if (finalOptions.startsWith('[') && finalOptions.endsWith(']')) {
       finalOptions = finalOptions.slice(0, -1) + extraOpts + ']';
     } else {
@@ -701,8 +734,14 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
   content = content.replace(/\\cite\{([^}]+)\}/g, (m, key) => {
     const keys = key.split(',').map((k: string) => k.trim());
-    const labels = keys.map((k: string) => citationMap[k] ? `[${citationMap[k]}]` : `[?]`);
-    return labels.join('');
+    // IEEE Style: Group all valid citation numbers into a single bracket [1, 2]
+    const validNums = keys
+      .map((k: string) => citationMap[k])
+      .filter((n: number | undefined): n is number => n !== undefined);
+    if (validNums.length > 0) {
+      return `[${validNums.join(', ')}]`;
+    }
+    return '[?]';
   });
 
 
@@ -733,6 +772,10 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   };
 
   // HELPER: Smart Row Splitting (Brace-aware)
+  // CRITICAL: AI may double-escape ALL LaTeX commands due to JSON escaping chain.
+  // - Actual row break: \\ followed by whitespace, newline, [, or end of string
+  // - Double-escaped command: \\X where X is a letter (should be \X)
+  // - Double-escaped symbol: \\& \\% etc (should be \& \%)
   const smartSplitRows = (text: string): string[] => {
     const res: string[] = [];
     let buf = '';
@@ -744,10 +787,33 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
       // Detect \\ at depth 0
       if (depth === 0 && c === '\\' && text[i + 1] === '\\') {
-        res.push(buf);
-        buf = '';
-        i++; // Skip next slash
-        continue;
+        const nextAfterSlashes = text[i + 2];
+
+        // Determine if this is a ROW BREAK or a DOUBLE-ESCAPED COMMAND
+        // Row break: \\ followed by whitespace, [, newline, or end of string
+        // Double-escaped: \\ followed by a letter or special char (&, %, #, etc)
+        const isRowBreak =
+          nextAfterSlashes === undefined ||  // End of string
+          nextAfterSlashes === '\n' ||        // Newline
+          nextAfterSlashes === '\r' ||        // Carriage return
+          nextAfterSlashes === ' ' ||         // Space
+          nextAfterSlashes === '\t' ||        // Tab
+          nextAfterSlashes === '[' ||         // Optional arg for row height
+          nextAfterSlashes === '\\';          // Another \\ (consecutive row breaks)
+
+        if (isRowBreak) {
+          // Actual row break
+          res.push(buf);
+          buf = '';
+          i++; // Skip second slash
+          continue;
+        } else {
+          // Double-escaped command - normalize to single backslash
+          // \\textit -> \textit, \\& -> \&, etc.
+          buf += '\\';
+          i++; // Skip to second slash, which becomes part of the command
+          continue;
+        }
       }
       buf += c;
     }
@@ -757,20 +823,26 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
   // HELPER: Robust Cell Splitter (Manual Character Walker)
   // "Scorched Earth" Policy: No regex for structural parsing.
+  // NOTE: AI may generate \\& due to JSON escaping chain. We normalize this first.
   const splitCells = (row: string): string[] => {
+    // PRE-NORMALIZATION: Handle AI double-escape issue
+    // \\& (double backslash + amp) should be treated as \& (escaped amp)
+    // This happens when AI outputs \& in LaTeX, JSON encodes as \\&, then fixAIJsonEscaping doubles it.
+    let normalizedRow = row.replace(/\\\\&/g, '\\&');
+
     const cells: string[] = [];
     let currentCell = '';
     let depth = 0;
     let i = 0;
 
-    while (i < row.length) {
-      const char = row[i];
+    while (i < normalizedRow.length) {
+      const char = normalizedRow[i];
 
       if (char === '\\') {
         // Escape detected: treat next char as literal (even if it is & or { or })
         currentCell += char;
-        if (i + 1 < row.length) {
-          currentCell += row[i + 1];
+        if (i + 1 < normalizedRow.length) {
+          currentCell += normalizedRow[i + 1];
           i++; // skip next char
         }
       } else if (char === '{') {
