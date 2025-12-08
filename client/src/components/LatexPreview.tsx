@@ -1342,14 +1342,22 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   });
   content = content.replace(/\\begin\{proof\}([\s\S]*?)\\end\{proof\}/g, (m, body) => `\n\n\\textit{Proof:} ${body} \u220E\n\n`);
 
-  // --- J2. PARAGRAPH/SUBPARAGRAPH ---
+  // --- J2. SECTION STAR NORMALIZATION ---
+  // latex.js has issues with starred section variants (\section*, \subsection*, etc.)
+  // Strip the stars to ensure compatibility
+  content = content
+    .replace(/\\section\*/g, '\\section')
+    .replace(/\\subsection\*/g, '\\subsection')
+    .replace(/\\subsubsection\*/g, '\\subsubsection');
+
+  // --- J3. PARAGRAPH/SUBPARAGRAPH ---
   // Ensure they look like headers (Bold, Run-in)
   // Fix: Handle \paragraph*{Title} and optional spaces
   content = content
     .replace(/\\paragraph\*?\{([^{}]*)\}/g, '\n\n\\vspace{1em}\\noindent\\textbf{$1} ')
     .replace(/\\subparagraph\*?\{([^{}]*)\}/g, '\n\n\\noindent\\textbf{$1} ');
 
-  // --- J3. MARKDOWN-STYLE BULLETS FIX ---
+  // --- J4. MARKDOWN-STYLE BULLETS FIX ---
   // Convert Markdown bullets (*   item) to LaTeX itemize
   // This handles invalid LaTeX where users mix Markdown syntax
   content = content.replace(/(?:^|\n)((?:\*   .*(?:\n|$))+)/gm, (match, bullets) => {
@@ -1443,27 +1451,35 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
         const { sanitized, blocks, bibliographyHtml } = sanitizeLatexForBrowser(latexContent);
 
         // DEBUG: Log sanitized content to diagnose \end{document} missing error
-        console.log('=== SANITIZED LATEX (length:', sanitized.length, ') ===');
-        console.log(sanitized.substring(0, 500));
-        console.log('...');
-        console.log(sanitized.substring(sanitized.length - 500));
-        console.log('=== END SANITIZED LATEX ===');
-        console.log('Has \\end{document}?', sanitized.includes('\\end{document}'));
+        console.log('=== FULL SANITIZED LATEX ===');
+        console.log(sanitized);
+        console.log('=== END FULL SANITIZED LATEX ===');
 
-        // Check for balanced environments
-        const beginCount = (sanitized.match(/\\begin\{/g) || []).length;
-        const endCount = (sanitized.match(/\\end\{/g) || []).length;
-        console.log('Environment balance check: \\begin count =', beginCount, ', \\end count =', endCount);
+        // Check for all environments
+        const allBeginEnvs = sanitized.match(/\\begin\{([^}]+)\}/g) || [];
+        const allEndEnvs = sanitized.match(/\\end\{([^}]+)\}/g) || [];
+        console.log('All \\begin environments:', allBeginEnvs);
+        console.log('All \\end environments:', allEndEnvs);
 
-        // Check for unclosed environments
-        const environments = ['itemize', 'enumerate', 'table', 'figure', 'equation', 'align'];
-        environments.forEach(env => {
-          const beginMatches = (sanitized.match(new RegExp(`\\\\begin\\{${env}\\}`, 'g')) || []).length;
-          const endMatches = (sanitized.match(new RegExp(`\\\\end\\{${env}\\}`, 'g')) || []).length;
-          if (beginMatches !== endMatches) {
-            console.error(`UNBALANCED ${env}: ${beginMatches} begins, ${endMatches} ends`);
-          }
-        });
+        // Check for problematic patterns that break latex.js
+        const issues: string[] = [];
+
+        // Check for duplicate sections
+        const sectionMatches = sanitized.match(/\\section\{[^}]*\}/g) || [];
+        const sectionTitles = sectionMatches.map(s => s.match(/\\section\{([^}]*)\}/)?.[1]);
+        const duplicateSections = sectionTitles.filter((title, index) => sectionTitles.indexOf(title) !== index);
+        if (duplicateSections.length > 0) {
+          issues.push(`Duplicate sections: ${duplicateSections.join(', ')}`);
+        }
+
+        // Check for subsection* commands (latex.js might not support starred variants well)
+        if (sanitized.includes('\\subsection*')) {
+          issues.push('Found \\subsection* (starred variant)');
+        }
+
+        if (issues.length > 0) {
+          console.error('POTENTIAL ISSUES:', issues);
+        }
 
         const generator = new latexjs.HtmlGenerator({ hyphenate: false });
 
