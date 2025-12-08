@@ -1349,6 +1349,22 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     .replace(/\\paragraph\*?\{([^{}]*)\}/g, '\n\n\\vspace{1em}\\noindent\\textbf{$1} ')
     .replace(/\\subparagraph\*?\{([^{}]*)\}/g, '\n\n\\noindent\\textbf{$1} ');
 
+  // --- J3. MARKDOWN-STYLE BULLETS FIX ---
+  // Convert Markdown bullets (*   item) to LaTeX itemize
+  // This handles invalid LaTeX where users mix Markdown syntax
+  content = content.replace(/(?:^|\n)((?:\*   .*(?:\n|$))+)/gm, (match, bullets) => {
+    // Extract individual bullet items
+    const items = bullets.trim().split(/\n/).map((line: string) => {
+      return line.replace(/^\*   /, '').trim();
+    }).filter((item: string) => item.length > 0);
+
+    if (items.length === 0) return match;
+
+    // Convert to LaTeX itemize
+    const latexItems = items.map((item: string) => `  \\item ${item}`).join('\n');
+    return `\n\\begin{itemize}\n${latexItems}\n\\end{itemize}\n`;
+  });
+
   // --- K. COMMAND STRIPPING (Strict Containment) ---
   // Architecture Rule: "Code is Law" - Dangerous macros must be intercepted.
   content = content
