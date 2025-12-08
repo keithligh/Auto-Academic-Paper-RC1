@@ -8,8 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.3] - 2025-12-08 (Sophisticated Terminology)
+### Changed
+- **Processing Page Labels**: User rejected "abstract" labels ("Drafting", "Research").
+  - **New Terminology**: Implemented "Sophisticated Active Verbs" to reflect technical depth:
+    1. Formulating Execution Strategy
+    2. Conducting Online Research
+    3. Synthesizing Core Arguments
+    4. Executing AI Peer Review
+    5. Verify and Injecting Citations
+    6. Compiling LaTeX Source
+  - **Reasoning**: The UI must communicate the *complexity* of the work, not just the status. Simple nouns felt "uninspiring".
+
+## [1.7.2] - 2025-12-08 (Progress Logic Alignment)
+### Fixed
+- **Stuck Progress Bar**: The progress indicator was stuck at "Phase 1" despite logs showing advanced activity.
+  - **Root Cause**: **Frontend-Backend State Desynchronization**. The frontend regex was listening for the old 5-Phase signal (`[Phase X/5]`), but the backend `service.ts` had been upgraded to a 6-Phase pipeline (`[Phase X/6]`).
+  - **Correction**: Updated `ProcessingPage.tsx` regex to match `Page X/6` and specific role keywords (`[Thinker]`, `[Librarian]`).
+  - **Lesson**: When refactoring backend pipelines, *always* audit the frontend listeners.
+
 ## [1.7.1] - 2025-12-08 (Aggressive Typography & Layout Refinement)
 ### Changed
+- **Wide-Format Dashboard**: Processing Page felt "cramped" and "tall".
+  - **Correction**: Increased container width from `max-w-4xl` to **`max-w-6xl`**.
+  - **Geometric Integrity**: Enforced `aspect-square` on step indicators to prevent "vertical rectangle" distortion.
 - **Aggressive Typography Upgrade ("125% Scale")**: Replaced the "Global 115% Hack" with a native component-level redesign.
   - **Problem**: "Tiny UI" was unreadable. Global CSS zoom (`html { font-size: 115% }`) was rejected as a "dirty patch".
   - **Solution**: Manually shifted all typography codes up by 2 steps.
@@ -469,6 +491,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2025-11-29
 ### Added
-- Initial migration to Railway and Poe API.
-- Basic LaTeX rendering with `latex.js`.
-- "Draft Mode" for handling cases with no research data.
+- **Initial migration to Railway and Poe API**.
+- **Basic LaTeX rendering with `latex.js`**.
+- **"Draft Mode" for handling cases with no research data**.

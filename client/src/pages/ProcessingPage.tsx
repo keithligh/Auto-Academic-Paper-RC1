@@ -8,16 +8,18 @@ import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ConversionJob } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle2, Terminal, Loader2, Clock } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Terminal, Loader2, Clock, ArrowLeft } from "lucide-react";
 
 // Micro-steps for the UI visualization
+// Mapped to the 6-Phase AI Pipeline (server/ai/service.ts)
+// FINAL DEFINITIVE LABELS per User Request
 const MICRO_STEPS = [
-    { id: "init", label: "Upload & Extract", duration: 3000 },
-    { id: "thinker", label: "Phase 1: Thinker", duration: 8000 },
-    { id: "critic", label: "Phase 2: Critic", duration: 4000 },
-    { id: "librarian", label: "Phase 3: Librarian", duration: 6000 },
-    { id: "editor", label: "Phase 4: Editor", duration: 6000 },
-    { id: "compiler", label: "Phase 5: Compiler", duration: 2000 },
+    { id: "init", label: "Formulating Execution Strategy", duration: 3000 },      // Phase 1
+    { id: "research", label: "Conducting Online Research", duration: 8000 },      // Phase 2
+    { id: "draft", label: "Synthesizing Core Arguments", duration: 6000 },        // Phase 3
+    { id: "review", label: "Executing AI Peer Review", duration: 6000 },          // Phase 4 & 5
+    { id: "edit", label: "Verify and Injecting Citations", duration: 6000 },      // Phase 6 (Specific User Wording)
+    { id: "compile", label: "Compiling LaTeX Source", duration: 2000 },           // Compilation
 ];
 
 export default function ProcessingPage() {
@@ -105,19 +107,31 @@ export default function ProcessingPage() {
         let newStepIndex = 0;
 
         // Determine step based on log content
-        // Determine step based on log content
-        if (logString.includes("[Phase 5/5]")) {
-            newStepIndex = 5; // Compiler
-        } else if (logString.includes("[Phase 4/5]")) {
-            newStepIndex = 4; // Editor
-        } else if (logString.includes("[Phase 3/5]")) {
-            newStepIndex = 3; // Librarian
-        } else if (logString.includes("[Phase 2/5]")) {
-            newStepIndex = 2; // Critic
-        } else if (logString.includes("[Phase 1/5]")) {
-            newStepIndex = 1; // Thinker
-        } else {
-            newStepIndex = 0; // Upload & Extract
+        // MAPPING STRATEGY: Check for highest phase first
+
+        // Step 5: Compiling LaTeX Source
+        if (logString.includes("Generating LaTeX") || logString.includes("LaTeX generation successful")) {
+            newStepIndex = 5;
+        }
+        // Step 4: Verify and Injecting Citations (Phase 6: Editor)
+        else if (logString.includes("[Phase 6/6]") || logString.includes("[Editor]")) {
+            newStepIndex = 4;
+        }
+        // Step 3: Executing AI Peer Review (Phase 4 & 5: Critic/Rewriter)
+        else if (logString.includes("[Phase 5/6]") || logString.includes("[Phase 4/6]") || logString.includes("[Rewriter]") || logString.includes("[Critic]")) {
+            newStepIndex = 3;
+        }
+        // Step 2: Synthesizing Core Arguments (Phase 3: Thinker)
+        else if (logString.includes("[Phase 3/6]") || logString.includes("[Thinker]")) {
+            newStepIndex = 2;
+        }
+        // Step 1: Conducting Online Research (Phase 2: Librarian)
+        else if (logString.includes("[Phase 2/6]") || logString.includes("[Librarian]")) {
+            newStepIndex = 1;
+        }
+        // Step 0: Formulating Execution Strategy (Init + Phase 1: Strategist)
+        else {
+            newStepIndex = 0;
         }
 
         setActiveStepIndex(newStepIndex);
@@ -139,12 +153,12 @@ export default function ProcessingPage() {
                         <AlertTriangle className="w-8 h-8 text-red-600" />
                     </div>
                     <div className="space-y-2">
-                        <h3 className="text-xl font-serif font-bold text-red-900">Job Not Found</h3>
-                        <p className="text-sm text-red-700 leading-relaxed">
+                        <h3 className="text-2xl font-serif font-bold text-red-900">Job Not Found</h3>
+                        <p className="text-base text-red-700 leading-relaxed">
                             The conversion job could not be found. The server may have restarted or the ID is invalid.
                         </p>
                     </div>
-                    <Button onClick={() => setLocation("/")} variant="outline" className="w-full border-red-200 text-red-900 hover:bg-red-100">
+                    <Button onClick={() => setLocation("/")} variant="outline" size="lg" className="w-full border-red-200 text-red-900 hover:bg-red-100">
                         Return Home
                     </Button>
                 </div>
@@ -154,42 +168,54 @@ export default function ProcessingPage() {
 
     return (
         <div className="min-h-screen bg-white text-foreground font-sans selection:bg-gray-100">
-            {/* Header */}
+            {/* Header - High Visibility */}
             <header className="fixed top-0 w-full bg-white/90 backdrop-blur-sm border-b border-gray-100 z-50">
-                <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-                    <span
-                        className="font-serif font-bold text-lg tracking-tight cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={() => setLocation("/")}
-                    >
-                        Auto Academic Paper
-                    </span>
-                    <div className="flex items-center gap-2 text-xs font-mono text-gray-400">
-                        <span>STATUS: {job?.status?.toUpperCase() || "CONNECTING..."}</span>
-                        <div className={`w-2 h-2 rounded-full ${job?.status === 'processing' ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
+                {/* WIDENED HEADER TO match main content */}
+                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setLocation("/")}
+                            className="md:hidden h-12 w-12"
+                        >
+                            <ArrowLeft className="w-6 h-6" />
+                        </Button>
+                        <span
+                            className="font-serif font-bold text-2xl tracking-tight cursor-pointer hover:opacity-80 transition-opacity hidden md:block"
+                            onClick={() => setLocation("/")}
+                        >
+                            Auto Academic Paper
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm font-mono text-gray-500 bg-gray-50 px-3 py-1.5 rounded-md">
+                        <span className="font-semibold">STATUS: {job?.status?.toUpperCase() || "CONNECTING..."}</span>
+                        <div className={`w-3 h-3 rounded-full ${job?.status === 'processing' ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
                     </div>
                 </div>
             </header>
 
-            <main className="pt-32 pb-12 px-6 max-w-4xl mx-auto space-y-12">
+            {/* UPGRADED TO max-w-6xl for wider stance */}
+            <main className="pt-32 pb-16 px-6 max-w-6xl mx-auto space-y-12">
 
-                {/* 1. Status Heading */}
-                <div className="text-center space-y-4">
-                    <h1 className="text-3xl md:text-4xl font-serif font-bold text-gray-900 text-center mx-auto">
+                {/* 1. Status Heading - Scaled Up */}
+                <div className="text-center space-y-6">
+                    <h1 className="text-4xl md:text-5xl font-serif font-bold text-gray-900 text-center mx-auto tracking-tight">
                         {job?.status === 'failed' ? 'Processing Failed' : 'Transforming into Academic Paper'}
                     </h1>
-                    <p className="text-gray-500 font-sans text-center mx-auto">
+                    <p className="text-xl text-gray-500 font-sans text-center mx-auto max-w-2xl">
                         {job?.originalFileName || "Document"}
                     </p>
                     {job?.status === 'processing' && (
-                        <div className="h-6 overflow-hidden">
-                            <p className="text-sm text-blue-600 font-medium transition-all duration-500">
+                        <div className="h-8 overflow-hidden">
+                            <p className="text-lg text-blue-600 font-medium transition-all duration-500">
                                 {statusMessage}
                             </p>
                         </div>
                     )}
                 </div>
 
-                {/* 2. Micro-Steps Visualization */}
+                {/* 2. Micro-Steps Visualization - SQUARE ASPECT RATIO & WIDER */}
                 <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                     {MICRO_STEPS.map((step, index) => {
                         const isActive = index === activeStepIndex;
@@ -197,21 +223,22 @@ export default function ProcessingPage() {
 
                         return (
                             <div key={step.id} className={`
-                relative flex flex-col items-center p-4 rounded-lg border transition-all duration-500
-                ${isActive ? 'border-black bg-gray-50 shadow-sm scale-105 z-10' : 'border-gray-100 bg-white'}
+                relative flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-500 aspect-square
+                ${isActive ? 'border-black bg-gray-50 shadow-md scale-105 z-10' : 'border-gray-100 bg-white'}
                 ${isCompleted ? 'border-gray-200' : ''}
               `}>
                                 <div className={`
-                  w-8 h-8 rounded-full flex items-center justify-center mb-3 transition-colors duration-300
+                  w-12 h-12 rounded-full flex items-center justify-center mb-3 transition-colors duration-300
                   ${isActive ? 'bg-black text-white' : ''}
                   ${isCompleted ? 'bg-gray-100 text-gray-600' : ''}
                   ${!isActive && !isCompleted ? 'bg-gray-50 text-gray-300' : ''}
                 `}>
-                                    {isCompleted ? <CheckCircle2 className="w-5 h-5" /> :
-                                        isActive ? <Loader2 className="w-4 h-4 animate-spin" /> :
-                                            <span className="text-xs font-mono">{index + 1}</span>}
+                                    {isCompleted ? <CheckCircle2 className="w-8 h-8" /> :
+                                        isActive ? <Loader2 className="w-7 h-7 animate-spin" /> :
+                                            <span className="text-xl font-mono font-bold">{index + 1}</span>}
                                 </div>
-                                <span className={`text-xs font-medium text-center ${isActive ? 'text-black' : 'text-gray-400'}`}>
+                                {/* Updated to Final User Request Version */}
+                                <span className={`text-sm font-bold text-center leading-tight ${isActive ? 'text-black' : 'text-gray-400'}`}>
                                     {step.label}
                                 </span>
                             </div>
@@ -219,17 +246,17 @@ export default function ProcessingPage() {
                     })}
                 </div>
 
-                {/* 3. Live Activity Log (Console) */}
-                <div className="space-y-2">
+                {/* 3. Live Activity Log (Console) - High Visibility Mode */}
+                <div className="space-y-3">
                     <div className="flex items-center justify-between px-1">
-                        <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                            <Terminal className="w-4 h-4" />
+                        <div className="flex items-center gap-2 text-base font-semibold text-gray-700">
+                            <Terminal className="w-5 h-5" />
                             <span>Activity Log</span>
                         </div>
                         {stallWarning && (
-                            <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full animate-pulse">
-                                <Clock className="w-3 h-3" />
-                                <span className="hidden md:inline">Deep research in progress... this may take a moment.</span>
+                            <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 px-3 py-1.5 rounded-full animate-pulse border border-amber-100">
+                                <Clock className="w-4 h-4" />
+                                <span className="hidden md:inline font-medium">Deep research in progress... this may take a moment.</span>
                                 <span className="md:hidden">Processing...</span>
                             </div>
                         )}
@@ -237,7 +264,7 @@ export default function ProcessingPage() {
 
                     <div
                         ref={logContainerRef}
-                        className="h-64 bg-gray-900 rounded-xl p-4 overflow-y-auto font-mono text-xs text-gray-300 shadow-inner scroll-smooth"
+                        className="h-80 bg-gray-950 rounded-xl p-6 overflow-y-auto font-mono text-sm text-gray-300 shadow-inner scroll-smooth border border-gray-800"
                     >
                         {logs.map((log, i) => {
                             const splitIndex = log.indexOf(']');
@@ -245,28 +272,28 @@ export default function ProcessingPage() {
                             const message = splitIndex > -1 ? log.substring(splitIndex + 1) : log;
 
                             return (
-                                <div key={i} className="py-0.5 border-l-2 border-transparent hover:border-gray-700 pl-2 transition-colors">
-                                    <span className="text-gray-500 mr-2">{timestamp}</span>
+                                <div key={i} className="py-1 border-l-2 border-transparent hover:border-gray-700 pl-3 transition-colors flex">
+                                    <span className="text-gray-500 mr-3 flex-shrink-0 w-32">{timestamp}</span>
                                     <span className="text-gray-100">{message}</span>
                                 </div>
                             );
                         })}
                         {job?.status === 'processing' && (
-                            <div className="py-0.5 pl-2 animate-pulse text-gray-500">
+                            <div className="py-1 pl-3 animate-pulse text-gray-500 font-bold text-lg">
                                 _
                             </div>
                         )}
                     </div>
                 </div>
 
-                {/* 4. Actions / Error Recovery */}
+                {/* 4. Actions / Error Recovery - Scaled Up */}
                 {job?.status === 'failed' && (
-                    <div className="bg-red-50 border border-red-100 rounded-xl p-6 flex items-center justify-between">
-                        <div className="space-y-1">
-                            <h4 className="font-medium text-red-900">Processing Error</h4>
-                            <p className="text-sm text-red-700">{job.error}</p>
+                    <div className="bg-red-50 border border-red-100 rounded-xl p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                        <div className="space-y-2 text-center md:text-left">
+                            <h4 className="font-bold text-xl text-red-900">Processing Error</h4>
+                            <p className="text-base text-red-700 max-w-xl">{job.error}</p>
                         </div>
-                        <Button onClick={() => setLocation("/")} variant="destructive">
+                        <Button onClick={() => setLocation("/")} variant="destructive" size="lg" className="h-12 px-8 text-lg font-medium shadow-md hover:shadow-lg transition-all w-full md:w-auto">
                             Try Again
                         </Button>
                     </div>
