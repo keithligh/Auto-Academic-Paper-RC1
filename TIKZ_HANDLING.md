@@ -158,7 +158,7 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 - **FLAT** takes second priority (aspect ratio distortion is visually severe)
 
 #### E. The Safety Nets (Hidden Logic)
-1.  **The 5cm Safety Net**: In LARGE mode, if an explicit distance is `< 4.0cm`, it is forcibly boosted to `5.0cm` to prevent cramping.
+1.  **The Text-Heavy Safety Net (v1.6.5)**: In LARGE mode, if an explicit distance is less than the target distance (8.4cm for text-heavy diagrams, 5.0cm for normal), it is **stripped and replaced** with the target distance to prevent cramping. This ensures text-heavy cycle diagrams get adequate spacing (8.4cm) rather than the generic fallback (5.0cm).
 2.  **The Goldilocks Protocol (Universal v1.5.8)**: For diagrams that are **Text Heavy**, we apply a **Global Coordinate Boost** (`x=2.2cm`) ONLY if:
     -   Average text/node > 30 chars
     -   **AND** `horizontalSpan < 7` (Index-based/Small)
