@@ -5,7 +5,7 @@ import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { ConversionJob } from "@shared/schema";
-import { SplitPreview } from "@/components/SplitPreview";
+import { UnifiedResultView } from "@/components/UnifiedResultView";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 
@@ -71,7 +71,7 @@ export default function ResultPage() {
             </header>
 
             <main className="container mx-auto py-8 px-6">
-                <SplitPreview
+                <UnifiedResultView
                     originalContent={job.originalContent || ""}
                     latexContent={job.latexContent || ""}
                     fileName={job.originalFileName}

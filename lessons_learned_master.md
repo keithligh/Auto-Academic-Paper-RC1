@@ -340,4 +340,23 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
     -   "Drafting" -> "Synthesizing Core Arguments"
     -   "Review" -> "Executing AI Peer Review"
     -   "Formatting" -> "Verify and Injecting Citations"
--   **The Lesson**: **Language is UI.** The words you choose determine the perceived value of the tool. "Drafting" sounds like homework; "Synthesizing Core Arguments" sounds like Science.
+### Lesson 40: The "Ephemeral Options" Finding (Zero Schema Risk)
+-   **Context**: We investigated persisting `generationMode` in the database.
+-   **The Finding**: `advancedOptions` are currently passed in-memory and not stored. Adding a column requires a DB migration, which carries risk.
+-   **The Decision**: **Accept the Limitation.** If a user manually retries a job via API, they lose the flag. This is a rare edge case.
+-   **The Lesson**: **Don't touch the DB unless absolutely necessary.** "Zero DB Risk" is often worth the trade-off of minor feature limitations (like non-persisted settings on manual retry).
+
+### Lesson 41: The "Full Context Propagation" Discovery (vs Summarization)
+-   **Context**: Planning the "Long Form" iterative generation.
+-   **The Assumption**: We need to summarize previous sections to save tokens.
+-   **The Reality**: Modern "weak" models (Haiku, Flash) have massive *input* windows (100k+).
+-   **The Strategy**: **Don't Summarize. Propagate.** Pass the *entire* accumulated draft to the next step.
+-   **The Lesson**: **Hardware capabilities change architecture.** Old constraints (4k input) forced complexity (summarization). New capabilities (100k input) allow simplicity (brute force context).
+
+### Lesson 42: The "Redundancy is Distraction" Principle (UI Cleanup)
+-   **Context**: The Result Page had a "Document Editor" header *above* the pane headers "Source" and "Live Preview".
+-   **The User's Feedback**: "Merge these. Too redundant."
+-   **The Logic**: If you have a global header, you don't need local headers repeating the context.
+-   **The Fix**: Consolidated all controls into one bar.
+-   **The Lesson**: **Every vertical pixel costs cognitive load.** If a header doesn't offer a unique control, kill it. Use visual hierarchy (active state), not text labels, to distinguish panes.
+

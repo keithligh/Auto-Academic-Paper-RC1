@@ -6,7 +6,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.8.0] - 2025-12-08 (Architecture & UI Refinement)
+### Added
+- **Future Development Plan**: Archived the "Iterative Long-Form Generation" strategy (The Architect/Mason/Artist pipeline) to `docs/future_development_plan.md`.
+  - **Reasoning**: Feature deferred, but the detailed architectural planning (including "Full Context Propagation" findings) is valuable and preserved.
+
+### Changed
+- **Unified Result View**: Renamed `SplitPreview` component to `UnifiedResultView` to reflect the removal of side-by-side mode.
+  - **Impact**: Purely semantic refactor for codebase clarity.
+- **UI Header Consolidation**: Merged redundant "Document Editor" headers in the Result Page.
+  - **Metric**: Reduced vertical header usage by ~50px.
+  - **Action**: Consolidated "Original | LaTeX" toggle and "Copy/Preview" controls into a single top-level toolbar.
+  - **Removal**: Deleted the "Document Editor" label as per user feedback ("It is not an editor").
+
+## [1.7.4] - 2025-12-08 (Persistence Investigation)
+### Investigated
+- **Database Persistence**: Confirmed that `advancedOptions` (like `reviewDepth` and the proposed `generationMode`) are ephemeral and **not persisted** in the `conversion_jobs` table.
+- **Decision**: No database schema changes will be made for future flags. We accept the limitation that manual API retries lose these flags in exchange for **Zero DB Risk** (No Migrations).
 
 ## [1.7.3] - 2025-12-08 (Sophisticated Terminology)
 ### Changed
