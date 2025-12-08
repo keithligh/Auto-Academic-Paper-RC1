@@ -169,6 +169,15 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
     let safeTikz = tikzCode.replace(/[^\x00-\x7F]/g, '');
 
+    // FIX (v1.6.9): Escape ampersands in TikZ code
+    // LaTeX interprets & as alignment tab in tables. In TikZ node text, we need \&
+    // Handle common patterns: \\& (after linebreak) and raw &
+    safeTikz = safeTikz.replace(/\\\\/g, '\\LINEBREAK\\'); // Temporarily mark linebreaks
+    safeTikz = safeTikz.replace(/\\&/g, '\\AMPERSAND\\'); // Temporarily mark already-escaped &
+    safeTikz = safeTikz.replace(/&/g, '\\&'); // Escape raw &
+    safeTikz = safeTikz.replace(/\\AMPERSAND\\/g, '\\&'); // Restore already-escaped &
+    safeTikz = safeTikz.replace(/\\LINEBREAK\\/g, '\\\\'); // Restore linebreaks
+
     // GEOMETRIC POLYFILL: Manual Bezier Braces for TikZJax
     // TikZJax cannot handle decoration={brace}, so we draw it manually.
     safeTikz = safeTikz.replace(
