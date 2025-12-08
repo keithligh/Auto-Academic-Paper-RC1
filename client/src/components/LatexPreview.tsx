@@ -376,6 +376,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // GOAL: Create vertical space for brace labels below main content
       // PROBLEM: Diagrams with x=0.8cm, y=0.8cm have cramped grids causing label overlap
       // SOLUTION: Boost both x and y to prevent horizontal AND vertical cramping
+      //           + Reduce font size to fit more text in available space
 
       // Calculate optimal x-scale to fill A4 width without exceeding it
       const coordinateWidth = (maxX !== -Infinity && minX !== Infinity) ? (maxX - minX) : 10;
@@ -401,6 +402,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         originalXScale: xScale,
         originalYScale: yScale
       });
+
+      // Reduce font size to prevent label overlap (follows LARGE intent pattern)
+      if (!options.includes('font=')) extraOpts += ', font=\\small';
 
       // Strip old x/y and inject new values
       extraOpts += `, x=${newXScale.toFixed(2)}cm, y=${newYScale.toFixed(2)}cm`;
