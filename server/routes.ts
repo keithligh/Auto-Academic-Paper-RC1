@@ -150,7 +150,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paperType = "research_paper",
         enhancementLevel = "standard",
         authorName,
-        authorAffiliation
+        authorAffiliation,
+        advancedOptions = { formula: true, diagram: true, logical_structure: true, reviewDepth: "quick" }
       } = req.body;
 
       console.log("POST /api/conversions received", {
@@ -242,7 +243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Conversion job created:", job.id);
 
       // Start async processing - fetch file from object storage
-      processDocumentFromStorage(job.id, objectPath, fileType, paperType, enhancementLevel, aiConfig, authorName, authorAffiliation).catch(err => {
+      processDocumentFromStorage(job.id, objectPath, fileType, paperType, enhancementLevel, aiConfig, advancedOptions, authorName, authorAffiliation).catch(err => {
         console.error("Document processing error:", err);
       });
 
@@ -390,6 +391,7 @@ async function processDocumentFromStorage(
   paperType: string,
   enhancementLevel: string,
   aiConfig: AIConfig,
+  advancedOptions: Record<string, any>,
   authorName?: string,
   authorAffiliation?: string
 ) {
@@ -423,7 +425,7 @@ async function processDocumentFromStorage(
     console.log("File downloaded to temp path:", tempPath);
 
     // Process the document using the temp file
-    await processDocumentFile(jobId, tempPath, mimeType, paperType, enhancementLevel, aiConfig, authorName, authorAffiliation);
+    await processDocumentFile(jobId, tempPath, mimeType, paperType, enhancementLevel, aiConfig, advancedOptions, authorName, authorAffiliation);
 
     // Clean up temp file
     fs.unlinkSync(tempPath);
@@ -494,6 +496,7 @@ async function processDocumentFile(
   paperType: string,
   enhancementLevel: string,
   aiConfig: AIConfig,
+  advancedOptions: Record<string, any>,
   authorName?: string,
   authorAffiliation?: string
 ) {
@@ -549,11 +552,7 @@ async function processDocumentFile(
       text,
       paperType,
       enhancementLevel,
-      {
-        formula: true,
-        diagram: true,
-        logical_structure: true
-      }
+      advancedOptions
     );
 
     // Separate analysis and enhancements

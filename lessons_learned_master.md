@@ -202,3 +202,34 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 - **Lesson**: **FIX AT CONSUMPTION, NOT GENERATION.** When dealing with AI output that passes through multiple escaping layers, do not try to "clean up" the intermediate representation. Fix the interpretation at the final consumer, using a stateful parser that understands context.
 - **Lesson 2**: **NEVER BREAK ERROR RECOVERY.** Functions like `fixAIJsonEscaping()` exist for robustness. Do not "optimize" them without understanding ALL the cases they protect against.
 
+## 26. The "Isolation-First" UI Pattern (v1.6.11)
+- **Incident**: We needed to add a loading indicator while TikZ diagrams render (500-2000ms delay).
+- **The Temptation**: Use React `useState` in `LatexPreview.tsx` and coordinate with iframe via `postMessage`.
+- **The Correct Pattern**: Implement the loading UI **entirely inside the iframe**:
+  1. HTML placeholder `<div class="tikz-loading">` rendered inline
+  2. CSS animation for visual feedback
+  3. Existing `MutationObserver` (already watching for SVG) adds `.hidden` class
+- **Why This is Superior**:
+  - **Zero cross-frame complexity**: No `postMessage`, no timing issues, no React/iframe state sync
+  - **Leverages existing infrastructure**: The `MutationObserver` was already there for resizing
+  - **Preserves isolation philosophy**: TikZ iframe remains a self-contained black box
+- **The Lesson**: **WHEN ADDING UI TO ISOLATED COMPONENTS, KEEP THE UI ISOLATED TOO.** If you've already decided a component needs its own iframe for safety/performance, extend that pattern to new features rather than punching holes in the isolation boundary.
+
+## 27. The "Two Spacing Systems" Discovery (v1.6.12)
+- **Incident**: TikZ diagrams with title nodes at `+(0,2)` had massive gaps between the title and the content, even after node distance was tuned correctly.
+- **The Misunderstanding**: We assumed reducing `node distance` would also reduce the title gap. It didn't.
+- **The Discovery**: TikZ has **two independent spacing systems**:
+  1. **Node Distance** (e.g., `node distance=8.4cm`): Controls `below of=`, `right of=` relative positioning. Specified in **absolute cm**.
+  2. **Coordinate Scaling** (e.g., `y=1cm`): Controls coordinate offsets like `+(0,2)`. Defaults to 1cm per unit.
+- **Key Insight**: Modifying `node distance` has **NO EFFECT** on title offsets because they use coordinate units, not node distance.
+- **The Fix**: Inject small `y=0.5cm` to compress title offsets (makes `+(0,2)` = 1cm instead of 2cm) while keeping `node distance=8.4cm` for proper box spacing.
+- **The Lesson**: **UNDERSTAND THE DOMAIN.** Before tuning parameters, verify they actually control the behavior you're trying to change. TikZ's dual spacing systems are not obvious from the syntax.
+
+## 28. The "Goldilocks" Trap (Infinite Expansion) (v1.6.17-20)
+- **Incident**: Diagrams with small absolute coordinates (e.g., span=3.5) were being "exploded" by a logic that tried to fill the A4 page width (`14 / span`). This resulted in 9cm gaps.
+- **The Failure**: We assumed "Fill Width" was always good. We forgot that for small-span diagrams, the multiplier becomes massive (`14 / 3.5 = 4x`).
+- **The Fix**: **Symmetrical Clamping**.
+  - We decoupled X and Y scaling.
+  - We implemented a "Glass Ceiling" clamp at **1.3cm** for both axes.
+- **The Lesson**: **Multipliers must be bounded.** Never implement a scaling formula `Target / Input` without a `Math.min(Limit, ...)` clamp. Without a ceiling, edge cases (small inputs) cause layout explosions.
+

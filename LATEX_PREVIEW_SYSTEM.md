@@ -134,7 +134,7 @@ if (el.scrollWidth > el.clientWidth) {
 TikZ is a Turing-complete vector graphics language. No simple JS library can parse it safely on the main thread.
 
 - **Extraction**: Regex finds `\begin{tikzpicture}` environments.
-- **Placeholder**: Replaced with `LATEXPREVIEWTIKZBLOCK{N}`.
+- **Placeholder**: Replaced with `LATEXPREVIEWMATH{N}`.
 - **Rendering**: We construct a complete HTML page that loads **TikZJax** and inject it into an `<iframe>`.
 - **Environment Wrapping**: We explicitly wrap the extracted TikZ code in `\begin{tikzpicture} ... \end{tikzpicture}` inside the iframe script tag.
 - **Responsive SVG Layout (v1.4.0)**: CSS-driven `max-width: 100%` ensures perfect fit on A4 pages without manual scaling hacks.
@@ -142,6 +142,32 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 - **ASCII Sanitization**: We strip non-ASCII characters to prevent `btoa` errors.
 - **No Typography Normalization**: We **DO NOT** convert `--` to `–` inside TikZ (breaks path syntax).
 - **Isolation**: The `<iframe>` isolates the heavy processing and CSS conflicts.
+
+#### Loading State (v1.6.11)
+
+TikZJax rendering can take 500-2000ms (CDN loading + WASM compilation). To improve perceived responsiveness, we display a loading placeholder inside the iframe:
+
+- **Placeholder Text**: `[ Generating diagram... ]` (ASCII-only for cross-platform compatibility)
+- **Animation**: Subtle CSS `pulse` animation (opacity 0.5 → 1.0)
+- **Hiding Mechanism**: The existing `MutationObserver` (used for height resizing) now also adds `.hidden` class to the placeholder when the SVG appears
+- **Architecture Choice**: The placeholder is implemented **inside the iframe** (not React) to preserve the strict isolation philosophy. This avoids cross-frame communication complexity.
+
+**CSS Implementation:**
+```css
+.tikz-loading {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: #666;
+  white-space: nowrap;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.tikz-loading.hidden { display: none; }
+```
+
+**Body Layout**: The iframe body uses `flex-direction: column` to stack the loading placeholder above the TikZ container, ensuring proper vertical flow.
 
 ### 4. Table Rendering (Manual Parsing & Order of Operations)
      
@@ -589,17 +615,31 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 We discovered that `node distance` is not always a perfect predictor. Some "Cycle" diagrams use `node distance=2cm` (Medium) but pack 50+ words of text into nodes.
 
 - **The Fix (Goldilocks Protocol)**: We calculate `avgLabelTextPerNode`.
-- **Rule**: If `avgLabelTextPerNode > 30` (Text Heavy) **AND** `horizontalSpan < 7` (Index Layout):
+- **Rule**: If `avgLabelTextPerNode > 30` (Text Heavy) **AND** `horizontalSpan < 7` (Index Layout) **AND** `intent !== 'LARGE'` (v1.6.12 exclusion):
     - We **FORCE** the global coordinate boost (`x=2.2cm, y=1.5cm`).
+- **LARGE Exclusion (v1.6.12)**: LARGE intent is now excluded because it uses `node distance` for spacing. Injecting x/y causes title offset explosions.
 - **Universal Safety**: If `horizontalSpan >= 7` (Physical Layout), we **SKIP** the boost to prevent "Exploding Diagrams" (v1.5.8 fix).
 - **Result**: Dense cycles get space; Physical diagrams keep their layout.
+
+### 3.1. Title Gap Compression (v1.6.12)
+
+For LARGE intent diagrams using relative positioning (`horizontalSpan=0`), title nodes with coordinate offsets like `+(0,2)` created excessive gaps.
+
+**The Discovery:**
+- `node distance` (in cm) controls `below of=`, `right of=` positioning → independent of coordinate scaling
+- Title offsets like `+(0,2)` use TikZ's y-unit (default 1cm) → affected by y-scale
+
+**The Fix:**
+Inject `y=0.5cm` for LARGE relative diagrams:
+- Title at `+(0,2)` = `2 × 0.5cm = 1cm` instead of 2cm
+- `node distance=8.4cm` remains unaffected (specified in absolute cm)
 
 ### 4. The "Absolute Positioning" Override (v1.5.6)
 Diagrams using `\node at (x,y)` syntax bypass `node distance` entirely. If the horizontal span exceeds A4 safe width (14cm), CSS responsive shrinking causes node overlap.
 
 - **The Fix**: Extract ALL `(x,y)` coordinates (not just `at` patterns), calculate span, apply dynamic scale.
 - **Formula**: `scale = min(1.0, 14/span) × 0.9` with floor at 0.5.
-- **Requirement**: `transform shape` is mandatory to shrink nodes proportionally.
+- **Requirement**: `transform shape` is mandatory for proportional shrinking.
 
 ### 5. The "Aspect Ratio" Override (v1.5.7)
 Timeline diagrams often have extreme aspect ratios (e.g., 10cm wide × 2.5cm tall = 4:1). This makes them look "squashed".
@@ -694,4 +734,55 @@ Rewrote the `\cite{}` handler to:
 4.  Join them with `, ` and wrap in a single bracket pair: `[1, 2]`.
 
 **Result**: `\cite{ref_1,ref_2}` now correctly renders as `[1, 2]` (IEEE/Nature style).
+
+
+## 26. Universal Math Repair (v1.6.16)
+
+**Problem:** Invalid LaTeX syntax like `$\theta$_t` (orphaned subscripts) crashes the renderer because `latex.js` (and most compilers) strictly forbid subscripts/superscripts outside of Math Mode.
+
+**The Fix:** We implemented a server-side **Universal Regex Sanitizer** in `server/ai/utils.ts`.
+
+**Logic:**
+The regex scans for any closing math delimiter (`$`) that is immediately followed by a subscript or superscript operator (`_` or `^`). It then captures the "payload" (either a single character or a braced group) and moves it **inside** the math delimiters.
+
+- **Regex:** `/(?<!\\)\$\s*([_^])\s*(\{[^}]*\}|[a-zA-Z0-9])/g`
+- **Transformation:** `$M$_P` → `$M_P$`
+- **Effect:**
+    - `$\theta$_t` becomes `$\theta_t$` (Valid)
+    - `$\sigma$^2` becomes `$\sigma^2$` (Valid)
+    - `$\alpha$_{t+1}` becomes `$\alpha_{t+1}$` (Valid)
+
+**Philosophy:** This adheres to **Rule 9 (Containment)**. We do not try to patch the client renderer to handle invalid syntax. We fix the data at the source (Server) so the client receives only valid LaTeX.
+
+## 27. Enhancement Safety Protocol (v1.6.15)
+
+**Problem:** When the AI edits a section (Phase 6), it sometimes hallucinates changes to diagram code, corrupting TikZ syntax.
+
+**The Fix:** The Editor is **strictly prohibited** from touching the `content` field of enhancements.
+- **Logic:** `SectionData` includes `enhancements`, but the Editor's instructions explicitly limit it to modifying `title` and `description` (for citation insertion). The `content` (TikZ code) is treated as **Read-Only** during the editing phase.
+
+## 28. TikZ Absolute Coordinate Protection (v1.6.17)
+
+**Problem:** Diagrams with explicit absolute coordinates (e.g., `at (0,4)`) were being "exploded" by the Density Boost logic (`y=1.5cm`).
+
+**Fix:** We restricted the Density Boost to **Relative Positioning Only** (`horizontalSpan === 0`).
+
+**Logic:**
+If the user (or AI) provides *any* explicit x-coordinates (`span > 0`), we assume they control the layout. We do not inject `x=2.2cm, y=1.5cm`. We rely on standard scaling logic or trust the coordinates as-is. This prevents "Outrageously Big" gaps.
+
+## 29. TikZ Vertical & Horizontal Protection (v1.6.18-20)
+
+**Problem:** "Cycle/Large" intent diagrams were auto-expanding to fill the A4 width.
+- **Vertical:** `optimalUnit` applied to Y caused 5cm vertical gaps.
+- **Horizontal:** `optimalUnit` applied to X caused 8cm horizontal gaps for small coordinate spans.
+
+**Fix:** We **decoupled and symmetrically clamped** expansion for diagrams with explicit coordinates:
+- **X-Axis:** Clamped to **1.3cm** maximum (Symmetrical).
+- **Y-Axis:** Clamped to **1.3cm** maximum (Compact Stacking).
+
+**Result:**
+The grid becomes rectangular (`x=1.3cm, y=1.3cm`) in the worst case, or scales down. This preserves readability and ensures a consistent visual density that doesn't feel "loose".
+
+
+
 

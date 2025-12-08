@@ -111,13 +111,33 @@ You may structure your arguments knowing this evidence exists, but do NOT insert
 ### Phase 4: The Peer Reviewer (Verification)
 **Agent:** Librarian (Role: Senior PI)
 **Input:** Draft + **Available References** (The Card Catalog).
-**Output:** `Review Report` (Supported Claims, Unverified Claims, **Novelty Check**, **Critique**).
-**Logic:**
-1.  **Verification:** Reads the draft *alongside* the library.
-2.  **Mapping:** Identifies claims explicitly supported by specific papers (`supported_claims`).
-3.  **Auditing:** Flags claims that sound factual but lack evidence (`unverified_claims`).
-4.  **Novelty & Rigor:** Evaluates the significance of the contribution and the logical soundness of the arguments (`novelty_check`, `critique`).
-5.  **No Hallucinations:** Prevents the system from asking for citations that don't exist.
+**Output:** `Review Report` (Supported Claims, Unverified Claims, Novelty, Critique, Methodology, Structure).
+**Modes:**
+
+The Peer Reviewer operates in two distinct modes, selectable via the frontend (`advancedOptions.reviewDepth`):
+
+#### Mode A: Quick Review (Single-Pass)
+**Logic:** A fast, consolidated review suitable for rapid iteration.
+1.  **Consolidated Prompt:** Asks for Verification, Novelty, and Critique in one AI call.
+2.  **Focus:** Speed and distinct, obvious errors.
+
+#### Mode B: Deep Review (Multi-Pass v1.6.13)
+**Logic:** A rigorous, 6-phase "Nature/Science" caliber review. Each sub-phase uses a dedicated AI call to maximize context usage and reasoning depth.
+
+| Sub-Phase | Action | Purpose |
+| :--- | :--- | :--- |
+| **4.1 Extract Claims** | **Extraction** | Identifies every substantive factual claim in the draft. |
+| **4.2 Map Evidence** | **Mapping** | maps extracted claims to specific references in the "Card Catalog". |
+| **4.3 Verify** | **Auditing** | Rigorously judges whether the mapped evidence *actually* supports the claim (vs. hallucination). |
+| **4.4 Methodology** | **Critique** | Evaluates study design, sampling bias, validity, and limitations. |
+| **4.5 Structure** | **Analysis** | Assesses logical flow, coherence, redundancies, and missing sections. |
+| **4.6 Novelty** | **Assessment** | Determines originality, derivative nature, and contribution to the field. |
+
+**Key Benefit:** By splitting the review, the AI is not forced to "cram" all reasoning into one context window. It can focus strictly on "Is this methodology sound?" without being distracted by citation checking.
+
+#### Shared Logic (Both Modes)
+1.  **No Hallucinations:** The Reviewer is strictly bound to the provided `references` array.
+2.  **Output:** A structured `ReviewReport` used by the Rewriter (Phase 5) to fix the paper.
 
 ### Phase 5: The Rewriter (Synthesis)
 **Agent:** Writer

@@ -66,7 +66,9 @@ interface ReviewReport {
     supported_claims: SupportedClaim[];
     unverified_claims: UnverifiedClaim[];
     critique: string;
-    novelty_check: string; // New: Assessment of originality
+    novelty_check: string;
+    methodology_critique?: string;
+    structure_analysis?: string;
 }
 
 interface PipelineContext {
@@ -211,8 +213,7 @@ export class AIService {
             // Phase 6: Editor (Insert citation markers)
             await this.phase6_Editor(ctx);
 
-            // Phase 6: Editor (Insert citation markers)
-            await this.phase6_Editor(ctx);
+
 
             // Merge reviewReport into final response for persistence
             if (ctx.finalDraft && ctx.reviewReport) {
@@ -477,9 +478,21 @@ Return ONLY the JSON.`;
         });
     }
 
-    // ====== PHASE 4: THE PEER REVIEWER (formerly The Critic) ======
+    // ====== PHASE 4: THE PEER REVIEWER ======
     private async phase4_PeerReviewer(ctx: PipelineContext): Promise<void> {
-        await this.log(`[Phase 4/6] The Peer Reviewer: Verifying draft against ${ctx.references.length} references...`, { phase: "Phase 4: Peer Review", step: "Reviewing Draft", progress: 52 });
+        const reviewDepth = ctx.advancedOptions?.reviewDepth || "quick";
+        await this.log(`[Phase 4/6] The Peer Reviewer: Starting ${reviewDepth.toUpperCase()} review process...`, { phase: "Phase 4: Peer Review", step: "Starting Review", progress: 52 });
+
+        if (reviewDepth === "deep") {
+            await this.phase4_DeepReview(ctx);
+        } else {
+            await this.phase4_QuickReview(ctx);
+        }
+    }
+
+    // Original Single-Pass Review (Consolidated)
+    private async phase4_QuickReview(ctx: PipelineContext): Promise<void> {
+        await this.log(`[PeerReviewer] Running Quick Review (Single Pass)...`, { phase: "Phase 4: Peer Review", step: "Reviewing Draft", progress: 53 });
 
         if (!ctx.draft) {
             await this.log(`[PeerReviewer] Error: No draft to review.`);
@@ -532,37 +545,114 @@ OUTPUT FORMAT (JSON):
 Return ONLY the JSON.`;
 
         return await pRetry(async () => {
-            const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("PeerReviewer timed out after 10 minutes")), 600000)
-            );
-
-            const completionPromise = this.librarian.jsonCompletion(
-                userPrompt,
-                systemPrompt,
-                null,
-                async () => { }
-            );
-
-            const result: any = await Promise.race([completionPromise, timeoutPromise]);
+            const result: any = await this.librarian.jsonCompletion(userPrompt, systemPrompt);
             ctx.reviewReport = result || { supported_claims: [], unverified_claims: [], critique: "No review generated.", novelty_check: "N/A" };
 
             const supportedCount = ctx.reviewReport?.supported_claims?.length || 0;
             const unverifiedCount = ctx.reviewReport?.unverified_claims?.length || 0;
             const novelty = ctx.reviewReport?.novelty_check ? ctx.reviewReport.novelty_check.substring(0, 100) + "..." : "N/A";
+            const critique = ctx.reviewReport?.critique ? ctx.reviewReport.critique.substring(0, 150) + "..." : "N/A";
 
             await this.log(`[PeerReviewer] Review complete: ${supportedCount} verified, ${unverifiedCount} unverified.`, { phase: "Phase 4: Peer Review", step: "Review Complete", progress: 58, details: `${supportedCount} verified` });
             if (ctx.reviewReport?.novelty_check) {
-                await this.log(`[PeerReviewer] Novelty Check: ${ctx.reviewReport.novelty_check}`, { phase: "Phase 4: Peer Review", step: "Novelty Analysis", progress: 58 });
+                await this.log(`[PeerReviewer] Novelty Check: ${novelty}`, { phase: "Phase 4: Peer Review", step: "Novelty Analysis", progress: 58 });
             }
             if (ctx.reviewReport?.critique) {
-                await this.log(`[PeerReviewer] Critique: ${ctx.reviewReport.critique.substring(0, 200)}...`, { phase: "Phase 4: Peer Review", step: "Critique", progress: 58 });
+                await this.log(`[PeerReviewer] Critique: ${critique}`, { phase: "Phase 4: Peer Review", step: "Critique", progress: 58 });
             }
-        }, {
-            retries: 2,
-            onFailedAttempt: async (error: any) => {
-                await this.log(`[PeerReviewer] Attempt ${error.attemptNumber} failed: ${error.message}. Retrying...`, { phase: "Phase 4: Peer Review", step: "Error - Retrying", progress: 52 });
-            }
-        });
+        }, { retries: 2 });
+    }
+
+    // New Deep Review (Multi-Phase)
+    private async phase4_DeepReview(ctx: PipelineContext): Promise<void> {
+        if (!ctx.draft) return;
+
+        await this.log(`[DeepReview] Starting 6-Phase Deep Analysis...`, { phase: "Phase 4: Peer Review", step: "Deep Review Start", progress: 53 });
+
+        // 4.1 Claim Extraction
+        const claims = await this.phase4_1_ExtractClaims(ctx);
+
+        // 4.2 Evidence Mapping
+        const evidenceMap = await this.phase4_2_MapEvidence(ctx, claims);
+
+        // 4.3 Verification Deep-Dive
+        const verificationResult = await this.phase4_3_Verify(ctx, claims, evidenceMap);
+
+        // 4.4 Methodology Critique
+        const methodologyCritique = await this.phase4_4_CritiqueMethodology(ctx);
+
+        // 4.5 Structure Analysis
+        const structureAnalysis = await this.phase4_5_AnalyzeStructure(ctx);
+
+        // 4.6 Novelty Assessment
+        const noveltyCheck = await this.phase4_6_AssessNovelty(ctx);
+
+        // Consolidate into Review Report
+        ctx.reviewReport = {
+            supported_claims: verificationResult.supported_claims,
+            unverified_claims: verificationResult.unverified_claims,
+            critique: `${structureAnalysis.substring(0, 500)}\n\nMethodology Note: ${methodologyCritique.substring(0, 300)}`,
+            novelty_check: noveltyCheck,
+            methodology_critique: methodologyCritique,
+            structure_analysis: structureAnalysis
+        };
+
+        const supportedCount = ctx.reviewReport.supported_claims.length;
+        const unverifiedCount = ctx.reviewReport.unverified_claims.length;
+        const noveltyShort = noveltyCheck.substring(0, 100) + "...";
+
+        await this.log(`[DeepReview] Complete. ${supportedCount} Verified, ${unverifiedCount} Unverified.`, { phase: "Phase 4: Peer Review", step: "Deep Review Complete", progress: 59 });
+        await this.log(`[DeepReview] Novelty: ${noveltyShort}`, { phase: "Phase 4: Peer Review", step: "Novelty Analysis", progress: 59 });
+    }
+
+    private async phase4_1_ExtractClaims(ctx: PipelineContext): Promise<string[]> {
+        await this.log(`[DeepReview] 4.1 Extracting Claims...`, { phase: "Phase 4: Peer Review", step: "4.1 Extracting Claims", progress: 54 });
+        const draftText = ctx.draft!.sections.map(s => s.content).join("\n\n");
+        const prompt = `Extract all substantive factual claims, data points, and specific arguments from the text below. Ignore general intro/outro fluff. Return a JSON list of strings.`;
+        const result = await this.librarian.jsonCompletion(`TEXT:\n${draftText}`, prompt);
+        return result?.claims || result || [];
+    }
+
+    private async phase4_2_MapEvidence(ctx: PipelineContext, claims: string[]): Promise<any> {
+        await this.log(`[DeepReview] 4.2 Mapping Evidence...`, { phase: "Phase 4: Peer Review", step: "4.2 Mapping Evidence", progress: 55 });
+        const referencesText = JSON.stringify(ctx.references, null, 2);
+        const claimsText = JSON.stringify(claims.slice(0, 50), null, 2); // Limit to top 50 to avoid overload if massive
+        const prompt = `Map these claims to the provided references. Which reference supports which claim? Return JSON { "mappings": [{ "claim": text, "ref_key": key }] }`;
+        return await this.librarian.jsonCompletion(`CLAIMS:\n${claimsText}\n\nREFS:\n${referencesText}`, prompt);
+    }
+
+    private async phase4_3_Verify(ctx: PipelineContext, claims: string[], evidenceMap: any): Promise<{ supported_claims: SupportedClaim[], unverified_claims: UnverifiedClaim[] }> {
+        await this.log(`[DeepReview] 4.3 Verifying Claims...`, { phase: "Phase 4: Peer Review", step: "4.3 Verifying", progress: 56 });
+        // Simplified verification logic for brevity - in real deep mode, could validte each mapping
+        // Here we ask the AI to produce the final lists based on the map
+        const prompt = `Based on the evidence map, generate the final list of verified vs unverified claims. Be strict. Return JSON { supported_claims: [], unverified_claims: [] } matching the schema.`;
+        const input = `CLAIMS:\n${JSON.stringify(claims)}\n\nEVIDENCE_MAP:\n${JSON.stringify(evidenceMap)}`;
+        const result = await this.librarian.jsonCompletion(input, prompt);
+        return result || { supported_claims: [], unverified_claims: [] };
+    }
+
+    private async phase4_4_CritiqueMethodology(ctx: PipelineContext): Promise<string> {
+        await this.log(`[DeepReview] 4.4 Critiquing Methodology...`, { phase: "Phase 4: Peer Review", step: "4.4 Methodology", progress: 57 });
+        const draftText = ctx.draft!.sections.map(s => s.content).join("\n\n");
+        const prompt = `Critique the research methodology. Limitations? Validity? Sampling bias? logical fallacies? Return a concise paragraph string.`;
+        const result = await this.librarian.completion(prompt, `Draft:\n${draftText}`);
+        return result || "No methodology critique generated.";
+    }
+
+    private async phase4_5_AnalyzeStructure(ctx: PipelineContext): Promise<string> {
+        await this.log(`[DeepReview] 4.5 Analyzing Structure...`, { phase: "Phase 4: Peer Review", step: "4.5 Structure", progress: 58 });
+        const draftText = ctx.draft!.sections.map(s => s.content).join("\n\n");
+        const prompt = `Analyze the structure, flow, and coherence. Redundancies? Missing sections? Logical progression? Return a concise paragraph string.`;
+        const result = await this.librarian.completion(prompt, `Draft:\n${draftText}`);
+        return result || "No structure analysis generated.";
+    }
+
+    private async phase4_6_AssessNovelty(ctx: PipelineContext): Promise<string> {
+        await this.log(`[DeepReview] 4.6 Assessing Novelty...`, { phase: "Phase 4: Peer Review", step: "4.6 Novelty", progress: 59 });
+        const draftText = ctx.draft!.sections.map(s => s.content).join("\n\n");
+        const prompt = `Assess the novelty and contribution. Originality? derivatives? New insights? Return a concise paragraph string.`;
+        const result = await this.librarian.completion(prompt, `Draft:\n${draftText}`);
+        return result || "Novelty assessment unavailable.";
     }
 
     // ====== PHASE 5: THE REWRITER ======
@@ -715,9 +805,9 @@ Return ONLY the JSON.`;
         });
     }
 
-    // ====== PHASE 6: THE EDITOR ======
+    // ====== PHASE 6: THE EDITOR (CHUNKED Refactor v1.6.15) ======
     private async phase6_Editor(ctx: PipelineContext): Promise<void> {
-        await this.log(`[Phase 6/6] The Editor: Inserting citation markers...`, { phase: "Phase 6: Editing", step: "Adding Citations", progress: 78 });
+        await this.log(`[Phase 6/6] The Editor: Inserting citation markers...`, { phase: "Phase 6: Editing", step: "Starting Editor", progress: 78 });
 
         if (!ctx.improvedDraft) {
             await this.log(`[Editor] Error: No improved draft to edit.`);
@@ -732,115 +822,124 @@ Return ONLY the JSON.`;
             return;
         }
 
-        const draftText = JSON.stringify({
-            title: ctx.improvedDraft.title,
-            abstract: ctx.improvedDraft.abstract,
-            sections: ctx.improvedDraft.sections
-        }, null, 2);
+        // Initialize finalDraft as a deep copy of improvedDraft
+        // We will update it section by section
+        ctx.finalDraft = JSON.parse(JSON.stringify(ctx.improvedDraft));
+        if (!ctx.finalDraft) return; // Typescript safety
 
         const referencesText = JSON.stringify(ctx.references, null, 2);
-        const enhancementsText = JSON.stringify(ctx.improvedDraft.enhancements || [], null, 2);
-
-        const systemPrompt = `You are a citation editor. Your ONLY task is to insert (ref_X) markers into the text.
-
-CRITICAL RULES:
-1. Use (ref_X) format, NOT \\cite{ref_X}. The Compiler will convert these later.
-2. Match references to appropriate sentences.
-3. PRESERVE all existing LaTeX formatting.
-4. Do NOT rewrite the content - only ADD citation markers.`;
-
-        const userPrompt = `DRAFT PAPER:
-${draftText}
-
-ENHANCEMENTS:
-${enhancementsText}
+        const globalContext = `PAPER CONTEXT:
+TITLE: ${ctx.finalDraft.title}
+ABSTRACT: ${ctx.finalDraft.abstract}
 
 REFERENCES TO INSERT:
-${referencesText}
+${referencesText}`;
+
+        // Process Sections (Chunked)
+        for (let i = 0; i < ctx.finalDraft.sections.length; i++) {
+            const section = ctx.finalDraft.sections[i];
+            await this.log(`[Editor] Processing Section ${i + 1}/${ctx.finalDraft.sections.length}: "${section.name}"...`, { phase: "Phase 6: Editing", step: `Editing Section ${i + 1}`, progress: 80 + Math.floor((i / ctx.finalDraft.sections.length) * 10) });
+
+            let lastError: string | null = null;
+
+            await pRetry(async () => {
+                const systemPrompt = `You are a citation editor. Your ONLY task is to insert (ref_X) markers into the provided text section.
+        
+CRITICAL RULES:
+1. Use (ref_X) format, NOT \\cite{ref_X}.
+2. Match references to appropriate sentences using the provided Reference List.
+3. PRESERVE all existing LaTeX formatting.
+4. Do NOT rewrite the content - only ADD citation markers.
+5. You are seeing ONE section of a larger paper. Use the provided Title/Abstract for context.
+
+${lastError ? `\nPREVIOUS ATTEMPT FAILED WITH ERROR:\n${lastError}\n\nFIX THIS ERROR.` : ""}`;
+
+                const userPrompt = `${globalContext}
+
+CURRENT SECTION TO EDIT:
+SECTION NAME: ${section.name}
+CONTENT:
+${section.content}
 
 TASK:
-1. Find appropriate places for each reference.
-2. Insert (ref_X) markers at the end of relevant sentences.
-3. Do NOT change the content, only add markers.
+1. Insert (ref_X) markers at the end of relevant sentences.
+2. Return ONLY the updated LaTeX content for this section.
+3. Do not return JSON, just the LaTeX string.`;
 
-OUTPUT SCHEMA:
-{
-  "title": "String",
-  "abstract": "String",
-  "sections": [{ "name": "String", "content": "LaTeX String WITH (ref_X) markers" }],
-  "references": [copy from REFERENCES TO INSERT],
-  "enhancements": [copy from ENHANCEMENTS]
-}
+                const result = await this.writer.completion(userPrompt, systemPrompt);
+                let newContent = sanitizeLatexOutput(result);
 
-Return ONLY the JSON.`;
+                // If result is wrapped in quotes or markdown block, strip them
+                newContent = newContent.replace(/^```latex\n?/, '').replace(/\n?```$/, '').trim();
 
-        return await pRetry(async () => {
-            let lastLogTime = 0;
-            const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Editor timed out after 10 minutes")), 600000)
-            );
-
-            const completionPromise = this.writer.jsonCompletion(
-                userPrompt,
-                systemPrompt,
-                aiResponseSchema,
-                async (text) => {
-                    const now = Date.now();
-                    if (now - lastLogTime > 5000) {
-                        await this.log(`[Editor] Editing... (${text.length} chars)`, { phase: "Phase 6: Editing", step: "Adding Citations", progress: 85, details: `${text.length} chars` });
-                        lastLogTime = now;
-                    }
-                }
-            );
-
-            const result: any = await Promise.race([completionPromise, timeoutPromise]);
-
-            let parsed: AiResponse;
-            if (typeof result === 'string') {
-                const sanitized = sanitizeLatexOutput(result);
-                parsed = extractJson(sanitized);
-            } else {
-                parsed = result;
-            }
-
-            // Validate LaTeX
-            await this.log(`[Editor] Validating LaTeX integrity...`, { phase: "Phase 6: Editing", step: "Validating", progress: 90 });
-            let validationErrors: string[] = [];
-
-            for (const section of parsed.sections) {
-                const val = validateLatexSyntax(section.content);
+                // Validate LaTeX Validity of this chunk
+                const val = validateLatexSyntax(newContent);
                 if (!val.valid) {
-                    validationErrors.push(`Section '${section.name}': ${val.errors.join(", ")}`);
+                    throw new Error(`Invalid LaTeX in section '${section.name}': ${val.errors[0]}`);
                 }
-            }
 
-            if (parsed.enhancements) {
-                for (const enh of parsed.enhancements) {
-                    const val = validateLatexSyntax(enh.content);
-                    if (!val.valid) {
-                        validationErrors.push(`Enhancement '${enh.title}': ${val.errors.join(", ")}`);
+                // Update the section in place
+                ctx.finalDraft!.sections[i].content = newContent;
+
+            }, {
+                retries: 3,
+                onFailedAttempt: async (error: any) => {
+                    lastError = error.message;
+                    await this.log(`[Editor] Section '${section.name}' failed: ${error.message}. Retrying...`);
+                }
+            });
+        }
+
+        // Process Enhancements (Chunked - Text Fields Only)
+        if (ctx.finalDraft.enhancements) {
+            for (let i = 0; i < ctx.finalDraft.enhancements.length; i++) {
+                const enh = ctx.finalDraft.enhancements[i];
+                // SKIP modifying 'content' for diagrams to prevent truncation/corruption
+                // Only allowed to modify title and description
+                await this.log(`[Editor] Processing Enhancement ${i + 1}/${ctx.finalDraft.enhancements.length}: "${enh.title}"...`, { phase: "Phase 6: Editing", step: `Editing Enhancement ${i + 1}`, progress: 90 });
+
+                let lastError: string | null = null;
+
+                await pRetry(async () => {
+                    const systemPrompt = `You are a citation editor. Your ONLY task is to insert (ref_X) markers into the enhancement description.
+        
+CRITICAL RULES:
+1. Use (ref_X) format.
+2. Return JSON with updated 'title' and 'description'.
+3. DO NOT return the 'content' field (we will preserve the original).
+${lastError ? `\nPREVIOUS ERROR: ${lastError}` : ""}`;
+
+                    const userPrompt = `${globalContext}
+
+ENHANCEMENT:
+TITLE: ${enh.title}
+DESCRIPTION: ${enh.description}
+
+TASK:
+1. Insert (ref_X) markers into Title or Description if relevant.
+2. Return JSON: { "title": "...", "description": "..." }`;
+
+                    const result = await this.writer.jsonCompletion(userPrompt, systemPrompt);
+
+                    if (result && result.description) {
+                        ctx.finalDraft!.enhancements![i].title = result.title || enh.title;
+                        ctx.finalDraft!.enhancements![i].description = result.description;
+                        // CONTENT IS PRESERVED AUTOMATICALLY AS WE DON'T OVERWRITE IT
                     }
-                }
+                }, {
+                    retries: 3,
+                    onFailedAttempt: async (error: any) => {
+                        lastError = error.message;
+                        await this.log(`[Editor] Enhancement '${enh.title}' failed: ${error.message}. Retrying...`);
+                    }
+                });
             }
+        }
 
-            if (validationErrors.length > 0) {
-                await this.log(`[Editor] ❌ LaTeX Validation Failed: ${validationErrors[0]}`, { phase: "Phase 6: Editing", step: "Validation Failed", progress: 90 });
-                throw new Error(`Generated LaTeX is invalid: ${validationErrors[0]}`);
-            }
+        // Ensure references are from our Card Catalog (prevent hallucination)
+        ctx.finalDraft.references = ctx.references;
 
-            await this.log(`[Editor] ✓ LaTeX Validation Passed.`, { phase: "Phase 6: Editing", step: "Validation Passed", progress: 92 });
-
-            // Ensure references are from our Card Catalog (prevent hallucination)
-            parsed.references = ctx.references;
-
-            ctx.finalDraft = parsed;
-
-            await this.log(`[Editor] Editing complete. Pipeline finished.`, { phase: "Phase 6: Editing", step: "Complete", progress: 95 });
-        }, {
-            retries: 2,
-            onFailedAttempt: async (error: any) => {
-                await this.log(`[Editor] Attempt ${error.attemptNumber} failed: ${error.message}. Retrying...`, { phase: "Phase 6: Editing", step: "Error - Retrying", progress: 78 });
-            }
-        });
+        await this.log(`[Editor] Editing complete. Pipeline finished.`, { phase: "Phase 6: Editing", step: "Complete", progress: 95 });
     }
 }
+

@@ -34,3 +34,12 @@ When modifying `LatexPreview.tsx`, ALWAYS run these checks:
 1.  **Open `debug_full_repro.html`:** Verify the diagram renders.
 2.  **Check Scrollbars:** The iframe should NOT have scrollbars.
 3.  **Check Console:** No `ReferenceError` or `SyntaxError`.
+4.  **Check Loading Placeholder (v1.6.11):** Verify `[ Generating diagram... ]` appears during compilation and disappears once the SVG renders.
+
+## 6. LOADING PLACEHOLDER (v1.6.11)
+- **Rule:** The loading state is displayed **inside the iframe**, not in React.
+- **Reason:** Cross-frame `postMessage` communication would add complexity without benefit. The `MutationObserver` already exists to detect SVG completion—we simply leverage it to hide the placeholder.
+- **Implementation:**
+    - CSS `.tikz-loading` class with `pulse` animation inside `iframeHtml` string.
+    - `MutationObserver` adds `.hidden` class when SVG appears.
+- **Do Not:** Do not try to use React state or `useState` for loading state in TikZ—it requires framework-level cross-frame bridges.

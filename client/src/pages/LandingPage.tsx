@@ -49,6 +49,12 @@ function generateUploadId(originalName: string) {
     return `${timestamp}-${finalName}${ext}`;
 }
 
+// Review Depth options (v1.6.13)
+const reviewDepthOptions = [
+    { value: "quick", label: "Quick Review", description: "Fast single-pass verification (~1 min)" },
+    { value: "deep", label: "Deep Review", description: "Rigorous multi-pass analysis (~5-8 min)" },
+] as const;
+
 export default function LandingPage() {
     const [, setLocation] = useLocation();
     const { toast } = useToast();
@@ -65,6 +71,7 @@ export default function LandingPage() {
     // Job Ticket State
     const [paperType, setPaperType] = useState("research_paper");
     const [enhancementLevel, setEnhancementLevel] = useState("standard");
+    const [reviewDepth, setReviewDepth] = useState<"quick" | "deep">("quick"); // v1.6.13: Review Depth
     const [authorName, setAuthorName] = useState("");
     const [authorAffiliation, setAuthorAffiliation] = useState("");
 
@@ -161,7 +168,7 @@ export default function LandingPage() {
             // Upload the file first
             await uploadFileToStorage(stagedFile, uploadID);
 
-            // Create the job
+            // Create the job - v1.6.13: Include reviewDepth in advancedOptions
             const res = await apiRequest("POST", "/api/conversions", {
                 fileName: stagedFile.name,
                 fileType: stagedFile.type,
@@ -171,7 +178,10 @@ export default function LandingPage() {
                 enhancementLevel,
                 authorName,
                 authorAffiliation,
-                advancedOptions,
+                advancedOptions: {
+                    ...advancedOptions,
+                    reviewDepth, // v1.6.13: Add reviewDepth to advancedOptions
+                },
             });
             return res.json();
         },
@@ -482,6 +492,22 @@ export default function LandingPage() {
                                                         <div key={l.value} className="flex items-center space-x-2">
                                                             <RadioGroupItem value={l.value} id={l.value} />
                                                             <Label htmlFor={l.value} className="font-normal cursor-pointer">{l.label}</Label>
+                                                        </div>
+                                                    ))}
+                                                </RadioGroup>
+                                            </div>
+
+                                            {/* v1.6.13: Review Depth Option */}
+                                            <div className="space-y-2">
+                                                <Label>Review Depth</Label>
+                                                <RadioGroup value={reviewDepth} onValueChange={(v) => setReviewDepth(v as "quick" | "deep")}>
+                                                    {reviewDepthOptions.map(r => (
+                                                        <div key={r.value} className="flex items-start space-x-2">
+                                                            <RadioGroupItem value={r.value} id={`review-${r.value}`} className="mt-0.5" />
+                                                            <div className="flex flex-col">
+                                                                <Label htmlFor={`review-${r.value}`} className="font-normal cursor-pointer">{r.label}</Label>
+                                                                <span className="text-xs text-gray-400">{r.description}</span>
+                                                            </div>
                                                         </div>
                                                     ))}
                                                 </RadioGroup>

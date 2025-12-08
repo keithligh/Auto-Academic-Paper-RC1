@@ -8,6 +8,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.20] - 2025-12-08
+### Fixed
+- **TikZ Symmetrical Clamping**: Tuned horizontal protection to clamp `xUnit` at **1.3cm** (down from 1.6cm) to match the vertical `yUnit` clamp.
+  - **Reasoning**: Creates a symmetrical "Max Grid" of 1.3cm for absolute diagrams, ensuring consistent compactness and preventing horizontal gaps from feeling "loose" compared to vertical ones.
+
+## [1.6.19] - 2025-12-08
+### Fixed
+- **TikZ Horizontal Scaling**: The calculated optimal unit (up to 2.5cm) was too aggressive for diagrams with small coordinate spans (e.g., 3.5 units), creating large horizontal gaps.
+  - **Correction**: Clamped `xUnit` to **1.6cm** for "Large Intent" diagrams with absolute positioning.
+  - **Reasoning**: This provides a modest boost (1.6x) over standard 1cm units without creating "outrageous" loose space.
+
+## [1.6.18] - 2025-12-08
+### Fixed
+- **TikZ Vertical Explosion (Levels)**: Hierarchical diagrams with "Large Intent" (Text Heavy) and explicit coordinates were checking X-width and expanding *both* X and Y to fill the page, leading to `y=2.5cm`.
+  - **Correction**: Decoupled X and Y expansion logic for absolute layouts.
+  - **Fix**: X expands to fill width (max 2.5cm), but **Y is clamped at 1.3cm**.
+  - **Result**: Wide text fits, but vertical stacking remains compact (2.6cm gap vs 5cm gap).
+
+## [1.6.17] - 2025-12-08
+### Fixed
+- **TikZ Coordinate Explosion**: Diagrams with explicit absolute coordinates (e.g., `at (0,4)`) were being inflated by the "Goldilocks" density boost (`y=1.5cm`).
+  - **Symptom**: "Outrageously big" gaps between nodes.
+  - **Root Cause**: The density check `horizontalSpan < 7` assumed that small-span diagrams needed expansion. However, diagrams with *any* explicit span (`> 0`) are by definition user-controlled and should not be distorted.
+  - **Fix**: Restricted the Goldilocks boost to **Relative Positioning Only** (`horizontalSpan === 0`). Absolute coordinates are now respected (or scaled proportionally via Medium intent).
+
+## [1.6.16] - 2025-12-08
+### Fixed
+- **Universal Math Repair**: `$\theta$_t` and `^2` (orphaned subscripts/superscripts) were crashing the renderer.
+  - **Root Cause**: Invalid LaTeX syntax where subscripts exist outside math mode.
+  - **Fix**: Implemented "Universal Regex" in `server/ai/utils.ts` that detects `MathEnd + Operator + Payload` and merges them back into the math block.
+  - **Scope**: Handles subscripts, superscripts, single chars, and braced groups.
+  - **Philosophy**: "Sanitize at Source" (Rule 9) - fix the data before it reaches the fragile client.
+
+## [1.6.15] - 2025-12-08
+### Refactored
+- **Chunked Editor (Phase 6)**: Refactored the Editor to process the document **Section-by-Section** instead of as a monolith.
+  - **Problem**: Large 70k+ char documents exceeded the output token limit (4k/8k), causing the AI to truncate the JSON response mid-file, deleting half the paper.
+  - **Solution**: The Editor loop now iterates through sections, independently processing each one.
+  - **Impact**: Eliminates truncation risk. Scales to infinite document length.
+### Fixed
+- **Diagram Corruption**: Phase 6 Editor is now **strictly prohibited** from modifying the `content` of enhancements. It can only edit `title` and `description`.
+- **Editor Duplication**: Fixed a bug where `phase6_Editor` was called twice in `service.ts`.
+
+## [1.6.14] - 2025-12-08
+### Added
+- **Feedback-Loop Retry (Self-Healing)**: Implemented an intelligent retry mechanism for Phase 6.
+  - **Logic**: If `validateLatexSyntax` fails, the error message is captured and injected back into the prompt: *"PREVIOUS ATTEMPT FAILED: [Error]. FIX THIS."*
+  - **Result**: The AI self-corrects syntax errors (e.g., closing missing braces) instead of blindly retrying.
+
+## [1.6.13] - 2025-12-08
+### Added
+- **Deep Review Mode**: Added user toggle to switch between "Quick Review" (Single Pass) and "Deep Review" (6-Phase rigorous analysis).
+- **Backend Flow**: Connected `advancedOptions.reviewDepth` from UI to `service.ts`.
+
+## [1.6.12] - 2025-12-08
+### Fixed
+- **TikZ Title Gap**: Diagrams with title nodes at `+(0,2)` had excessive whitespace between the title and the content boxes.
+  - **Root Cause**: For LARGE intent relative positioning diagrams, TikZ's default y-unit (1cm) made `+(0,2)` = 2cm gap.
+  - **Discovery**: `node distance` controls relative positioning (`below of=`, `right of=`) but NOT coordinate offsets like `+(0,2)`. These are independent systems.
+  - **Fix**: Inject `y=0.5cm` for LARGE relative diagrams, compressing `+(0,2)` to 1cm while `node distance=8.4cm` remains unaffected.
+  - **Goldilocks Exclusion**: LARGE intent is now excluded from Goldilocks Protocol's x/y injection to prevent conflicts.
+
+## [1.6.11] - 2025-12-08
+### Added
+- **TikZ Loading Placeholder**: Added visual feedback while TikZ diagrams render.
+  - **Display**: Shows `[ Generating diagram... ]` with subtle pulsing animation.
+  - **Architecture**: Fully contained inside the TikZ iframe (preserves isolation philosophy).
+  - **Auto-Hide**: The existing `MutationObserver` now hides the placeholder when the SVG appears.
+  - **Design Decision**: ASCII-only text for maximum compatibility; avoids emoji rendering issues across systems.
+  - **Layout**: Uses `flex-direction: column` on body to stack loading state above diagram container.
+
 ## [1.5.16] - 2025-12-08
 ### Fixed
 - **Table Thousand Separators**: Numbers like `105{,}000` were rendering with literal `{,}` instead of `105,000`.

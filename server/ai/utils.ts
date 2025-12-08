@@ -48,6 +48,11 @@ export function fixAIJsonEscaping(jsonString: string): string {
  */
 export function sanitizeLatexOutput(text: string): string {
     return text
+        // Universal Math Repair (v1.6.16):
+        // Fixes orphaned subscripts/superscripts like `$\theta$_t` or `^2` by merging them back into math mode.
+        // Matches: Closing $ (not escaped), followed by _ or ^, followed by a char or {...} block.
+        // Replacement: Moves the operator and payload BEFORE the closing $.
+        .replace(/(?<!\\)\$\s*([_^])\s*(\{[^}]*\}|[a-zA-Z0-9])/g, '$1$2$')
         // Replace unsupported symbols
         .replace(/\\smalltriangleup/g, '$\\triangle$')
         .replace(/\\checkmark/g, '$\\checkmark$')

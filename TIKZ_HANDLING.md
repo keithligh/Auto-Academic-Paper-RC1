@@ -49,8 +49,18 @@ We explicitly re-wrap extracted content in `\begin{tikzpicture}` inside the ifra
 ### Phase 5: The Silencer (Error Suppression)
 We suppress `message channel closed` errors caused by TikZJax/Iframe interaction issues.
 
+### Phase 5.5: The Loading Placeholder (v1.6.11)
+TikZJax compilation (CDN load + WASM execution) can take 500-2000ms. To provide visual feedback:
+
+- **Display**: ASCII placeholder `[ Generating diagram... ]` centered in the iframe
+- **Animation**: Subtle CSS `pulse` animation for perceived responsiveness
+- **Implementation**: Fully contained inside the iframe (no parent-child communication)
+- **Architecture Rationale**: Keeping UI inside the iframe preserves the strict isolation philosophy. Using React state would require cross-frame `postMessage` patterns, adding complexity without benefit.
+
 ### Phase 6: The Auto-Resize (MutationObserver)
-A `MutationObserver` inside the iframe watches for `<svg>` creation and resizes the iframe height to match the diagram.
+A `MutationObserver` inside the iframe watches for `<svg>` creation and:
+1. **Hides the loading placeholder** (adds `.hidden` class) (v1.6.11)
+2. **Resizes the iframe height** to match the rendered diagram
 
 ### Phase 7: The "Hybrid Intent" Scaling (v1.5.5)
 
@@ -165,6 +175,23 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
     -   **Reason**: Prevents "Explosion" of physical layouts (e.g., width 10) while saving dense index layouts (width 1-2).
 3.  **Maximize Space Override (v1.6.4 upgrade)**: For **LARGE** diagrams (Text Heavy), we prioritize physical space over user intent. If the AI provides restrictive coordinates (e.g., `x=0.8cm`), we **STRIP** them and inject calculated values (`optimalUnit = 14cm / horizontalSpan`) to force the diagram to expand to the full width of the view. We also enforce `font=\small` to reduce content density. This solves the "Density Equation" by expanding Space while shrinking Content.
 4.  **FLAT Coordinate Override**: For FLAT intent, existing `x=` and `y=` values are **stripped and replaced** with calculated multiplied values (cannot skip, must fix ratio).
+5.  **Title Gap Compression (v1.6.12)**: For **LARGE** intent with relative positioning (`horizontalSpan=0`), inject `y=0.5cm` to compress title offsets like `+(0,2)` from 2cm to 1cm. Key insight: `node distance` (in cm) is **NOT affected** by coordinate scaling - they are independent systems.
+6.  **Goldilocks LARGE Exclusion (v1.6.12)**: **LARGE** intent is now **excluded** from the Goldilocks Protocol's x/y injection (`x=2.2cm, y=1.5cm`). LARGE uses `node distance` for spacing rather than coordinate scaling, so injecting x/y causes title offset explosions.
+
+#### 8. The Absolute Protection Protocol (v1.6.17-20)
+
+> **Problem Case**: Diagrams with **Explicit Absolute Coordinates** (e.g., `at (0,4)`) were being "exploded" by generic scaling logic intended for relative or small diagrams.
+> - **v1.6.17 Incident**: The "Goldilocks" density check (`horizontalSpan < 7`) assumed small diagrams needed expansion. It multiplied `at (0,4)` by `y=1.5`, creating massive gaps.
+> - **v1.6.19 Incident**: The `optimalUnit` calculation allowed X to grow to 2.5cm, creating 8cm horizontal gaps for small spans.
+
+**The Fix: A Symmetrical Cage**
+We created a protected branch for Absolute Layouts (`horizontalSpan > 0`).
+
+1.  **Strict Isolation**: The "Goldilocks" density booster (`x=2.2cm`) is strictly disabled for explicit coordinates.
+2.  **Symmetrical Clamping (v1.6.20)**: We decouple X/Y scaling but apply symmetrical clamps to prevent "loose" visuals.
+    -   **X-Axis**: Clamped to **1.3cm** (was 2.5 -> 1.6 -> 1.3).
+    -   **Y-Axis**: Clamped to **1.3cm** (was 2.5 -> 1.5 -> 1.3).
+3.  **Result**: The grid expands to fit text but hits a "Glass Ceiling" at 1.3cm, ensuring diagrams remain compact even if the math suggests infinite expansion.
 
 ---
 

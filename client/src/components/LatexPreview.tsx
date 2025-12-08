@@ -247,6 +247,10 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const aspectRatio = verticalSpan > 0 ? horizontalSpan / verticalSpan : 0;
     const isFlat = horizontalSpan > 0 && verticalSpan > 0 && aspectRatio > 3.0;
 
+    // DEBUG: TikZ Forensic Logger (v1.6.17)
+    console.log(`[TikZ Debug] ID:${id} Span: [${horizontalSpan.toFixed(2)} x ${verticalSpan.toFixed(2)}] Ratio:${aspectRatio.toFixed(2)} TextHeavy:${isTextHeavy}`);
+
+
     // REFACTOR (v1.5.5): HYBRID INTENT (Phase 7 + Density Override)
     // We analyze the AI's *intent* based on 'node distance', BUT we fallback to 
     // text density if the distance is missing (to catch implicit "Large" layout).
@@ -308,9 +312,22 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // FIX (v1.6.6): Use smaller y value to prevent vertical offsets (like title positioning) from expanding too much
       // FIX (v1.6.7): Reduced y from 1.0cm to 0.6cm for tighter title spacing
       // FIX (v1.6.8): Aggressively reduced y to 0.35cm to eliminate massive title spacing
-      const xUnit = optimalUnit;
-      const yUnit = horizontalSpan > 0 ? optimalUnit : 0.35; // Use 0.35cm for y when using relative positioning
-      extraOpts += `, x=${xUnit.toFixed(2)}cm, y=${yUnit.toFixed(2)}cm`;
+      // FIX (v1.6.12): For RELATIVE diagrams, inject SMALL y-scale to compress title offsets like +(0,2)
+      // Node distance (in cm) is NOT affected by y-scale, but coordinate offsets are.
+      // Title at +(0,2) with y=0.5cm = 1cm gap instead of 2cm gap
+      if (horizontalSpan > 0) {
+        // Absolute positioning: calculate optimal unit to fill A4
+        // FIX (v1.6.19/20): Clamp X to 1.3cm (was 2.5 -> 1.6 -> 1.3).
+        // User requested "bit less" space. 1.3cm matches Y-clamp for symmetry.
+        // This effectively limits the grid expansion for small-span diagrams.
+        const xUnit = Math.min(1.3, optimalUnit);
+        // FIX (v1.6.18): Decouple X/Y. Clamp Y to 1.3cm to prevent vertical explosion.
+        const yUnit = Math.min(1.3, optimalUnit);
+        extraOpts += `, x=${xUnit.toFixed(2)}cm, y=${yUnit.toFixed(2)}cm`;
+      } else {
+        // Relative positioning: inject small y-scale to compress title offsets
+        extraOpts += ', y=0.5cm';
+      }
 
       // Ensure font is small enough to fit
       if (!options.includes('font=')) extraOpts += ', font=\\small';
@@ -318,6 +335,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // RESTORED (v1.6.4): Support Relative/Cycling Diagrams
       // For diagrams using 'node distance' (not absolute coords), we must inject spacious defaults.
       // FIX (v1.6.5): Use consistent targetDist calculation for both branches
+      // NOTE (v1.6.12): Title gap is now fixed via y=0.5cm injection, so node distance can remain at 8.4cm
       const targetDist = isTextHeavy ? 8.4 : 5.0;
 
       if (!options.includes('node distance')) {
@@ -325,7 +343,6 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         extraOpts += `, node distance=${targetDist}cm`;
       } else {
         // If AI set a distance, we allow it but boost it if it's too small
-        // Use same targetDist as above to ensure text-heavy diagrams get 8.4cm, not just 5cm
         if (nodeDist < targetDist) {
           extraOpts += `, node distance=${targetDist}cm`;
         }
@@ -412,9 +429,12 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     // GOLDILOCKS PROTOCOL: Coordinate Boost for text-heavy diagrams (Global Scope)
     // RECOVERED from Artifacts: x=2.2cm (Resolve Label Overlap), y=1.5cm (Increase Height)
     // UNIVERSAL FIX (v1.5.8): Only boost if span is unknown OR small (Index-Based < 7)
-    const isSmallOrUnknown = horizontalSpan === 0 || horizontalSpan < 7;
+    // FIX (v1.6.12): EXCLUDE LARGE intent - it uses node distance, not coordinate scaling
+    // FIX (v1.6.17): EXCLUDE ABSOLUTE POSITIONING (`horizontalSpan > 0`). If user provides explicit coords,
+    // we must not distort the grid. Only boost "Relative/Index" layouts (span === 0).
+    const isRelativeOrIndex = horizontalSpan === 0;
 
-    if (isTextHeavy && !options.includes('x=') && isSmallOrUnknown) {
+    if (isTextHeavy && !options.includes('x=') && isRelativeOrIndex && intent !== 'LARGE') {
       extraOpts += ', x=2.2cm, y=1.5cm';
     }
 
@@ -428,8 +448,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
     }
 
-    // LARGE INTENT: Strip node distance if we're overriding it (v1.6.5)
+    // LARGE INTENT: Strip node distance if we're overriding it (v1.6.5, v1.6.12 adaptive)
     if (intent === 'LARGE') {
+      // Use same adaptive formula as above
       const targetDist = isTextHeavy ? 8.4 : 5.0;
       const distMatch = options.match(/node distance\s*=\s*([\d\.]+)/);
       if (distMatch) {
@@ -464,9 +485,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     body { 
       margin: 0; 
       padding: 0; 
-      display: flex; 
-      justify-content: center; 
-      align-items: flex-start; 
+      display: flex;
+      flex-direction: column; /* Stack loading + diagram vertically */
+      align-items: center;
       overflow: hidden; /* Hide scrollbars, let height grow */
       width: 100%;
     }
@@ -482,6 +503,25 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       display: flex;
       justify-content: center;
     }
+    /* Loading Placeholder Styles (v1.6.11) */
+    .tikz-loading {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      box-sizing: border-box;
+      color: #666;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      white-space: nowrap; /* Prevent text wrapping */
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+    .tikz-loading.hidden { display: none; }
   </style>
   <script>
     window.addEventListener('error', e => { if (e.message?.includes('message channel closed')) e.preventDefault(); });
@@ -489,6 +529,10 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   </script>
 </head>
 <body>
+  <!-- Loading Placeholder (v1.6.11) -->
+  <div id="tikz-loading" class="tikz-loading">
+    <div>[ Generating diagram... ]</div>
+  </div>
   <div class="tikzjax-container">
     <script type="text/tikz">
       \\begin{tikzpicture}${finalOptions}
@@ -502,6 +546,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const observer = new MutationObserver(() => {
       const svg = document.querySelector('svg');
       if (svg && window.frameElement) {
+         // Hide loading placeholder once SVG appears (v1.6.11)
+         const loading = document.getElementById('tikz-loading');
+         if (loading) loading.classList.add('hidden');
          // Add a small buffer for tooltips/shadows
          const rect = svg.getBoundingClientRect();
          window.frameElement.style.height = (rect.height + 5) + 'px';
