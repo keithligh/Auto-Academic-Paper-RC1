@@ -299,8 +299,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // Override/Inject generic optimal settings
       // We purposefully IGNORE existing x=/y= because they are likely the cause of the overlap.
       // FIX (v1.6.6): Use smaller y value to prevent vertical offsets (like title positioning) from expanding too much
+      // FIX (v1.6.7): Reduced y from 1.0cm to 0.6cm for tighter title spacing
       const xUnit = optimalUnit;
-      const yUnit = horizontalSpan > 0 ? optimalUnit : 1.0; // Use 1.0cm for y when using relative positioning
+      const yUnit = horizontalSpan > 0 ? optimalUnit : 0.6; // Use 0.6cm for y when using relative positioning
       extraOpts += `, x=${xUnit.toFixed(2)}cm, y=${yUnit.toFixed(2)}cm`;
 
       // Ensure font is small enough to fit
