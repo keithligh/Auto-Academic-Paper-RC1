@@ -233,3 +233,31 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
   - We implemented a "Glass Ceiling" clamp at **1.3cm** for both axes.
 - **The Lesson**: **Multipliers must be bounded.** Never implement a scaling formula `Target / Input` without a `Math.min(Limit, ...)` clamp. Without a ceiling, edge cases (small inputs) cause layout explosions.
 
+## 29. The Heuristic Overlap Trap (v1.6.23)
+- **Incident**: A complex diagram with explicit coordinates was misclassified as `COMPACT` because it had many nodes (>8). This triggered `scale=0.75` shrinking, crushing the layout.
+- **The Failure**: We had competing heuristics: `Absolute Coordinates` (Layout) vs `Node Count` (Complexity). The generic "Node Count" rule accidentally won because it was lower in the `else-if` chain.
+- **The Fix**: **Explicit Trumps Implicit.** Signals like "User provided coordinates" (`span > 0`) should always take priority over "Inferred Intent" (`node count`). We moved the check up the priority chain.
+- **The Lesson**: **Prioritize Explicit Intent.** When building classification trees, explicit signals (coordinates, keywords) must always override implicit heuristics (counts, density).
+
+### Lesson 30: The Verification First Protocol (or "The Premature Documentation Trap")
+- **Context**: During the TikZ Fix cycle (v1.6.25-28), the Agent prematurely updated `CHANGELOG.md` and `TIKZ_HANDLING.md` immediately after implementing code fixes, *before* the user verified them.
+- **The Failure**: Several of these "fixes" failed (v1.6.25 Partial, v1.6.27 Reverted), leading to documentation that described a "history of failures" rather than a definitive manual. It confused the reader and polluted the system artifacts.
+- **The Solution**: **Strict Governance Rule**. Do NOT touch documentation until the fix is **confirmed working** by the user (visually or functionally).
+- **The Protocol**: `Code -> Notify User -> Wait for Confirmation -> Update Docs`. No exceptions.
+
+### Lesson 31: The Bifurcated Logic Pattern (or "One Rule Breaks the Other")
+- **Context**: During TikZ scaling (v1.6.35-40), applying a single threshold for `node distance` overrides broke either Pipelines (explosion) or Cycles (squashing).
+- **The Failure**: Universal rules couldn't handle the diversity of diagram types.
+- **The Solution**: **Bifurcated Logic**. Split the rule into two branches based on a discriminating metric (`isTextHeavy`).
+    -   **Text-Heavy**: Aggressive overrides (needs space for paragraphs).
+    -   **Text-Light**: Permissive respect (tight packing is intentional).
+- **The Lesson**: When a single parameter must satisfy conflicting requirements, **bifurcate the logic** based on a second metric that distinguishes the cases.
+
+### Lesson 32: The Accidental Deletion Trap (or "Complex Function Edits")
+- **Context**: During v1.6.38, a large edit to `LatexPreview.tsx` accidentally deleted the critical `extraOpts += x=...cm, y=...cm` line.
+- **The Failure**: All LARGE intent diagrams rendered "tiny" until the user noticed.
+- **The Solution**: **Extreme Caution for Complex Edits.** When editing large functions:
+    1.  Make minimal, targeted changes.
+    2.  Verify the diff includes ONLY intended changes.
+    3.  Test immediately after commit.
+- **The Lesson**: File editing is inherently destructive. Complex functions are fragile. Double-check diffs.

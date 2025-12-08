@@ -8,6 +8,116 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.26] - 2025-12-08
+### Fixed
+- **TikZ Brace Polyfill (Vertical Artifacts)**: The manual brace polyfill (v1.6.21) assumed all braces were horizontal, applying Y-axis offsets. Vertical braces were rendered as straight lines or distorted loops (the "Vertical Line" artifact).
+  - **Correction**: Implemented **Orientation Detection** (`dy > dx`).
+    - **Vertical Braces**: Apply offsets to X-axis (creating curvature). Default direction points Left (-X).
+    - **Horizontal Braces**: Apply offsets to Y-axis (creating curvature). Default direction points Up (+Y).
+  - **Impact**: Vertical braces now curve correctly away from the content, eliminating the "straight line" visual bug and reducing perceived overlap.
+
+## [1.6.40] - 2025-12-08 (Compact Layout Tuning)
+### Fixed
+- **TikZ Excessive Empty Space**: The Adaptive Y-Scaling (v1.6.31) targeted a 12cm physical height, which was too aggressive for naturally compact diagrams.
+  - **Correction**: Reduced target height from **12cm → 8cm** and lowered Y-clamp range from **[1.3, 2.2] → [1.0, 1.8]**.
+  - **Reasoning**: Diagrams with moderate vertical span (e.g., 5-6 units) were being stretched 2x when they only needed 1.3x.
+  - **Impact**: ~30% reduction in vertical empty space for compact diagrams while maintaining readability.
+
+## [1.6.39] - 2025-12-08 (X/Y Injection Restoration)
+### Fixed
+- **TikZ "Tiny Diagram" Regression**: The v1.6.38 edit accidentally removed the critical line that injects calculated `x=...cm, y=...cm` values into the TikZ options for LARGE intent diagrams.
+  - **Symptom**: All LARGE intent diagrams (Pipelines, Cycles, Wide) rendered at native TikZ scale (1cm=1cm), then got shrunk by "Zoom-to-Fit" to appear "tiny".
+  - **Correction**: Restored the `extraOpts += `, x=\${xUnit}cm, y=\${yUnit}cm\`` injection line.
+  - **Impact**: Re-enables Adaptive Density Optimization for all absolute-layout diagrams.
+
+## [1.6.38] - 2025-12-08 (Title Gap Restoration)
+### Fixed
+- **TikZ Title Gap Explosion**: Adaptive Y-Scaling (v1.6.31) universally applied `y=1.5cm` (or calculated value) to LARGE intent, including Relative Layouts. This caused absolute title offsets (e.g., `+(0,2)`) to scale physically to `3cm`, creating a massive gap between title and content.
+  - **Correction**: Restored **Title Gap Compression** (v1.6.12 Logic).
+  - **Logic**: If `verticalSpan === 0` (Relative Layout), we force `y=0.5cm`.
+  - **Impact**: Titles anchored with absolute offsets (e.g., `+(0,2)`) now sit tightly (`1cm`) above the diagram, while the nodes themselves use the spacious `node distance=8.4cm` (from v1.6.37).
+
+## [1.6.37] - 2025-12-08 (Bifurcated Safety Net)
+### Fixed
+- **TikZ Cycle Diagram Regression (Threshold Bias)**: The v1.6.36 fix used a 2.5cm threshold, but many Text-Heavy diagrams use `node distance=3cm`, which slipped through and rendered as squashed.
+  - **Correction**: Implemented **Bifurcated Logic** in the Safety Net.
+  - **Logic**:
+    -   **Text-Heavy (Cycle)**: Aggressive Protection. Override ANY distance < 8.4cm. (Fixes Squashing).
+    -   **Text-Light (Pipeline)**: Permissive Respect. Override ONLY distance < 0.5cm. (Preserves Compactness).
+  - **Impact**: Solves the "Goldilocks" problem by acknowledging that text-heavy diagrams operate on a fundamentally different physical scale than text-light ones.
+
+## [1.6.36] - 2025-12-08 (Text-Heavy Safety Net) [PARTIAL]
+### Fixed
+- **TikZ Cycle Diagram Regression ("Squashed again")**: The "Strict Respect" rule (v1.6.35) allowed text-heavy diagrams (Cycles) to use tiny node distances.
+  - **Status**: Partially effective (Pipeline vs 0.8cm), but failed for "Medium" distance cycles (3cm). Superseded by v1.6.37.
+  - **Correction**: Re-introduced the **Text-Heavy Safety Net** with conditional logic.
+  - **Logic**:
+    -   **IF** `isTextHeavy` (avg label > 30 chars) **AND** `node distance < 2.5cm`: **OVERRIDE** (Force 8.4cm).
+    -   **ELSE**: **RESPECT** user intent (allows tight Pipelines).
+  - **Impact**: Universally solves both "Explosion" (for Pipelines) and "Squash" (for Cycles) by detecting content density.
+
+## [1.6.35] - 2025-12-08 (Strict Node Distance Protocol) [PARTIAL]
+### Fixed
+- **TikZ Relative Layout Explosion**: The system was overriding explicit `node distance=0.8cm` with `8.4cm` (10x expansion).
+  - **Status**: Fixed explosion but caused regression for text-heavy diagrams. Superseded by v1.6.36.
+  - **Correction**: Implemented **Strict Respect** for user-defined node distances.
+  - **Logic**: If the user sets a distance >= 0.5cm, we **TRUST IT** and do not override. We only inject defaults for missing or near-zero distances.
+  - **Impact**: Flowcharts with `node distance` retain their intended compactness while still benefiting from Adaptive Y-Scaling.
+
+## [1.6.31] - 2025-12-08 (Adaptive Y-Axis Scaling)
+### Fixed
+- **TikZ "Fix One, Ruin Others" Regression**: The "Vertical Boost" (v1.6.28, y=2.2cm) fixed "Squashed" diagrams but exploded tall/sparse diagrams.
+  - **Correction**: Implemented **Adaptive Y-Scaling**.
+    - **Logic**: `y = 12cm / VerticalSpan`.
+    - **Clamps**: Min 1.3cm (for tall diagrams), Max 2.2cm (for squashed diagrams).
+    - **Impact**: Provides "Goldilocks" spacing. Short diagrams get maximum boost; tall diagrams get constrained spacing.
+
+## [1.6.29] - 2025-12-08 (Unified Intent Architecture)
+### Fixed
+- **TikZ Classification Logic Trap**: Wide diagrams (>14cm) were triggering `WIDE` intent (Legacy Scaling) instead of `LARGE` intent (Density Optimized), bypassing fixes.
+  - **Correction**: All Absolute Layouts (`Span > 0`) now strictly enter `LARGE/FLAT` intent.
+  - **Impact**: Ensures modern density logic applies to all diagrams, preventing "Blind Shrinking".
+
+## [1.6.28] - 2025-12-08 (Vertical Boost Strategy) [PARTIAL]
+### Fixed
+- **TikZ Vertical Compression ("Squashed" Look)**: Acknowledged failure of symmetrical density.
+  - **Status**: Partially effective but caused regression (Explosion). Superseded by v1.6.31.
+
+## [Abandoned] Node Inflation (v1.6.30-34)
+- **Attempt**: To increase node size (`inner sep`) when boosting Y-axis.
+- **Outcome**: **FAILED**. Render engine completely ignored explicit padding instructions despite multiple strategies (Injection, Decoupling, Scorched Earth).
+- **Resolution**: Feature abandoned to preserve system integrity. Code reverted.
+### Fixed
+- **TikZ High-Definition Density (The Universal Overlap Fix)**: Previous fixes (1.3cm/1.5cm) were insufficient for wide text content in absolute layouts.
+  - **Correction**: Implemented **Adaptive Density Logic**:
+    - **Small Diagrams (Span <= 7)**: Force **Tight Grid (1.3cm)** to prevent "Huge Empty Gaps".
+    - **Large Diagrams (Span > 7)**: Force **Loose Grid (1.8cm)** and **25cm Width Budget**.
+  - **Impact**: Large diagrams now render with ~1.8cm unit spacing (70% expansion vs 1.0). The `katex-autoscale` engine then shrinks the visual view to fit the container. This effectively reduces font size relative to geometry by ~40%, clearing even the most stubborn text overlaps (like "Inputs (emails, docs)" vs braces).
+
+## [1.6.24] - 2025-12-08 (Partial Fix)
+### Fixed
+- **TikZ Edge-Case Collision**: Symmetrical clamping (`x=1.3cm`) was slightly too tight for nodes with very long text (e.g., "(emails, docs, data)") placed adjacent to other elements.
+  - **Correction**: Relaxed the **X-Axis Clamp** from 1.3cm to **1.5cm**.
+  - **Impact**: Provides 15% more horizontal breathing room for text expansion without returning to the "loose" visuals of 1.6cm+. The default grid is now (`x=1.5cm, y=1.3cm`) for maximum safe density.
+
+## [1.6.23] - 2025-12-08
+### Fixed
+- **TikZ Logic Trap**: Diagrams with explicit Absolute Coordinates were falling through to "COMPACT" intent if they had >8 nodes, causing blind `scale=0.75` shrinking and neutralizing our v1.6.22 fix.
+  - **Correction**: Updated intent classification to prioritize `horizontalSpan > 0` (Absolute Layouts) as **LARGE** intent.
+  - **Impact**: Ensures absolute layouts invoke the "Density Equation" logic (Width Budget 19cm + Auto-Zoom), rather than being crushed by generic node-count heuristics.
+
+## [1.6.22] - 2025-12-08
+### Fixed
+- **TikZ High-Density Cramping**: Dense diagrams (Span ~14cm) were being rendered at 1:1 scale (`x=1cm`), causing massive text overlap.
+  - **Correction**: Increased calculation "Width Budget" from 14cm to **19cm**.
+  - **Reasoning**: This allows `xUnit` to expand to **1.35cm** (clamped to 1.3), increasing physical spacing by 30%. The Zoom-to-Fit engine then shrinks the entire view to fit the container, effectively shrinking the font relative to the geometry. Resolves "Density Equation".
+
+## [1.6.21] - 2025-12-08
+### Fixed
+- **TikZ Brace Parsing**: The regex for the "Manual Bezier Brace Polyfill" (`decoration={brace}`) was too strict, failing on spaces (e.g., `decorate, decoration`).
+  - **Symptom**: Rendering crash (`! Package pgfkeys Error: I do not know the key '/pgf/decoration/.expanded'`).
+  - **Fix**: Updated the regex in `LatexPreview.tsx` to be robust against whitespace (`\s*`) around keys and commas.
+
 ## [1.6.20] - 2025-12-08
 ### Fixed
 - **TikZ Symmetrical Clamping**: Tuned horizontal protection to clamp `xUnit` at **1.3cm** (down from 1.6cm) to match the vertical `yUnit` clamp.

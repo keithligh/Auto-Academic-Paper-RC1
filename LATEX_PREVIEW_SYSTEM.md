@@ -610,22 +610,201 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 | **COMPACT** | **Fit to A4** | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm` |
 | **LARGE** | **Readability** | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
 | **MEDIUM** | Balance | **Smart Scale**: `1.0` (Fits A4) or `0.8/0.9` + Dist (2.5cm) |
+- `node distance` (in cm) controls `below of=`, `right of=` positioning → independent of coordinate scaling
+- Title offsets like `+(0,2)` use TikZ's y-unit (default 1cm) → affected by y-scale
 
-### 3. The "Universal" Density Override (v1.5.8)
-We discovered that `node distance` is not always a perfect predictor. Some "Cycle" diagrams use `node distance=2cm` (Medium) but pack 50+ words of text into nodes.
+**The Fix:**
+Inject `y=0.5cm` for LARGE relative diagrams:
+- Title at `+(0,2)` = `2 × 0.5cm = 1cm` instead of 2cm
+- `node distance=8.4cm` remains unaffected (specified in absolute cm)
 
-- **The Fix (Goldilocks Protocol)**: We calculate `avgLabelTextPerNode`.
-- **Rule**: If `avgLabelTextPerNode > 30` (Text Heavy) **AND** `horizontalSpan < 7` (Index Layout) **AND** `intent !== 'LARGE'` (v1.6.12 exclusion):
-    - We **FORCE** the global coordinate boost (`x=2.2cm, y=1.5cm`).
-- **LARGE Exclusion (v1.6.12)**: LARGE intent is now excluded because it uses `node distance` for spacing. Injecting x/y causes title offset explosions.
-- **Universal Safety**: If `horizontalSpan >= 7` (Physical Layout), we **SKIP** the boost to prevent "Exploding Diagrams" (v1.5.8 fix).
-- **Result**: Dense cycles get space; Physical diagrams keep their layout.
+### 4. The "Absolute Positioning" Override (v1.5.6)
+Diagrams using `\node at (x,y)` syntax bypass `node distance` entirely. If the horizontal span exceeds A4 safe width (14cm), CSS responsive shrinking causes node overlap.
 
-### 3.1. Title Gap Compression (v1.6.12)
+- **The Fix**: Extract ALL `(x,y)` coordinates (not just `at` patterns), calculate span, apply dynamic scale.
+- **Formula**: `scale = min(1.0, 14/span) × 0.9` with floor at 0.5.
+- **Requirement**: `transform shape` is mandatory for proportional shrinking.
 
-For LARGE intent diagrams using relative positioning (`horizontalSpan=0`), title nodes with coordinate offsets like `+(0,2)` created excessive gaps.
+### 5. The "Aspect Ratio" Override (v1.5.7)
+Timeline diagrams often have extreme aspect ratios (e.g., 10cm wide × 2.5cm tall = 4:1). This makes them look "squashed".
 
-**The Discovery:**
+- **Root Cause**: Initial coordinate extraction only matched `at (x,y)` patterns, missing `\draw (x,y)` paths that define vertical extent.
+- **The Fix**: Extract ALL `(x,y)` pairs from the TikZ body to calculate true vertical span.
+- **Formula**: `yMultiplier = min(3.0, max(1.5, aspectRatio / 2.0))`, `xMultiplier = 1.5`
+- **Override**: Existing `x=`/`y=` values are stripped and replaced (cannot skip, must fix ratio).
+
+This ensures that "Cycle" diagrams (Large intent) get the massive spacing they need to avoid overlap, while "Pipelines" (Compact intent) are shrunk proportionally.
+
+## 22. Mathematical Precision & KaTeX Handling (v1.5.8)
+
+We use **KaTeX** for rendering mathematics, prioritizing speed and "just works" display over 100% LaTeX feature parity.
+
+### 1. The Auto-Scaling Heuristic (The "Tiny Equation" Fix)
+Equations that are wider than the page (A4 width) must be scaled down to prevent overflow. However, naive character counting leads to "Tiny Equations" where short rendered math gets shrunk because the source code is verbose.
+
+-   **The Problem**: `\mathrm{Integration}` is ~20 characters in code but only ~11 characters wide visually.
+-   **The Solution**: We apply a **Strip-First Heuristic** before calculating length.
+    -   Removes `\mathrm{...}`, `\text{...}`, `\textbf{...}`.
+    -   Removes sizing commands `\left`, `\right`, `\big`.
+    -   *Result*: `estimatedWidthEm` is based on "visual density", not "code verbosity".
+
+### 2. Structured Environment Protection
+We **NEVER** auto-scale structured environments (`\begin{equation}`, `align`, `gather`, `multline`) based on character count.
+
+-   **Reason**: The wrapper tags (`\begin{equation}...`) inflate the character count by ~50 chars, causing the heuristic to incorrectly flag short equations as "too long".
+-   **Reason 2**: Multiline environments (`align`) grow *vertically*, so horizontal character count is a poor proxy for width.
+
+### 3. The "No Scrollbar" Policy
+A4 papers do not have scrollbars.
+
+
+## 23. The Universal Citation Processor (v1.5.13 System Refactor)
+
+We replaced the fragile regex-based citation patcher with a **Robust Tokenizer** in `server/latexGenerator.ts`. This ensures that *all* AI-generated citations are correctly formatted, regardless of spacing, newlines, or separators.
+
+### The Problem
+The AI outputs unpredictable formats:
+1.  `(ref_1)` (Standard)
+2.  `( ref_2 )` (Leading/Trailing spaces)
+3.  `(ref_3, ref_4)` (Grouped with comma)
+4.  `(ref_5; ref_6)` (Grouped with semicolon)
+5.  `(ref_7 ref_8)` (Grouped with spaces)
+
+Legacy regexes failed to handle all these variations simultaneously.
+
+### The Solution: Two-Pass Architecture
+
+#### Pass 1: The Robust Tokenizer (Anti-Fragile)
+Logic: "Find ANY parenthesized block starting with `ref_`, then **Parse** it (don't regex it)."
+-   **Step A (Capture)**: `/\(\s*(ref_[\s\S]*?)\)/g`. Captures the *block*, ignoring internal structure.
+-   **Step B (Tokenize)**: `content.split(/[,\s;]+/)`. Splits by commas, spaces, or semicolons.
+-   **Step C (Filter)**: Validates tokens against the reference catalog.
+-   **Result**: Handles *any* combination of separators transparently.
+
+#### Pass 2: The Recursive Merger (Best Practice Enforcement)
+Logic: "Recursively merge adjacent `\cite{}` commands into a single group."
+-   **Input**: `\cite{ref_1} \cite{ref_2}`
+-   **Output**: `\cite{ref_1,ref_2}`
+-   **Benefit**: This guarantees compliance with standard academic formatting (e.g., `[1, 2]`) even if the AI output separate blocks. This is a **structural enforcement** of style, not just a fix.
+
+## 24. Render Stability: The Move to Synchronous Execution (v1.6.0)
+
+For a long time, the preview renderer used `setTimeout(..., 50)` hacks to "wait for the DOM". This introduced race conditions where the scaling logic would run before the elements existed (rendering correct but unscaled) or after the user navigated away (React errors).
+
+### The Fix: Synchronous Logic
+We removed all artificial delays.
+
+1.  **Render Phase**: `latex.js` generator runs synchronously. HTML strings are generated instantly.
+2.  **Injection Phase**: `TreeWalker` substitution happens in the same tick.
+3.  **Measurement Phase**: Scaling logic is wrapped in `requestAnimationFrame`. This is the *browser-native* way to say "Run this code immediately after the next paint, when layout metrics are valid."
+
+**Rule**: **NEVER use `setTimeout` for layout logic.** Always use `requestAnimationFrame` or `useLayoutEffect`.
+
+## 25. Client-Side Citation Rendering (v1.5.15)
+
+The server-side citation processor (`latexGenerator.ts`) outputs `\cite{ref_1,ref_2}` syntax. The client-side renderer (`LatexPreview.tsx`) must convert this to IEEE-style brackets.
+
+### The Problem (v1.5.14)
+The client renderer was producing `[1][2]` instead of `[1, 2]`.
+
+### Root Cause
+The citation handler was joining individual bracket labels with an empty string instead of grouping them into a single bracket.
+
+### The Fix
+Rewrote the `\cite{}` handler to:
+1.  Parse the comma-separated keys: `\cite{ref_1,ref_2}` → `['ref_1', 'ref_2']`
+2.  Look up each key in the `citationMap` to get the numeric ID.
+3.  Collect all valid IDs into a single array.
+4.  Join them with `, ` and wrap in a single bracket pair: `[1, 2]`.
+
+**Result**: `\cite{ref_1,ref_2}` now correctly renders as `[1, 2]` (IEEE/Nature style).
+
+
+## 26. Universal Math Repair (v1.6.16)
+
+**Problem:** Invalid LaTeX syntax like `$\theta$_t` (orphaned subscripts) crashes the renderer because `latex.js` (and most compilers) strictly forbid subscripts/superscripts outside of Math Mode.
+
+**The Fix:** We implemented a server-side **Universal Regex Sanitizer** in `server/ai/utils.ts`.
+
+**Logic:**
+The regex scans for any closing math delimiter (`$`) that is immediately followed by a subscript or superscript operator (`_` or `^`). It then captures the "payload" (either a single character or a braced group) and moves it **inside** the math delimiters.
+
+- **Regex:** `/(?<!\\)\$\s*([_^])\s*(\{[^}]*\}|[a-zA-Z0-9])/g`
+- **Transformation:** `$M$_P` → `$M_P$`
+- **Effect:**
+    - `$\theta$_t` becomes `$\theta_t$` (Valid)
+    - `$\sigma$^2` becomes `$\sigma^2$` (Valid)
+    - `$\alpha$_{t+1}` becomes `$\alpha_{t+1}$` (Valid)
+
+**Philosophy:** This adheres to **Rule 9 (Containment)**. We do not try to patch the client renderer to handle invalid syntax. We fix the data at the source (Server) so the client receives only valid LaTeX.
+- **The Rule**: Dashes are left as-is. Smart quotes are allowed but not forced.
+- **Circled Text**: `\textcircled{x}` is simplified to `(x)`.
+
+---
+
+## 20. Final Architectures (v1.5.2 Refinements)
+
+### Math Auto-Scaling (Summary - see Section 2 for full details)
+
+We use a **two-layer scaling system** (see "Math Sizing Strategy" in Section 2):
+
+1.  **Pre-Render (Layer 1)**: Heuristic-based scaling for long single-line equations. Multi-line environments (`align*`, `gather*`) are **exempt** because they grow vertically, not horizontally.
+
+2.  **Post-Render (Layer 2)**: DOM-based `scrollWidth > clientWidth` check catches any overflows that escape Layer 1.
+
+*   **Min Scale**: 0.55x floor to prevent microscopic text
+*   **Method**: `transform: scale()` + `width: (100/scale)%` (not `zoom`, which causes reflow bugs)
+*   **UX**: No hover effects. No magnifying glass. Just correct sizing.
+
+### Header Handling (Valid LaTeX Injection)
+We previously injected HTML `<br>` tags to style `\paragraph`. This leaked into `latex.js`.
+*   **The Fix**: We now replace `\paragraph{Title}` with:
+    ```latex
+    \vspace{1em}
+    \noindent
+    \textbf{Title}
+    ```
+*   **Result**: `latex.js` sees valid LaTeX and renders it perfectly without artifacts.
+
+### Command Stripping (The "No-Op" List)
+
+Certain commands are actively removed to prevent errors or clutter:
+
+- **File System Access**: `\input{...}` and `\include{...}` are removed because the browser cannot access the server's file system.
+- **Metadata Lists**: `\tableofcontents`, `\listoffigures`, `\listoftables` are removed as `latex.js` cannot generate them dynamically without a second pass.
+- **Figure Wrappers**: `\begin{figure}` environments are "flattened" (tags removed, content kept) because floating layout logic is handled by CSS, not LaTeX.
+- **Captions/Labels**: `\caption`, `\label`, and `\ref` are currently stripped or replaced with `[?]` placeholders to prevent undefined reference errors.
+
+### Fatal Error Handling
+
+If the renderer encounters a catastrophic failure (e.g., `latex.js` throws an exception):
+
+- **The Guard**: A `try-catch` block wraps the entire render process.
+- **The UI**: An `Alert` component (shadcn/ui) is rendered in place of the document.
+
+---
+
+## 21. The Dynamic TikZ Engine (Intent-Based Phase 7)
+
+We adhere to the strict "Phase 7" logic documented in `TIKZ_HANDLING.md`. This strategy respects the AI's *intent* (expressed via `node distance`) while ensuring fit and readability.
+
+### 1. The Classifier (The Intent)
+We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm if node count > 8).
+*   **WIDE** (v1.5.6): Horizontal span > 14cm. **Takes priority.**
+*   **FLAT** (v1.5.7): Aspect ratio > 3:1 (timeline-style). **Second priority.**
+*   **COMPACT** (Pipeline): `dist < 2.0cm`.
+*   **LARGE** (Cycle): `dist >= 2.5cm`.
+*   **MEDIUM**: Everything else.
+
+### 2. The Execution Rules
+
+| Intent | Goal | Action |
+| :--- | :--- | :--- |
+| **WIDE** | **Fit to A4** | Dynamic `scale=(14/span × 0.9)`, `transform shape` |
+| **FLAT** | **Balance Ratio** | Multiplier: `y × (ratio/2)`, `x × 1.5`, strip old x/y |
+| **COMPACT** | **Fit to A4** | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm` |
+| **LARGE** | **Readability** | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
+| **MEDIUM** | Balance | **Smart Scale**: `1.0` (Fits A4) or `0.8/0.9` + Dist (2.5cm) |
 - `node distance` (in cm) controls `below of=`, `right of=` positioning → independent of coordinate scaling
 - Title offsets like `+(0,2)` use TikZ's y-unit (default 1cm) → affected by y-scale
 
@@ -756,33 +935,62 @@ The regex scans for any closing math delimiter (`$`) that is immediately followe
 
 ## 27. Enhancement Safety Protocol (v1.6.15)
 
-**Problem:** When the AI edits a section (Phase 6), it sometimes hallucinates changes to diagram code, corrupting TikZ syntax.
+- **Density:** For dense diagrams (Span ~14cm), `optimalUnit` was 1.0, causing text overlap.
 
-**The Fix:** The Editor is **strictly prohibited** from touching the `content` field of enhancements.
-- **Logic:** `SectionData` includes `enhancements`, but the Editor's instructions explicitly limit it to modifying `title` and `description` (for citation insertion). The `content` (TikZ code) is treated as **Read-Only** during the editing phase.
+## 28. The TikZ Scaling Saga (v1.6.35 - v1.6.40)
 
-## 28. TikZ Absolute Coordinate Protection (v1.6.17)
+This section documents the rapid iteration cycle that resolved the persistent TikZ diagram rendering issues. The core problem was achieving "Goldilocks" spacing: diagrams with dense text (Cycles) needed expansion, while diagrams with minimal text (Pipelines) needed compact packing. Applying one rule universally always broke the other.
 
-**Problem:** Diagrams with explicit absolute coordinates (e.g., `at (0,4)`) were being "exploded" by the Density Boost logic (`y=1.5cm`).
+### v1.6.35 (Strict Node Distance) - PARTIAL
+**Problem**: System was overriding explicit `node distance=0.8cm` with `8.4cm` (10x explosion).
+**Fix**: Implemented "Strict Respect" - only override if distance < 0.5cm.
+**Regression**: Caused Text-Heavy diagrams (Cycles) to squash due to respecting their small (but insufficient) node distances.
 
-**Fix:** We restricted the Density Boost to **Relative Positioning Only** (`horizontalSpan === 0`).
+### v1.6.36 (Text-Heavy Safety Net) - PARTIAL
+**Problem**: Cycles with 0.8cm were squashing.
+**Fix**: Added threshold: If `isTextHeavy` AND `distance < 2.5cm`, override.
+**Regression**: Cycles with `3cm` distance still slipped through.
 
-**Logic:**
-If the user (or AI) provides *any* explicit x-coordinates (`span > 0`), we assume they control the layout. We do not inject `x=2.2cm, y=1.5cm`. We rely on standard scaling logic or trust the coordinates as-is. This prevents "Outrageously Big" gaps.
+### v1.6.37 (Bifurcated Safety Net) - SUCCESS
+**Problem**: Single threshold didn't work for all cases.
+**Fix**: Completely bifurcated the logic based on content density:
+-   **Text-Heavy (Cycle)**: Override ANY distance < 8.4cm. (Aggressive Protection)
+-   **Text-Light (Pipeline)**: Override ONLY distance < 0.5cm. (Permissive Respect)
+**Result**: Universal stability.
 
-## 29. TikZ Vertical & Horizontal Protection (v1.6.18-20)
+### v1.6.38 (Title Gap Restoration) - BUGGY
+**Problem**: Adaptive Y-Scaling (v1.6.31) set `y=1.5cm` default for relative layouts, causing title offsets to explode.
+**Fix**: Restored v1.6.12 logic: If `verticalSpan === 0`, force `y=0.5cm`.
+**Regression**: Accidentally removed x/y injection line during edit.
 
-**Problem:** "Cycle/Large" intent diagrams were auto-expanding to fill the A4 width.
-- **Vertical:** `optimalUnit` applied to Y caused 5cm vertical gaps.
-- **Horizontal:** `optimalUnit` applied to X caused 8cm horizontal gaps for small coordinate spans.
+### v1.6.39 (X/Y Injection Restoration)
+**Problem**: v1.6.38 edit broke all LARGE intent diagrams by removing the `extraOpts += x=...cm, y=...cm` line.
+**Symptom**: LARGE intent diagrams rendered at native TikZ scale (1cm/unit), then shrunk by Zoom-to-Fit to appear "tiny".
+**Fix**: Restored the critical injection line.
+**Lesson**: Exercise extreme care when editing complex functions.
 
-**Fix:** We **decoupled and symmetrically clamped** expansion for diagrams with explicit coordinates:
-- **X-Axis:** Clamped to **1.3cm** maximum (Symmetrical).
-- **Y-Axis:** Clamped to **1.3cm** maximum (Compact Stacking).
+### v1.6.40 (Compact Layout Tuning) - SUCCESS
+**Problem**: 12cm target height was too aggressive for naturally compact diagrams, creating excessive empty space.
+**Fix**: Reduced scaling parameters:
+-   **Target Height**: 12cm → 8cm.
+-   **Y-Clamp Range**: [1.3, 2.2] → [1.0, 1.8].
+**Result**: ~30% reduction in vertical empty space while maintaining readability.
 
-**Result:**
-The grid becomes rectangular (`x=1.3cm, y=1.3cm`) in the worst case, or scales down. This preserves readability and ensures a consistent visual density that doesn't feel "loose".
+## 29. Current TikZ Parameters (v1.6.40)
 
+For **LARGE** intent (Absolute Layouts):
+-   **Width Budget**: 25cm.
+-   **X-Unit**: `Math.min(dynamicClamp, optimalUnit)` where `dynamicClamp = (span > 7) ? 1.8 : 1.3` and `optimalUnit = 25 / span`.
+-   **Y-Unit**: `Math.min(1.8, Math.max(1.0, 8 / verticalSpan))`. For Relative Layouts (`verticalSpan === 0`), force `y = 0.5cm`.
+-   **Node Distance**: `8.4cm` for Text-Heavy, `5.0cm` for Light. Bifurcated Safety Net applies.
 
+For **COMPACT** intent (Many Nodes):
+-   **Scale**: 0.75 (>=8 nodes) or 0.85.
+-   **Node Distance**: 1.5cm.
+-   **transform shape**: Applied (scales text proportionally).
 
+## 30. Display Math Scrollbar Fix
 
+Display math equations (`\[...\]`) were showing horizontal scrollbars when wider than the container.
+**Fix**: Changed `.katex-display` CSS from `overflow-x: auto` to `overflow-x: hidden` and added `max-width: 100%`.
+**Result**: Wide equations are now clipped rather than scrolled, providing a cleaner appearance.

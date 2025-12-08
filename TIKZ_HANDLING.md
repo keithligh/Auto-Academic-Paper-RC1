@@ -179,26 +179,67 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 6.  **Goldilocks LARGE Exclusion (v1.6.12)**: **LARGE** intent is now **excluded** from the Goldilocks Protocol's x/y injection (`x=2.2cm, y=1.5cm`). LARGE uses `node distance` for spacing rather than coordinate scaling, so injecting x/y causes title offset explosions.
 
 #### 8. The Absolute Protection Protocol (v1.6.17-20)
+#### 8. The Absolute Protection Protocol (v1.6.17-31)
+> **Problem**: Diagrams with explicit absolute coordinates (`\node at (0,4)`) suffered from "Squashed" vs "Exploded" dichotomy.
+> **The Fix**: We introduced a specific `horizontalSpan > 0` check (Unified Intent v1.6.29) and Adaptive Y-Scaling (v1.6.31).
+> 1.  **Width Budget**: We assume the diagram can fill up to **25cm** (v1.6.25).
+> 2.  **Adaptive Y-Axis Scaling (v1.6.31 - "The Goldilocks Vertical")**:
+    -   **Concept**: Height is cheap, but not *infinitely* cheap. We must balance squashed diagrams vs exploded ones.
+    -   **Formula**: `yUnit = TargetHeight (12cm) / VerticalSpan`.
+    -   **Clamping**:
+        -   **Max 2.2cm**: For short diagrams (e.g., Span < 5), giving them massive vertical boost to fix "Squashed" look.
+        -   **Min 1.3cm**: For tall diagrams (e.g., Span > 10), constraining them to prevent "Explosion".
+    -   **Result**: A responsive vertical grid that feels proportional regardless of the input coordinate scale.
+> 3.  **Unified Intent (v1.6.29)**:
+    -   We abolished the `WIDE` intent for absolute layouts. If `Span > 0`, it enters the `LARGE` physics engine, ensuring the Adaptive Y logic applies universally.
+> 4.  **Failed Experiment: Node Inflation**: We attempted to dynamically inflate `inner sep` based on Y-boost. This failed due to rendering engine limitations and was abandoned to preserve integrity.
 
-> **Problem Case**: Diagrams with **Explicit Absolute Coordinates** (e.g., `at (0,4)`) were being "exploded" by generic scaling logic intended for relative or small diagrams.
-> - **v1.6.17 Incident**: The "Goldilocks" density check (`horizontalSpan < 7`) assumed small diagrams needed expansion. It multiplied `at (0,4)` by `y=1.5`, creating massive gaps.
-> - **v1.6.19 Incident**: The `optimalUnit` calculation allowed X to grow to 2.5cm, creating 8cm horizontal gaps for small spans.
+#### 9. The Logic Trap (v1.6.23)
+> **Problem Case**: Diagrams with explicit coordinates (Span > 0) but many nodes (>8) were falling through to `COMPACT` intent, triggering blind `scale=0.75` shrinking. This neutralized the density fixes.
+> **The Fix**: We updated the intent classification priority. **Explicit Coordinates (`horizontalSpan > 0`) now strictly imply `LARGE` (Optimized Density) intent**, overriding generic node counts.
+> **Rule**: Explicit Layout Signals > Implicit Complexity Heuristics.
 
-**The Fix: A Symmetrical Cage**
-We created a protected branch for Absolute Layouts (`horizontalSpan > 0`).
+#### 10. The Bifurcated Safety Net (v1.6.37)
+> **Problem**: A conflict existed between "Pipelines" (Small labels, tight packing) and "Cycles" (Large paragraphs, loose packing). Both often come with `node distance=0.8cm` or `3cm` from the AI.
+> - **v1.6.5**: Forced 8.4cm everywhere. Result: Pipelines exploded.
+> - **v1.6.35**: Respected user setting. Result: Cycles squashed.
+> - **v1.6.36**: Used 2.5cm threshold. Result: Pipelines Safe, but `3cm` Cycles still squashed.
+>
+> **The Solution (v1.6.37)**: We use the **Intent Engine** (`isTextHeavy`) to bifurcate the physics.
+> 1.  **Metric**: `isTextHeavy` = Average Label Length > 30 characters.
+> 2.  **Logic**:
+>     -   **IF** `isTextHeavy` (Cycle): **Aggressive Protection**. Override ANY distance < **8.4cm**. (Forces proper spacing for paragraphs).
+>     -   **ELSE** (Pipeline): **Permissive Respect**. Override ONLY distance < **0.5cm**. (Preserves compact layout).
+> 3.  **Result**: Universal stability. Text-heavy diagrams get the space they need; Light diagrams keep the layout they have.
 
-1.  **Strict Isolation**: The "Goldilocks" density booster (`x=2.2cm`) is strictly disabled for explicit coordinates.
-2.  **Symmetrical Clamping (v1.6.20)**: We decouple X/Y scaling but apply symmetrical clamps to prevent "loose" visuals.
-    -   **X-Axis**: Clamped to **1.3cm** (was 2.5 -> 1.6 -> 1.3).
-    -   **Y-Axis**: Clamped to **1.3cm** (was 2.5 -> 1.5 -> 1.3).
-3.  **Result**: The grid expands to fit text but hits a "Glass Ceiling" at 1.3cm, ensuring diagrams remain compact even if the math suggests infinite expansion.
+---
+
+#### 11. Title Gap Restoration (v1.6.38)
+> **Problem**: The "Adaptive Y-Scaling" (v1.6.31) set `y=1.5cm` (default) for relative layouts. This physically scaled absolute title offsets (like `+(0,2)`) to `3cm`, creating a huge disconnected gap.
+> **The Fix**: We restored the "Title Gap Compression" logic from v1.6.12.
+> - **Rule**: If `verticalSpan === 0` (Relative Layout, no absolute coordinates), we Force `y=0.5cm`.
+> - **Effect**: A title at `(0,2)` renders at `1cm` physical height.
+> - **Synergy**: This works perfectly with v1.6.37 because `node distance` (8.4cm) handles the *layout* spacing independently of `y` unit. The diagram stays large; the title stays close.
+
+#### 12. X/Y Injection Restoration (v1.6.39)
+> **Problem**: The v1.6.38 edit accidentally removed the line that injects `x=...cm, y=...cm` into the TikZ options.
+> **Symptom**: LARGE intent diagrams rendered at native TikZ scale (1cm per unit), then Zoom-to-Fit shrunk them to appear "tiny".
+> **The Fix**: Restored the critical `extraOpts += \`, x=\${xUnit}cm, y=\${yUnit}cm\`` line.
+> **Lesson**: Exercise extreme care when editing complex functions. Verify before committing.
+
+#### 13. Compact Layout Tuning (v1.6.40)
+> **Problem**: Diagrams with moderate vertical span (5-6 units) were being stretched excessively due to the 12cm height target.
+> **The Fix**: Reduced vertical scaling parameters:
+> - **Target Height**: 12cm → 8cm.
+> - **Y-Clamp Range**: [1.3, 2.2] → [1.0, 1.8].
+> **Reasoning**: A diagram with 5.6 vertical span was getting `y = 12/5.6 = 2.14cm`. Now it gets `y = 8/5.6 = 1.43cm`.
+> **Result**: ~30% reduction in vertical empty space while maintaining readability.
 
 ---
 
 ## Summary of Critical Rules
 
 1.  **NEVER** let `latex.js` see `\begin{tikzpicture}`.
-2.  **NEVER** pass Unicode characters to TikZJax.
 3.  **ALWAYS** use the manual bracket parser for extraction (Regex is insufficient).
 4.  **ALWAYS** use `transform shape` for **COMPACT** and **WIDE** diagrams (scales text).
 5.  **NEVER** use `transform shape` for **LARGE** diagrams (keeps text readable).

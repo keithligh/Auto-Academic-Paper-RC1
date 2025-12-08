@@ -176,10 +176,13 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     safeTikz = safeTikz.replace(/\\\\&/g, '\\\\ \\&'); // \\& → \\ \& (linebreak + space + escaped ampersand)
     safeTikz = safeTikz.replace(/([^\\])&/g, '$1\\&'); // raw & → \& (but not already escaped)
 
+
+
     // GEOMETRIC POLYFILL: Manual Bezier Braces for TikZJax
     // TikZJax cannot handle decoration={brace}, so we draw it manually.
+    // FIX (v1.6.21): Made regex robust against whitespace (e.g., "decorate, decoration")
     safeTikz = safeTikz.replace(
-      /\\draw\[decorate,decoration=\{brace([^}]*)\}\]\s*\(([^)]+)\)\s*--\s*\(([^)]+)\)\s*node\[([^\]]*)\]\s*\{([^}]*)\};/g,
+      /\\draw\[\s*decorate\s*,\s*decoration\s*=\s*\{\s*brace([^}]*)\}\]\s*\(([^)]+)\)\s*--\s*\(([^)]+)\)\s*node\[([^\]]*)\]\s*\{([^}]*)\};/g,
       (match, decoOpts, start, end, nodeOpts, label) => {
         const isMirror = decoOpts && decoOpts.includes('mirror');
         const parseCoord = (s: string) => {
@@ -187,12 +190,54 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
           return { x: parts[0] || 0, y: parts[1] || 0 };
         };
         const p1 = parseCoord(start); const p2 = parseCoord(end);
+
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const isVertical = Math.abs(dy) > Math.abs(dx);
+
         const midX = (p1.x + p2.x) / 2;
         const midY = (p1.y + p2.y) / 2;
-        const curvature = isMirror ? 1 : -1;
-        const offset = 0.15 * curvature;
-        const tip = 0.35 * curvature;
-        return `\\draw[thick] (${p1.x},${p1.y}) .. controls (${p1.x},${p1.y + offset}) and (${midX},${midY + offset}) .. (${midX},${midY + tip}) .. controls (${midX},${midY + offset}) and (${p2.x},${p2.y + offset}) .. (${p2.x},${p2.y}); \\node[${nodeOpts}] at (${midX},${midY + tip + (0.4 * curvature)}) {${label}};`;
+
+        // Curvature calculation
+        // Horizontal: +Y is "Up" (Standard), -Y is "Down" (Mirror?) - TikZ default is Up? Actually default brace is usually "top".
+        // Vertical: -X is "Left", +X is "Right".
+        // Heuristic: We use a default amplitude factor.
+
+        let c1x, c1y, c2x, c2y, c3x, c3y, tipX, tipY;
+        const mag = 0.15; // amplitude base
+        const tipMag = 0.35; // tip height
+
+        // Direction multiplier
+        const dir = isMirror ? -1 : 1;
+
+        if (isVertical) {
+          // Vertical Brace (offsets on X)
+          const sign = -1 * dir; // Default -1 (Left)
+
+          c1x = p1.x + (sign * mag); c1y = p1.y;
+          c2x = midX + (sign * mag); c2y = midY;
+          tipX = midX + (sign * tipMag); tipY = midY;
+          c3x = p2.x + (sign * mag); c3y = p2.y;
+
+          // Label position: Further out in X
+          const labelX = midX + (sign * (tipMag + 0.6)); // v1.6.28 Boosted Offset
+          const labelY = midY;
+
+          return `\\draw[thick] (${p1.x},${p1.y}) .. controls (${c1x},${c1y}) and (${c2x},${c2y}) .. (${tipX},${tipY}) .. controls (${c2x},${c2y}) and (${c3x},${c3y}) .. (${p2.x},${p2.y}); \\node[${nodeOpts}] at (${labelX},${labelY}) {${label}};`;
+        } else {
+          // Horizontal Brace (offsets on Y)
+          const sign = 1 * dir; // Default +1 (Up)
+
+          c1x = p1.x; c1y = p1.y + (sign * mag);
+          c2x = midX; c2y = midY + (sign * mag);
+          tipX = midX; tipY = midY + (sign * tipMag);
+          c3x = p2.x; c3y = p2.y + (sign * mag);
+
+          const labelX = midX;
+          const labelY = midY + (sign * (tipMag + 0.6)); // v1.6.28 Boosted Offset
+
+          return `\\draw[thick] (${p1.x},${p1.y}) .. controls (${c1x},${c1y}) and (${c2x},${c2y}) .. (${tipX},${tipY}) .. controls (${c2x},${c2y}) and (${c3x},${c3y}) .. (${p2.x},${p2.y}); \\node[${nodeOpts}] at (${labelX},${labelY}) {${label}};`;
+        }
       }
     );
 
@@ -266,22 +311,25 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     }
 
     // 2. CLASSIFY
-    // Priority: WIDE > FLAT > node distance > text density > node count
-    if (isWideHorizontal) {
-      intent = 'WIDE'; // Horizontal overflow - must scale down to fit
-    } else if (isFlat) {
-      intent = 'FLAT'; // Timeline-style - needs y-axis boost
+    // Priority: FLAT > LARGE (Absolute) > node distance > text density > node count
+    // UNIFICATION (v1.6.29): All Absolute Layouts (Span > 0) use LARGE (Density Engine) logic.
+    // This allows the "Vertical Boost" (v1.6.28) to apply to "Wide" diagrams too, fixing the squashed look.
+
+    if (horizontalSpan > 0) {
+      if (isFlat) intent = 'FLAT'; // Timeline-style (Extreme aspect ratio)
+      else intent = 'LARGE';       // Absolute Layout (includes WIDE) -> Uses Adaptive Density + Vertical Boost
     } else if (distMatch) {
-      // Explicit intent wins
+      // Explicit intent wins (Relative Layouts)
       if (nodeDist < 2.0) intent = 'COMPACT';
       else if (nodeDist >= 2.5) intent = 'LARGE';
     } else {
-      // Implicit intent (Inference)
+      // Implicit intent (Inference for Relative Layouts)
       if (isTextHeavy) intent = 'LARGE'; // Text-heavy = Cycle = Large
       else if (nodeMatches.length >= 8) intent = 'COMPACT'; // Many nodes = Pipeline = Compact
     }
 
     // 3. EXECUTE RULES (The Table)
+    console.log(`[TikZ Classification] ID:${id} Intent:${intent} Span:${horizontalSpan} Flat:${isFlat}`);
     let extraOpts = '';
 
     if (intent === 'COMPACT') {
@@ -295,44 +343,33 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     } else if (intent === 'LARGE') {
       // GOAL: Readability & Maximize Spacing
       // PROBLEM: AI often sets tiny grids (x=0.8cm) which cause text overlap.
-      // SOLUTION (v1.6.4): Ignore AI's grid. Force expansion to fill A4 width (14cm).
+      // SOLUTION (v1.6.22): Ignore AI's grid. Force expansion to fill available space (25cm budget - v1.6.25/27).
 
-      let optimalUnit = 1.0;
-      if (horizontalSpan > 0) {
-        // Calculate unit size to fill 14cm width
-        // e.g. Span 10 -> Unit 1.4cm
-        optimalUnit = Math.min(2.5, 14 / horizontalSpan); // Cap at 2.5cm to avoid explosion
-      } else {
-        // Fallback if span unknown
-        optimalUnit = 1.5;
-      }
+      // Width Budget: 25cm (allows expansion for Zoom Engine)
+      const optimalUnit = Math.min(2.5, 25 / (horizontalSpan || 1));
 
-      // Override/Inject generic optimal settings
-      // We purposefully IGNORE existing x=/y= because they are likely the cause of the overlap.
-      // FIX (v1.6.6): Use smaller y value to prevent vertical offsets (like title positioning) from expanding too much
-      // FIX (v1.6.7): Reduced y from 1.0cm to 0.6cm for tighter title spacing
-      // FIX (v1.6.8): Aggressively reduced y to 0.35cm to eliminate massive title spacing
-      // FIX (v1.6.12): For RELATIVE diagrams, inject SMALL y-scale to compress title offsets like +(0,2)
-      // Node distance (in cm) is NOT affected by y-scale, but coordinate offsets are.
-      // Title at +(0,2) with y=0.5cm = 1cm gap instead of 2cm gap
-      if (horizontalSpan > 0) {
-        // Absolute positioning: calculate optimal unit to fill A4
-        // FIX (v1.6.19/20): Clamp X to 1.3cm (was 2.5 -> 1.6 -> 1.3).
-        // User requested "bit less" space. 1.3cm matches Y-clamp for symmetry.
-        // This effectively limits the grid expansion for small-span diagrams.
-        const xUnit = Math.min(1.3, optimalUnit);
-        // FIX (v1.6.18): Decouple X/Y. Clamp Y to 1.3cm to prevent vertical explosion.
-        const yUnit = Math.min(1.3, optimalUnit);
-        extraOpts += `, x=${xUnit.toFixed(2)}cm, y=${yUnit.toFixed(2)}cm`;
-      } else {
-        // Relative positioning: inject small y-scale to compress title offsets
-        extraOpts += ', y=0.5cm';
-      }
+      // FIX (v1.6.25): Adaptive Clamp
+      const dynamicClamp = horizontalSpan > 7 ? 1.8 : 1.3;
 
-      // Ensure font is small enough to fit
+      // FIX (v1.6.31/v1.6.38): Adaptive Y-Axis Scaling (The "Goldilocks" Vertical)
+      // Problem: "Universal Boost" (y=2.2) exploded tall diagrams. "Symmetry" squashed short ones.
+      // Solution: Calculate yUnit based on Vertical Span to target a specific physical height.
+      // v1.6.38: If verticalSpan == 0 (Relative Layout), force y=0.5 for title compression.
+      // v1.6.40: Reduced targetHeight from 12cm to 8cm to reduce excessive empty space.
+      const targetHeight = 8; // cm (v1.6.40: reduced from 12cm for tighter layouts)
+      const rawY = verticalSpan > 0 ? (targetHeight / verticalSpan) : 0.5;
+
+      // Clamp Y: Min 1.0cm (v1.6.40: lowered from 1.3 for tighter packing), Max 1.8cm (lowered from 2.2)
+      let yUnit = rawY === 0.5 ? 0.5 : Math.min(1.8, Math.max(1.0, rawY));
+
+      const xUnit = Math.min(dynamicClamp, optimalUnit); // Keeps width constraint
+
+      // FIX (v1.6.39): RESTORED - This line was accidentally removed in v1.6.38!
+      extraOpts += `, x=${xUnit.toFixed(2)}cm, y=${yUnit.toFixed(2)}cm`;
+
+      // Restore missing font setting (likely lost in v1.6.29 refactor)
       if (!options.includes('font=')) extraOpts += ', font=\\small';
 
-      // RESTORED (v1.6.4): Support Relative/Cycling Diagrams
       // For diagrams using 'node distance' (not absolute coords), we must inject spacious defaults.
       // FIX (v1.6.5): Use consistent targetDist calculation for both branches
       // NOTE (v1.6.12): Title gap is now fixed via y=0.5cm injection, so node distance can remain at 8.4cm
@@ -342,13 +379,30 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         // If we forced LARGE due to text density, we use the proven magic number
         extraOpts += `, node distance=${targetDist}cm`;
       } else {
-        // If AI set a distance, we allow it but boost it if it's too small
-        if (nodeDist < targetDist) {
-          extraOpts += `, node distance=${targetDist}cm`;
+        // FIX (v1.6.37): The Bifurcated Safety Net.
+        // Problem: v1.6.36 used a 2.5cm threshold, but Cycle diagrams with `node distance=3cm` were still squashed.
+        // Solution: We split the logic completely based on `isTextHeavy`.
+
+        if (isTextHeavy) {
+          // STRATEGY: Aggressive Protection (Restore v1.6.5 behavior)
+          // Text-heavy nodes need massive space. 3cm is NOT enough.
+          // If the provided distance is less than our target (8.4cm), we FORCE the boost.
+          if (nodeDist < targetDist) {
+            extraOpts += `, node distance=${targetDist}cm`;
+          }
+        } else {
+          // STRATEGY: Permissive Respect (Preserve v1.6.35 behavior)
+          // Light nodes (Pipelines) look good packed tight (e.g. 0.8cm).
+          // We only interfere if it's absurdly small (< 0.5cm).
+          if (nodeDist < 0.5) {
+            extraOpts += `, node distance=${targetDist}cm`;
+          }
         }
       }
 
       // Mandatory for Large
+      // FIX (v1.6.32): Adaptive Node Inflation. Link Padding to Vertical Boost.
+      // Mandatory for Large: Alignment
       if (!options.includes('text width')) extraOpts += ', every node/.append style={align=center}';
 
       // Remove explicit scale if we are handling it via x/y

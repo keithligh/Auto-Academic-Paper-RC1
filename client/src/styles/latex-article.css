@@ -285,11 +285,16 @@ ol {
 .latex-preview .katex-display {
     margin: 1.5em 0 !important;
     font-size: 1.1em;
-    /* Allow scrolling for wide equations/tables */
-    overflow-x: auto;
+    /* FIX: Hide horizontal overflow. Wide equations will be handled by the wrapper's scale-down. */
+    overflow-x: hidden;
     overflow-y: hidden;
-    max-width: none !important;
-    /* Allow expansion for auto-scaling */
+    max-width: 100% !important;
+}
+
+/* Auto-scale wrapper for wide display math - scales down to fit container */
+.latex-preview .katex-display>.katex {
+    max-width: 100%;
+    display: inline-block;
 }
 
 /* Inline math should not add extra spacing */
