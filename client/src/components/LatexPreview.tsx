@@ -373,10 +373,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       if (!options.includes('transform shape')) extraOpts += ', transform shape';
 
     } else if (intent === 'BRACE') {
-      // GOAL: Create vertical space for brace labels below main content
-      // PROBLEM: Diagrams with x=0.8cm, y=0.8cm have cramped grids causing label overlap
-      // SOLUTION: Boost both x and y to prevent horizontal AND vertical cramping
-      //           + Reduce font size to fit more text in available space
+      // GOAL: Improve horizontal spacing for brace label diagrams
+      // PROBLEM: Diagrams with x=0.8cm have cramped horizontal grids causing label overlap
+      // SOLUTION: Boost x-axis only, keep y-axis at original scale (user prefers normal height)
 
       // Calculate optimal x-scale to fill A4 width without exceeding it
       const coordinateWidth = (maxX !== -Infinity && minX !== Infinity) ? (maxX - minX) : 10;
@@ -384,30 +383,18 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       const optimalXScale = coordinateWidth > 0 ? (targetWidthCm / coordinateWidth) : 1.5;
       const newXScale = Math.max(1.2, Math.min(2.0, optimalXScale)); // Floor at 1.2cm for label spacing
 
-      // Calculate optimal y-scale for vertical separation
-      const negativeExtent = Math.abs(minY) * yScale; // Physical depth below x-axis
-      const targetDepth = 3.0; // cm - increased from 2.5 for more vertical breathing room
-      const requiredYScale = negativeExtent > 0 ? (targetDepth / Math.abs(minY)) : 1.5;
-      const newYScale = Math.max(1.5, Math.min(2.5, requiredYScale));
-
       // Debug logging
       console.log('[BRACE Intent]', {
         coordinateWidth,
         optimalXScale,
         newXScale,
-        minY,
-        negativeExtent,
-        requiredYScale,
-        newYScale,
         originalXScale: xScale,
-        originalYScale: yScale
+        originalYScale: yScale,
+        keepingOriginalY: true
       });
 
-      // Reduce font size to prevent label overlap (follows LARGE intent pattern)
-      if (!options.includes('font=')) extraOpts += ', font=\\small';
-
-      // Strip old x/y and inject new values
-      extraOpts += `, x=${newXScale.toFixed(2)}cm, y=${newYScale.toFixed(2)}cm`;
+      // Only inject new x value, keep original y scale (no vertical boost)
+      extraOpts += `, x=${newXScale.toFixed(2)}cm`;
 
       // Do NOT use transform shape - we want text to stay at normal readable size
       // The boosted coordinate grid provides the space naturally
@@ -482,10 +469,15 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
     // FLAT/BRACE INTENT: Strip old x/y values so new calculated values take precedence
     let processedOptions = options.trim();
-    if (intent === 'FLAT' || intent === 'BRACE') {
-      // Remove existing x= and y= values (they'll be replaced with calculated ones)
+    if (intent === 'FLAT') {
+      // FLAT: Remove both x= and y= values (they'll be replaced with calculated ones)
       processedOptions = processedOptions.replace(/,?\s*x\s*=\s*[\d.]+\s*(cm)?/gi, '');
       processedOptions = processedOptions.replace(/,?\s*y\s*=\s*[\d.]+\s*(cm)?/gi, '');
+      // Clean up any double commas or leading/trailing commas
+      processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
+    } else if (intent === 'BRACE') {
+      // BRACE: Only remove x= value (keep original y scale for normal height)
+      processedOptions = processedOptions.replace(/,?\s*x\s*=\s*[\d.]+\s*(cm)?/gi, '');
       // Clean up any double commas or leading/trailing commas
       processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
     }
