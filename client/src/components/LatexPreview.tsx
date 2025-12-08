@@ -1342,36 +1342,12 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   });
   content = content.replace(/\\begin\{proof\}([\s\S]*?)\\end\{proof\}/g, (m, body) => `\n\n\\textit{Proof:} ${body} \u220E\n\n`);
 
-  // --- J2. SECTION STAR NORMALIZATION ---
-  // latex.js has issues with starred section variants (\section*, \subsection*, etc.)
-  // Strip the stars to ensure compatibility
-  content = content
-    .replace(/\\section\*/g, '\\section')
-    .replace(/\\subsection\*/g, '\\subsection')
-    .replace(/\\subsubsection\*/g, '\\subsubsection');
-
-  // --- J3. PARAGRAPH/SUBPARAGRAPH ---
+  // --- J2. PARAGRAPH/SUBPARAGRAPH ---
   // Ensure they look like headers (Bold, Run-in)
   // Fix: Handle \paragraph*{Title} and optional spaces
   content = content
     .replace(/\\paragraph\*?\{([^{}]*)\}/g, '\n\n\\vspace{1em}\\noindent\\textbf{$1} ')
     .replace(/\\subparagraph\*?\{([^{}]*)\}/g, '\n\n\\noindent\\textbf{$1} ');
-
-  // --- J4. MARKDOWN-STYLE BULLETS FIX ---
-  // Convert Markdown bullets (*   item) to LaTeX itemize
-  // This handles invalid LaTeX where users mix Markdown syntax
-  content = content.replace(/(?:^|\n)((?:\*   .*(?:\n|$))+)/gm, (match, bullets) => {
-    // Extract individual bullet items
-    const items = bullets.trim().split(/\n/).map((line: string) => {
-      return line.replace(/^\*   /, '').trim();
-    }).filter((item: string) => item.length > 0);
-
-    if (items.length === 0) return match;
-
-    // Convert to LaTeX itemize
-    const latexItems = items.map((item: string) => `  \\item ${item}`).join('\n');
-    return `\n\\begin{itemize}\n${latexItems}\n\\end{itemize}\n`;
-  });
 
   // --- K. COMMAND STRIPPING (Strict Containment) ---
   // Architecture Rule: "Code is Law" - Dangerous macros must be intercepted.
@@ -1450,36 +1426,12 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
 
         const { sanitized, blocks, bibliographyHtml } = sanitizeLatexForBrowser(latexContent);
 
-        // DEBUG: Log sanitized content to diagnose \end{document} missing error
-        console.log('=== FULL SANITIZED LATEX ===');
-        console.log(sanitized);
-        console.log('=== END FULL SANITIZED LATEX ===');
+        // DEBUG: Log sanitized length for diagnostics
+        console.log('[LatexPreview] Sanitized content length:', sanitized.length);
 
-        // Check for all environments
-        const allBeginEnvs = sanitized.match(/\\begin\{([^}]+)\}/g) || [];
-        const allEndEnvs = sanitized.match(/\\end\{([^}]+)\}/g) || [];
-        console.log('All \\begin environments:', allBeginEnvs);
-        console.log('All \\end environments:', allEndEnvs);
-
-        // Check for problematic patterns that break latex.js
-        const issues: string[] = [];
-
-        // Check for duplicate sections
-        const sectionMatches = sanitized.match(/\\section\{[^}]*\}/g) || [];
-        const sectionTitles = sectionMatches.map(s => s.match(/\\section\{([^}]*)\}/)?.[1]);
-        const duplicateSections = sectionTitles.filter((title, index) => sectionTitles.indexOf(title) !== index);
-        if (duplicateSections.length > 0) {
-          issues.push(`Duplicate sections: ${duplicateSections.join(', ')}`);
-        }
-
-        // Check for subsection* commands (latex.js might not support starred variants well)
-        if (sanitized.includes('\\subsection*')) {
-          issues.push('Found \\subsection* (starred variant)');
-        }
-
-        if (issues.length > 0) {
-          console.error('POTENTIAL ISSUES:', issues);
-        }
+        // Log first and last 200 chars for quick inspection
+        console.log('[LatexPreview] First 200 chars:', sanitized.substring(0, 200));
+        console.log('[LatexPreview] Last 200 chars:', sanitized.substring(sanitized.length - 200));
 
         const generator = new latexjs.HtmlGenerator({ hyphenate: false });
 
@@ -1488,7 +1440,36 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
           containerRef.current!.appendChild(generator.domFragment());
         } catch (parseErr: any) {
           console.error("latex.js parse error:", parseErr);
-          throw new Error(`Browser Render Error: ${parseErr.message}`);
+
+          // Build a helpful error message
+          let errorMsg = `LaTeX Parse Error: ${parseErr.message}`;
+
+          // Add location info if available
+          if (parseErr.location) {
+            const loc = parseErr.location;
+            errorMsg += `\n\nLocation: Line ${loc.start?.line || '?'}, Column ${loc.start?.column || '?'}`;
+
+            // Try to extract the problematic line
+            const lines = sanitized.split('\n');
+            if (loc.start?.line && loc.start.line <= lines.length) {
+              const lineNum = loc.start.line - 1;
+              const problemLine = lines[lineNum];
+              errorMsg += `\n\nProblematic line:\n${problemLine}`;
+
+              // Show surrounding context
+              if (lineNum > 0) {
+                errorMsg += `\n\nPrevious line:\n${lines[lineNum - 1]}`;
+              }
+            }
+          }
+
+          // Add suggestions based on error type
+          if (parseErr.message.includes('\\end{document} missing')) {
+            errorMsg += `\n\n💡 This usually means latex.js encountered invalid syntax and stopped parsing before reaching \\end{document}.`;
+            errorMsg += `\nThe LaTeX source may contain commands that latex.js doesn't support.`;
+          }
+
+          throw new Error(errorMsg);
         }
 
         // AUDIT FIX #3: Normalize DOM to prevent text node splitting
@@ -1613,11 +1594,20 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
     return (
       <div className={`latex-preview ${className}`}>
         <div style={{ padding: '20px', background: '#fff3f3', border: '1px solid #ffcccc', borderRadius: '4px' }}>
-          <strong style={{ color: '#cc0000' }}>Preview Notice:</strong>
-          <p>{error}</p>
+          <strong style={{ color: '#cc0000' }}>Preview Render Error</strong>
+          <pre style={{
+            marginTop: '10px',
+            padding: '10px',
+            background: '#f9f9f9',
+            borderRadius: '4px',
+            overflow: 'auto',
+            fontSize: '0.85em',
+            whiteSpace: 'pre-wrap',
+            wordWrap: 'break-word'
+          }}>{error}</pre>
           <p style={{ marginTop: '10px', color: '#666', fontSize: '0.9em' }}>
-            The preview uses a simplified browser renderer.
-            <strong>Your LaTeX source will still compile perfectly.</strong>
+            💡 <strong>Note:</strong> The preview uses a browser-based renderer with limited LaTeX support.
+            Your LaTeX source may still compile correctly with a full LaTeX compiler.
           </p>
         </div>
       </div>
