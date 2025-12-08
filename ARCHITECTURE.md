@@ -124,13 +124,14 @@ We do not ask the AI to "write and cite" simultaneously. We find the evidence *f
 
 The bibliography is constructed programmatically from the `Librarian`'s results. The LLM never writes the `\bibliography` section, ensuring perfect formatting.
 
-### 3. The Trojan Horse Architecture (Preview)
+### 3. Custom Preview Architecture ("The Nuclear Option")
 
-Visualizing LaTeX in the browser is unsafe. We use a **Strict Containment Protocol**:
-
-- **The Shield:** Strip dangerous macros.
-- **The Heist:** Extract complex nodes (Math, TikZ).
-- **The Injection:** Render them in isolated environments (Iframes).
+We have abandoned third-party rendering libraries (`latex.js`) in favor of a **Custom TypeScript Parser** (`latex-to-html.ts`).
+-   **Chassis**: A recursive "SaaS" parser for general structure (Sections, Environments).
+-   **Engines**: Specialized renderers for complex content:
+    -   **TikZ**: Iframe Isolation + Intent Engine.
+    -   **Math**: KaTeX (for all equation types).
+    -   **Tables/Lists**: Manual Character-Walker Parsers.
 
 ### 4. Intent-Based Diagrams
 
@@ -140,7 +141,7 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
 
 - If no evidence is found for a claim, we do not fake it.
 - Activity logs show every step: "Drafting section...", "Identifying claim...", "Researching...".
-- **Preview Transparency:** Unsupported LaTeX features are shown as raw code blocks, not hidden or broken.
+- **Fault Tolerance**: The previewer follows the "Show Something" rule. Malformed LaTeX is rendered as best-effort text or raw code, never crashing the UI.
 
 ### 6. Zero Hallucinations
 
@@ -153,19 +154,16 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
 - **ALWAYS** use `write_to_file` to rewrite the entire file content when making changes.
 - **Reason:** To prevent file corruption and "hallucinated" code states.
 
-### 8. The "Code is Law" Rule (Latex.js Containment)
+### 8. The "Code is Law" Rule (Parser Independence)
 
-- **NEVER** trust `latex.js` for anything complex.
-- **Strict Containment Protocol:**
+- **NEVER** rely on external libraries for critical path rendering if they are unstable.
+- **Strict Containment** (Legacy Concept) has been replaced by **Full Ownership** (Nuclear Option). We own the parser, so we control the errors.
   1. **Math**: Must use KaTeX.
   2. **TikZ**: Must use Iframe Isolation.
   3. **Tables**: Must use Custom HTML Parser.
   4. **Algorithms**: Must use Custom HTML Parser.
   5. **Enumerate**: Must use Custom HTML Parser (Leaf-First Recursion).
   6. **Citations**: Must use Custom Parser.
-  7. **Macros**: Dangerous macros (`\ref`, `\label`, `\url`, `\footnote`, `\eqref`) MUST be intercepted/sanitized.
-  8. **Itemize Options**: `itemize` MUST have optional arguments (`[...]`) stripped.
-- `latex.js` is strictly limited to being a "dumb text formatter".
 
 ### 9. Universal Citation Processor (v1.5.13)
 -   **Robust Tokenizer**: Captures citation blocks `(ref_...)` and **parses** them by splitting on any separator (comma, space, semicolon).
@@ -174,20 +172,11 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
 -   **Implementation**:
   -   **Server**: Two-pass Parser logic in `latexGenerator.ts`.
   -   **Client**: Custom grouper `[${validNums.join(', ')}]` for preview.
-- **Streaming:** Real-time progress updates via `onProgress` callbacks and throttled logging.
-- **Resilience:**
-  - **Timeouts:** 3-minute timeout for critical AI steps (Critic).
-  - **Retries:** Automatic retries for failed API calls.
-  - **Throttling:** Log updates are throttled to prevent CPU spikes.
-- **Sanitization:**
-  - **Server:** `sanitizeLatexOutput` in `server/ai/utils.ts`.
-  - **Client:** `sanitizeLatexForBrowser` in `client/src/components/LatexPreview.tsx` (Trojan Horse Architecture).
-  - 
 
 ### 10. Synchronous Rendering Stability (v1.6.0)
 -   **No Timers**: `setTimeout` is strictly forbidden for core rendering logic (`render`, `scaling`, `layout`).
 -   **Event Loop**: DOM measurements must use `requestAnimationFrame` to guarantee execution *after* the browser paint cycle, eliminating race conditions.
--   **Constraint**: All `latex.js` generation must be synchronous.
+-   **Pipeline**: The new `convertLatexToHtml` parser is fully synchronous string-processing.
 
 ### 11. Robust Manual Parsing (The "Scorched Earth" Policy)
 -   **Regex Forbidden**: For nested or recursive structures (Lists, Tables, Parboxes), Regex is strictly forbidden.
@@ -210,6 +199,3 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
 | `/config` | `ConfigPage` | AI provider configuration (responsive accordion layout) |
 | `/processing/:id` | `ProcessingPage` | Live progress console during AI processing |
 | `/result/:id` | `ResultPage` | LaTeX preview with download options |
-
-*Last Updated: 2025-12-08*
-*Version: 5.0 (Local-First + Responsive UI)*

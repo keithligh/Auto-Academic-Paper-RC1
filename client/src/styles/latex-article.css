@@ -5,11 +5,12 @@
 @import "latex-base.css";
 
 /* User Provided Reference CSS */
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&display=swap');
+/* @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&display=swap'); */
 
 /* Document Container - The "Page" */
 .latex-preview {
-    font-family: 'Lora', 'Times New Roman', serif !important;
+    font-family: 'Times New Roman', 'Times', serif !important;
+    /* Enforce Academic Journal Standard (Times) */
     line-height: 1.6 !important;
     color: #000 !important;
 

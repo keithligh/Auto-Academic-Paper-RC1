@@ -8,8 +8,9 @@ interface AIConfigContextType {
     updateConfig: (newConfig: Partial<AIConfig>) => void;
     updateProviderConfig: (type: keyof AIConfig, updates: Partial<ProviderConfig>) => void;
     resetConfig: () => void;
-    verifyConnection: (scope?: string) => Promise<boolean>;
+    verifyConnection: (scope?: string, configOverride?: AIConfig) => Promise<boolean>;
     isVerifying: boolean;
+    verifyingScope: string | null;
 }
 
 const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
@@ -36,7 +37,7 @@ const AIConfigContext = createContext<AIConfigContextType | undefined>(undefined
 export function AIConfigProvider({ children }: { children: React.ReactNode }) {
     // Initialize from localStorage or defaults
     const [config, setConfig] = useState<AIConfig>(() => {
-        const saved = localStorage.getItem("ai_config");
+        const saved = localStorage.getItem("ai_config_v1");
         if (saved) {
             try {
                 const parsed = JSON.parse(saved);
@@ -50,12 +51,12 @@ export function AIConfigProvider({ children }: { children: React.ReactNode }) {
         return DEFAULT_CONFIG;
     });
 
-    const [isVerifying, setIsVerifying] = useState(false);
+    const [verifyingScope, setVerifyingScope] = useState<string | null>(null);
     const { toast } = useToast();
 
     // Persist to localStorage whenever config changes
     useEffect(() => {
-        localStorage.setItem("ai_config", JSON.stringify(config));
+        localStorage.setItem("ai_config_v1", JSON.stringify(config));
     }, [config]);
 
     const updateConfig = (newConfig: Partial<AIConfig>) => {
@@ -87,13 +88,16 @@ export function AIConfigProvider({ children }: { children: React.ReactNode }) {
         });
     };
 
-    const verifyConnection = async (scope?: string): Promise<boolean> => {
-        setIsVerifying(true);
+    const verifyConnection = async (scope?: string, configOverride?: AIConfig): Promise<boolean> => {
+        const activeScope = scope || 'all';
+        setVerifyingScope(activeScope);
         try {
-            // Send current config to backend for verification
-            // FIX: Spread config into body so backend receives { writer, librarian, ... } at top level
+            // Use override if provided (for immediate verification after updates), otherwise use current state
+            const configToVerify = configOverride || config;
+
+            // Send config to backend for verification
             const res = await apiRequest("POST", "/api/verify-ai-config", {
-                ...config,
+                ...configToVerify,
                 scope
             });
 
@@ -134,7 +138,7 @@ export function AIConfigProvider({ children }: { children: React.ReactNode }) {
             });
             return false;
         } finally {
-            setIsVerifying(false);
+            setVerifyingScope(null);
         }
     };
 
@@ -145,7 +149,8 @@ export function AIConfigProvider({ children }: { children: React.ReactNode }) {
             updateProviderConfig,
             resetConfig,
             verifyConnection,
-            isVerifying
+            isVerifying: !!verifyingScope,
+            verifyingScope
         }}>
             {children}
         </AIConfigContext.Provider>

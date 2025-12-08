@@ -151,7 +151,7 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Failure**: A "Universal" regex-based list parser failed when it encountered optional arguments (`\begin{enumerate}[label=\textbf{1.}]`). The regex was too strict, causing the complex list to fall back to the buggy `latex.js` renderer.
 -   **The Insight**: Regex is a "happy path" optimization. It cannot handle arbitrarily nested structures (braces inside brackets inside braces) reliably.
 -   **The Fix**: Abandoned regex. Implemented a **Manual Character-Walker** that counts brace balance `depth++ / depth--`.
--   **The Rule**: **If "Fallback" is unacceptable, Regex is unacceptable.** To guarantee coverage of unknown edge cases (like code blocks inside lists), you must use a stateful parser (Character Walker) and explicitly order your pipeline (Verbatim -> Structure -> Text).
+-   **The Rule**: **If "Fallback" is unacceptable, Regex is unacceptable.** To guarantee coverage of unknown edge cases (like code blocks inside lists, or escaped ampersands in tables, you must use a stateful parser (Character Walker) and explicitly order your pipeline (Verbatim -> Structure -> Text).
 
 ## 20. Pipeline Ordering (The Corruption Trap)
 -   **The Failure**: SQL code `$amount` was rendered as `$LATEXPREVIEWMATH39$`, corrupting the code listing.
@@ -257,9 +257,9 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **Context**: During v1.6.38, a large edit to `LatexPreview.tsx` accidentally deleted the critical `extraOpts += x=...cm, y=...cm` line.
 -   **The Failure**: All LARGE intent diagrams rendered "tiny" until the user noticed.
 -   **The Solution**: **Extreme Caution for Complex Edits.** When editing large functions:
-    1.  Make minimal, targeted changes.
-    2.  Verify the diff includes ONLY intended changes.
-    3.  Test immediately after commit.
+    1.  **Strict Diff Review**: Manually inspect the diff for lines that are *missing* from the proposed content but present in the original.
+    2.  **Verify the diff includes ONLY intended changes.**
+    3.  **Test immediately after commit.**
 -   **The Lesson**: File editing is inherently destructive. Complex functions are fragile. Double-check diffs.
 
 ### Lesson 33: The "Modal is Not Mobile-Friendly" Pattern (v1.7.0)
@@ -360,3 +360,29 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Fix**: Consolidated all controls into one bar.
 -   **The Lesson**: **Every vertical pixel costs cognitive load.** If a header doesn't offer a unique control, kill it. Use visual hierarchy (active state), not text labels, to distinguish panes.
 
+### Lesson 43: The "Nuclear Option" (Abandoning the Sinking Ship) (v1.8.1)
+-   **Context**: `latex.js` was crashing on everything: unsupported macros, tabularx, math. We spent weeks building "Containment Protocols" to isolate it.
+-   **The Failure**: We were fighting the library, not using it. The "Hybrid" approach was 90% custom code and 10% `latex.js`, but `latex.js` caused 100% of the crashes.
+-   **The Decision**: **Abandon `latex.js` entirely.** We wrote a lightweight, fault-tolerant custom parser (`latex-to-html.ts`) that handles the 20% of LaTeX we actually need (sections, standard formatting) and integrates our existing custom engines (TikZ, Math, Tables).
+-   **The Lesson**: **If you have to wrap a library in a 'Containment Field' to keep it from exploding, you shouldn't be using that library.** Don't fall for the "Sunk Cost Fallacy" of an existing dependency. If it's broken, build a dumber, safer replacement.
+-   **The Result**: The new parser *never* crashes. If it sees something it doesn't know, it ignores it or shows raw text. It obeys the "Show Something" principle.
+
+### Lesson 44: The "Structural Underscore" Trap (Context-Aware Stability) (v1.8.1)
+-   **Context**: To stop `latex.js` from crashing on `_`, we blindly replaced `_` with `\_` globally.
+-   **The Failure**: This broke all Math. `$x_i$` became `$x\_i$`, which renders as literal backslash-underscore, not a subscript.
+-   **The Insight**: **Safety < Structure.** You cannot "sanitize" a language like LaTeX with global string replacements because the same character (`_`) is a crash-hazard in Text Mode but a vital operator in Math Mode.
+-   **The Fix**: Removed global replacement. Moved sanitation into the **Context-Aware Parser** (`parseLatexFormatting`). It only escapes underscores when it knows it is processing *text*, not math.
+-   **The Lesson**: **Global Regex Replacements are evil for structured languages.** You effectively corrupt the code before the parser even sees it. Always parse first, then sanitize based on the context (Text vs Code).
+
+### Lesson 45: The "Template Literal Space Corruption" Trap (v1.8.2)
+-   **Context**: During bulk code restoration/editing, template literals containing CSS class names were corrupted.
+-   **The Failure**: The preview rendered as completely unstyled plain text. No title formatting, no sections, just raw paragraphs.
+-   **The Root Cause**: Template literals had spaces injected around hyphens:
+    -   **Corrupted**: `.latex - preview { line - height: 1.8!important; }`
+    -   **Correct**: `.latex-preview { line-height: 1.8 !important; }`
+    -   **Corrupted JSX**: `className={`latex - preview ${className} `}`
+    -   **Correct JSX**: `className={`latex-preview ${className}`}`
+-   **Why It Happened**: The editing tool or copy/paste process introduced spaces. TypeScript/JavaScript doesn't error on this because it's a valid string - just a wrong CSS selector that matches nothing.
+-   **The Insight**: **CSS selectors are invisible failure points.** Unlike syntax errors, wrong selectors produce no console errors. The styles silently fail to apply.
+-   **The Lesson**: When bulk-editing files containing CSS class names (especially in template literals), **verify class name integrity** by searching for patterns like `\w+ - \w+` (letter-space-hyphen-space-letter).
+-   **Prevention**: After major edits, run `grep " - " filename.tsx` to detect corrupted hyphenated identifiers.

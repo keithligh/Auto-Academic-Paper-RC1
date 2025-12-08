@@ -110,10 +110,22 @@ export function extractJson(content: string): any {
         try {
             return JSON.parse(fixed);
         } catch (e2) {
+            // DETECT TRUNCATION: Check for common JSON parsing errors related to incomplete output
+            const errorMsg = e2 instanceof Error ? e2.message : String(e2);
+            const isTruncated =
+                errorMsg.includes("Unexpected end of JSON input") ||
+                errorMsg.includes("Unterminated string") ||
+                errorMsg.includes("End of data");
+
+            if (isTruncated) {
+                // Throw a specific error that we can catch upstream to abort retries
+                throw new Error(`AI_OUTPUT_TRUNCATED: The model response was cut off. This usually means the model hit its max output token limit. Try reducing the 'Enhancement Level' or using a model with a larger context window.`);
+            }
+
             // If that also fails, throw the original error but with more context
             // We truncate the content in the error message to avoid spam
-            const preview = clean.length > 100 ? clean.substring(0, 100) + "..." : clean;
-            throw new Error(`Failed to parse JSON: ${e instanceof Error ? e.message : String(e)}. Content preview: ${preview}`);
+            const preview = clean.length > 200 ? clean.substring(clean.length - 200) : clean;
+            throw new Error(`Failed to parse JSON: ${errorMsg}. End of content: "...${preview}"`);
         }
     }
 }

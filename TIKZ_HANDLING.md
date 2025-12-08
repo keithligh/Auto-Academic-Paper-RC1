@@ -2,12 +2,12 @@
 
 This document details the specific engineering strategies used to render compiled TikZ diagrams in the browser within the Auto Academic Paper application.
 
-Rendering TikZ in the browser is notoriously difficult because TikZ is a Turing-complete language that requires a full TeX engine. We use a **Hybrid Isolation Strategy** (part of the **Strict Containment Protocol** detailed in `LATEX_PREVIEW_SYSTEM.md`) to achieve this without crashing the main application.
+Rendering TikZ in the browser is notoriously difficult because TikZ is a Turing-complete language that requires a full TeX engine. We use an **Iframe Isolation Strategy** (part of the **Nuclear Option Architecture** detailed in `LATEX_PREVIEW_SYSTEM.md`) to achieve this without crashing the main application.
 
 ---
 
 ## 1. The Core Problem
-Client-side LaTeX parsers (like `latex.js` and `KaTeX`) **cannot** render TikZ. They lack the logic engine required to calculate coordinates, paths, and nodes.
+Client-side text parsers (like our Custom Parser or the now-defunct `latex.js`) **cannot** render TikZ. They lack the logic engine required to calculate coordinates, paths, and nodes.
 
 The only viable browser-based solution is **TikZJax**, a WebAssembly port of the TeX engine. However, TikZJax is heavy, fragile, and prone to crashing the main thread if mishandled.
 
@@ -23,10 +23,10 @@ Not all TikZ code is safe for the browser. Specifically, `pgfplots` (plots based
 -   **Output**: We inject a warning placeholder: `⚠️ Complex diagram (pgfplots) - not supported in browser preview`.
 
 ### Phase 1: The Heist (Extraction)
-Before the main document is parsed by `latex.js`, we steal the TikZ code.
+Before the main document is processed by our Custom Parser (`latex-to-html.ts`), we steal the TikZ code.
 
 -   **Manual Parser**: We do NOT use robust regex alone. We use a character-level parser to handle nested brackets `[...]` inside optional arguments (e.g., `label={[0,1]}`).
--   **Proprietary extraction**: See `LatexPreview.tsx` for the loop safety logic.
+-   **Proprietary extraction**: See `latex-to-html.ts` (specifically `extractTikzBlocks`) for the loop safety logic.
 -   **Placeholder**: We replace the entire block with a safe ID: `LATEXPREVIEWTIKZBLOCK1`.
 
 ### Phase 2: The Detox (Sanitization)
@@ -235,11 +235,24 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 > **Reasoning**: A diagram with 5.6 vertical span was getting `y = 12/5.6 = 2.14cm`. Now it gets `y = 8/5.6 = 1.43cm`.
 > **Result**: ~30% reduction in vertical empty space while maintaining readability.
 
+#### 14. FLAT Intent Font Reduction (v1.6.41)
+> **Problem**: FLAT diagrams (timeline-style, aspect ratio > 3:1) with many nodes had overlapping text labels even after x/y multiplier expansion.
+> **Root Cause**: Nodes with `minimum width=2.5cm` don't resize when coordinates scale. The text "AI research, personas, journeys" (~6cm) overflows the 2.5cm box.
+> **Key Insight**: x/y multipliers expand spacing between node *centers*, but they don't shrink text that overflows fixed-width boxes.
+> **The Fix**: For FLAT intent diagrams with ≥5 nodes, inject `font=\small`.
+> ```typescript
+> if (nodeMatches.length >= 5 && !options.includes('font=')) {
+>   extraOpts += ', font=\\small';
+> }
+> ```
+> **Why 5 nodes?**: Fewer nodes rarely cause overlap. The threshold prevents unnecessary font reduction for simple diagrams.
+> **Alternative Considered**: Adding `text width` to force wrapping. Rejected because it changes the visual appearance more drastically.
+
 ---
 
 ## Summary of Critical Rules
 
-1.  **NEVER** let `latex.js` see `\begin{tikzpicture}`.
+1.  **NEVER** let the text parser see `\begin{tikzpicture}`.
 3.  **ALWAYS** use the manual bracket parser for extraction (Regex is insufficient).
 4.  **ALWAYS** use `transform shape` for **COMPACT** and **WIDE** diagrams (scales text).
 5.  **NEVER** use `transform shape` for **LARGE** diagrams (keeps text readable).

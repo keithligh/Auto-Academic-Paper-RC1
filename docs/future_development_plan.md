@@ -110,3 +110,61 @@ Add `generationMode: 'standard' | 'long_form'` to `advancedOptions`.
 ## User Review Required
 -   **Latency**: Long form generation will take significantly longer (linear time with length).
 -   **Token Usage**: Will increase due to repetitive context sending for each section.
+
+---
+
+# Offline Librarian Mode Implementation Plan
+
+## Goal
+Allow users to explicitly disable "Online Research" for the Librarian role. This enables the use of non-web-search-capable LLMs (e.g., standard GPT-4, local Ollama) without receiving confusing warnings or errors. When disabled, the Librarian will skip the research phase explicitly.
+
+## User Review Required
+> [!NOTE]
+> This change modifies the `ProviderConfig` schema and `AIConfigContext`. Users will need to toggle the setting in the Config page to activate it for the first time (defaults to "Online" for backward compatibility).
+
+## Proposed Changes
+
+### Shared Schema
+#### [MODIFY] [schema.ts](file:///d:/Projects/Antigravity/Auto-Academic-Paper-RC1/shared/schema.ts)
+- Update `providerConfigSchema` to include an optional `offlineFromUser` (boolean) flag.
+- Default to `false` (Online).
+
+### Frontend (Client)
+#### [MODIFY] [ConfigPage.tsx](file:///d:/Projects/Antigravity/Auto-Academic-Paper-RC1/client/src/pages/ConfigPage.tsx)
+- In `ProviderSection` (for Librarian role):
+    - Add a `Switch` labeled "Enable Online Research".
+    - If ON (default): Show the existing "Web Search Required" warning if needed.
+    - If OFF:
+        - Hide the "Web Search Required" warning.
+        - Show a permanent alert: "Offline Mode Active. Librarian will rely on internal knowledge only."
+        - Allow selecting ANY provider/model without UI friction.
+
+#### [MODIFY] [AIConfigContext.tsx](file:///d:/Projects/Antigravity/Auto-Academic-Paper-RC1/client/src/context/AIConfigContext.tsx)
+- Ensure the new `offlineFromUser` flag is properly correctly propagated during updates.
+
+### Backend (Server)
+#### [MODIFY] [service.ts](file:///d:/Projects/Antigravity/Auto-Academic-Paper-RC1/server/ai/service.ts)
+- Update `phase2_Librarian`:
+    - Check `this.librarian.config.offlineFromUser` (or passed via context settings).
+    - If true:
+        - Log: `[Librarian] Offline Mode requested by User. Skipping external research.`
+        - **Skip** the research loop entirely.
+        - Do NOT call `supportsResearch`.
+    - This ensures a clean bypass even if the model *could* search.
+
+## Verification Plan
+
+### Manual Verification
+1.  **Config Page**:
+    - Go to Config.
+    - Open Librarian.
+    - Toggle "Enable Online Research" OFF.
+    - Verify the "Web Search Required" warning disappears.
+    - Verify the "Offline Mode" alert appears.
+    - Select a non-search model (e.g., standard GPT-4).
+    - Save/Verify.
+2.  **Processing**:
+    - Run a job.
+    - Check Logs (Activity Log console).
+    - Confirm unique log message: `[Librarian] Offline Mode requested by User. Skipping external research.`
+    - Confirm Phase 2 completes instantly without searching.

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Info, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle, Info, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useAIConfig } from "@/context/AIConfigContext";
 
 const providers = [
@@ -43,8 +43,10 @@ interface ProviderSectionProps {
 }
 
 function ProviderSection({ title, description, role, isExpanded, onToggle, showWebSearchWarning, showSameAsWriterSwitch, useSameAsWriter, onToggleSameAsWriter }: ProviderSectionProps) {
-    const { config, updateProviderConfig, verifyConnection, isVerifying } = useAIConfig();
+    const { config, updateProviderConfig, verifyConnection, isVerifying, verifyingScope } = useAIConfig();
     const providerConfig = config[role];
+
+    const isTestingThis = verifyingScope === role;
 
     return (
         <Card className="overflow-hidden">
@@ -174,9 +176,16 @@ function ProviderSection({ title, description, role, isExpanded, onToggle, showW
                                     size="lg"
                                     onClick={() => verifyConnection(role)}
                                     disabled={isVerifying}
-                                    className="h-12 px-8 text-lg font-medium w-full md:w-auto"
+                                    className="h-12 px-8 text-lg font-medium w-full md:w-auto min-w-[180px]"
                                 >
-                                    Test Connection
+                                    {isTestingThis ? (
+                                        <>
+                                            <Loader2 className="w-5 h-5 mr-3 animate-spin" />
+                                            Verifying...
+                                        </>
+                                    ) : (
+                                        "Test Connection"
+                                    )}
                                 </Button>
                             </div>
                         </>
@@ -215,9 +224,20 @@ export default function ConfigPage() {
                 apiKey: config.writer.apiKey,
                 baseURL: config.writer.baseURL,
             });
-            // Auto-verify if writer is verified
+
+            // Auto-verify using the NEW intent (since state update is async)
             if (config.writer.isVerified) {
-                await verifyConnection("strategist");
+                const tempConfig = {
+                    ...config,
+                    strategist: {
+                        ...config.strategist, // keep other fields like isVerified (though it will be reset by updateProviderConfig)
+                        provider: config.writer.provider,
+                        model: config.writer.model,
+                        apiKey: config.writer.apiKey,
+                        baseURL: config.writer.baseURL,
+                    }
+                };
+                await verifyConnection("strategist", tempConfig);
             }
         }
     };

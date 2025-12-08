@@ -6,8 +6,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.0] - 2025-12-08 (Architecture & UI Refinement)
+## [1.8.2] - 2025-12-09 (Intent Engine Restoration & CSS Corruption Fix)
+### Fixed
+- **CSS Class Name Corruption**: Template literals with spaces in class names broke all styling.
+  - **Symptom**: Preview rendered as plain text with no formatting (no title styling, no sections).
+  - **Root Cause**: Previous edits introduced spaces in class names: `latex - preview` instead of `latex-preview`.
+  - **Affected Areas**: Dynamic style injection (lines 916-923) and JSX className attributes (lines 1194, 1206).
+  - **Fix**: Corrected all instances to use proper hyphenated class names.
+  - **Lesson**: Template literal edits can corrupt class names if spaces are introduced around hyphens.
+
 ### Added
+- **Full TikZ Intent Engine Restoration**: Restored the complete 450-line Intent Engine (`createTikzBlock`) with all v1.5.x-v1.6.40 fixes.
+  - **Contents**:
+    - pgfplots rejection
+    - ASCII sanitization (btoa fix)
+    - Bezier brace polyfill (v1.6.21)
+    - Coordinate parsing (v1.5.6-v1.5.7)
+    - Intent classification (WIDE/FLAT/COMPACT/LARGE/MEDIUM)
+    - Adaptive Y-scaling (v1.6.31/v1.6.40)
+    - Bifurcated safety net (v1.6.37)
+    - Goldilocks protocol
+  - **Reasoning**: Intent Engine was accidentally removed during previous architecture changes.
+- **v1.6.41 FLAT Intent Font Reduction**: Added `font=\small` for FLAT diagrams with ≥5 nodes.
+  - **Problem**: FLAT diagrams with `minimum width` nodes had text overflow because x/y multipliers don't shrink text.
+  - **Solution**: Inject `font=\small` when `nodeMatches.length >= 5` to fit labels within fixed-width boxes.
+
+## [1.8.1] - 2025-12-08 (The Nuclear Option)
+### Architecture Change
+- **Removed `latex.js` Dependency**: Completely removed the fragile `latex.js` library.
+  - **Reasoning**: It was the single point of failure (crashes on unknown macros, no tabularx support, no TikZ support, difficult error handling). The "Containment" strategy was costing more effort than a replacement.
+- **Implemented Custom Parser (`latex-to-html.ts`)**: Built a robust, fault-tolerant TypeScript parser.
+  - **Philosophy**: "Show Something." Never crash. If a command is unknown, strip it or show a placeholder, but render the rest of the document.
 - **Future Development Plan**: Archived the "Iterative Long-Form Generation" strategy (The Architect/Mason/Artist pipeline) to `docs/future_development_plan.md`.
   - **Reasoning**: Feature deferred, but the detailed architectural planning (including "Full Context Propagation" findings) is valuable and preserved.
 
@@ -253,7 +282,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TikZ Loading Placeholder**: Added visual feedback while TikZ diagrams render.
   - **Display**: Shows `[ Generating diagram... ]` with subtle pulsing animation.
   - **Architecture**: Fully contained inside the TikZ iframe (preserves isolation philosophy).
-  - **Auto-Hide**: The existing `MutationObserver` now hides the placeholder when the SVG appears.
+  - **Auto-Hide**: The existing `MutationObserver` (used for height resizing) now hides the placeholder when the SVG appears.
   - **Design Decision**: ASCII-only text for maximum compatibility; avoids emoji rendering issues across systems.
   - **Layout**: Uses `flex-direction: column` on body to stack loading state above diagram container.
 
