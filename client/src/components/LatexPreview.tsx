@@ -170,7 +170,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     let safeTikz = tikzCode.replace(/[^\x00-\x7F]/g, '');
 
     // CRITICAL (v1.7.0): Detect braces BEFORE polyfill removes decoration syntax
-    const hasBracesBeforePolyfill = safeTikz.includes('decoration={brace') || safeTikz.includes('decoration=\\{brace');
+    // Use regex for robust detection (handles spacing variations like "decoration = {brace" or "decoration={ brace")
+    const hasBracesBeforePolyfill = /decoration\s*=\s*\\?\{\s*brace/i.test(safeTikz);
 
     // GEOMETRIC POLYFILL: Manual Bezier Braces for TikZJax
     // TikZJax cannot handle decoration={brace}, so we draw it manually.
@@ -254,18 +255,17 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     const aspectRatio = verticalSpan > 0 ? horizontalSpan / verticalSpan : 0;
     const isFlat = horizontalSpan > 0 && verticalSpan > 0 && aspectRatio > 3.0;
 
-    // NEW (v1.7.0): Detect BRACE diagrams (labels below main content causing vertical cramping)
-    // Indicators: 1) Has brace decorations, 2) Has negative y-coordinates, 3) Has small y-scale
-    // NOTE: Use hasBracesBeforePolyfill detected earlier (line 173) before polyfill removes decoration syntax
+    // NEW (v1.7.0): Detect BRACE diagrams (labels below main content causing horizontal cramping)
+    // IMPROVED (v1.7.1): More flexible detection - only require braces + negative Y (not small y-scale)
+    // Rationale: Diagrams with y=1.0cm still benefit from x-axis boost for label spacing
+    // NOTE: Use hasBracesBeforePolyfill detected earlier (line 174) before polyfill removes decoration syntax
     const hasNegativeY = minY !== Infinity && minY < 0;
-    const hasSmallYScale = yScale < 1.0;
-    const isBraceLayout = hasBracesBeforePolyfill && hasNegativeY && hasSmallYScale;
+    const isBraceLayout = hasBracesBeforePolyfill && hasNegativeY;
 
     // DEBUG: Log detection conditions
     console.log('[BRACE Detection]', {
       hasBracesBeforePolyfill,
       hasNegativeY,
-      hasSmallYScale,
       isBraceLayout,
       minY,
       maxY,
