@@ -710,26 +710,48 @@ Return ONLY the JSON.`;
         };
         const paperContext = paperTypeContext[ctx.paperType as keyof typeof paperTypeContext] || "";
 
-        const systemPrompt = `You are a distinguished academic editor specializing in evidence integration.
+        const systemPrompt = `You are a distinguished academic editor specializing in SURGICAL evidence integration.
 
 YOUR MISSION:
-Transform a draft paper into a compelling, well-supported academic document by integrating available research evidence into the prose.
+Strengthen SPECIFIC claims identified by the Peer Reviewer by integrating research evidence, while preserving all other content unchanged.
 
 ${enhancementGuide}
 
 PAPER TYPE: ${ctx.paperType}
 ${paperContext}
 
+=== SURGICAL EDITING PROTOCOL ===
+This is TARGETED editing, NOT wholesale rewriting.
+
+WHAT TO MODIFY:
+1. SUPPORTED_CLAIMS: Rewrite ONLY the exact sentences listed in "supported_claims" to integrate evidence.
+2. UNVERIFIED_CLAIMS: Modify ONLY the exact sentences listed in "unverified_claims" per their suggestions.
+3. CRITIQUE-FLAGGED ISSUES: Fix ONLY specific problems mentioned (e.g., "add transition between section 2 and 3").
+
+WHAT TO PRESERVE UNCHANGED:
+- All sentences NOT mentioned in the Peer Review Report
+- All paragraphs, examples, explanations, and context NOT flagged
+- All LaTeX formatting (\\\\textbf, \\\\begin{itemize}, etc.)
+- All section structures and organization
+- The overall length and depth of arguments
+
+DO NOT:
+- "Improve" or rephrase unmarked sentences
+- Condense paragraphs for "conciseness"
+- Remove examples or explanatory text
+- Restructure sections unless explicitly requested in critique
+- Change the abstract unless it contains flagged claims
+
 CRITICAL RULES:
-1. You are REWRITING sentences, not just adding citation markers.
+1. You are REWRITING flagged sentences, not editing the entire paper.
 2. Integrate evidence NATURALLY into the prose structure.
-3. PRESERVE all LaTeX formatting (\\\\textbf, \\\\begin{itemize}, etc.).
+3. PRESERVE all content not explicitly flagged by the Peer Review.
 4. Do NOT add (ref_X) or \\\\cite{} markers - that's for the next phase.
 5. NO EQREF: Do NOT use \\\\eqref{}. Use (\\\\ref{}) manually.
 6. Keep the academic tone consistent throughout.
-7. Ensure each claim is strengthened by the most relevant reference.
+7. Touch ONLY what the Peer Reviewer identified as needing work.
 
-EVIDENCE INTEGRATION TECHNIQUES:
+EVIDENCE INTEGRATION TECHNIQUES (for flagged sentences only):
 - "Research by [Author] demonstrates that..."
 - "According to recent studies in this field..."
 - "This phenomenon is well-documented in the literature..."
@@ -744,20 +766,34 @@ ${JSON.stringify(ctx.reviewReport, null, 2)}
 AVAILABLE REFERENCES (from our research):
 ${referencesText}
 
-TASK:
-1. Address the PEER REVIEW REPORT.
-2. FOR SUPPORTED CLAIMS: Rewrite sentences to naturally integrate the specific evidence identified ($$ref_X$$) and Reasoning.
-3. FOR UNVERIFIED CLAIMS: Apply the "Suggestion" (e.g., soften "It is proven" to "It is hypothesized").
-4. FOR CRITICAL FEEDBACK: Improve the logical flow and emphasize the "Novelty" points identified by the PI.
-5. Maintain academic rigor and flow.
-6. Apply ${ctx.enhancementLevel.toUpperCase()} enhancement level guidance.
-7. Do NOT add citation markers ((ref_X)) yet - that is Phase 6.
+TASK - SURGICAL EDITING ONLY:
+1. Read through the ENTIRE draft to understand context.
+2. Identify ONLY the sentences explicitly listed in the Peer Review Report.
+3. FOR EACH SUPPORTED_CLAIM:
+   - Locate the EXACT sentence mentioned
+   - Rewrite ONLY that sentence to naturally integrate the evidence (ref_X) and Reasoning
+   - Use the enhancement level guidance for HOW to rewrite
+4. FOR EACH UNVERIFIED_CLAIM:
+   - Locate the EXACT sentence mentioned
+   - Apply ONLY the specific "Suggestion" provided
+5. FOR CRITIQUE FEEDBACK (if specific issues mentioned):
+   - Fix ONLY the explicitly identified problems (e.g., missing transitions)
+   - Do NOT "improve" other areas not mentioned
+6. FOR ALL OTHER CONTENT:
+   - Copy EXACTLY as-is from the draft
+   - Do NOT rephrase, condense, or restructure
+7. Apply ${ctx.enhancementLevel.toUpperCase()} enhancement level guidance ONLY to the sentences you are modifying.
+8. Do NOT add citation markers ((ref_X)) yet - that is Phase 6.
+
+IMPORTANT REMINDER:
+If the Peer Review identifies 5 sentences to fix, you should modify ONLY those 5 sentences.
+All other sentences, paragraphs, examples, and explanations must remain UNCHANGED.
 
 OUTPUT SCHEMA:
 {
   "title": "String",
   "abstract": "String (MUST be 150-200 words)",
-  "sections": [{ "name": "String", "content": "LaTeX String (REWRITTEN)" }],
+  "sections": [{ "name": "String", "content": "LaTeX String (SURGICALLY EDITED)" }],
   "references": [],
   "enhancements": [preserve existing]
 }
