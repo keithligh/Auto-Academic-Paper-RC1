@@ -258,6 +258,7 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 5.  **NEVER** use `transform shape` for **LARGE** diagrams (keeps text readable).
 6.  **ALWAYS** extract **ALL** `(x,y)` coordinate pairs (not just `at (x,y)`) for span/aspect calculations.
 7.  **ALWAYS** strip and replace existing `x=`/`y=` values for **FLAT** intent (cannot skip, must fix ratio).
+8.  **ALWAYS** wrap combined options in `[...]` during merging. **NEVER** pass raw option strings (e.g., `x=1cm`) to the iframe. (v1.9.16)
 
 ### 15. The Browser Engine Protection Suite (v1.9.12)
 
@@ -286,5 +287,15 @@ The TikZ engine was prone to "Blank" renders due to browser limitations. We impl
     *   **Fonts**: `\sffamily`, `\ttfamily`. (Reason: Missing WASM font metrics).
     *   **Environments**: `itemize` or `enumitem`. (Reason: Incompatible with WASM nodes).
         *   **Fix**: Auto-convert `\item` to `$\bullet$`.
-4.  **Collapse Prevention**: `min-height: 200px` on the iframe.
     *   **Why**: If `MutationObserver` fails to detect height (0px), the diagram vanishes. This forces visibility.
+5.  **Small Minimum Height (v1.9.16)**: Reduced `min-height` to `100px`.
+    *   **Why**: 200px was too tall for horizontal timeline diagrams, creating massive whitespace gaps.
+
+### 16. The Double Bracket Protocol (v1.9.16)
+> **Problem**: The TikZ Option Extractor strips outer brackets (`[x=1cm]` -> `x=1cm`). The Merger then adds new options (`x=1.5cm`).
+> **The Bug**: We were injecting the result as `x=1.5cm, x=1cm`. This is **invalid TikZ syntax**. TikZ expects options to be wrapped in square brackets `[...]` or passed as a command argument. Loose text inside the environment is treated as... text? Or just ignored as garbage.
+> **The Fix**: The Merger must explicitly **re-wrap** the combined string.
+> ```typescript
+> const finalOptions = `[${combined}]`; // MANDATORY
+> ```
+> **Rule**: **Any transformation that unwraps a container must re-wrap it before final injection.**

@@ -6,6 +6,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.17] - 2025-12-10 (The Server Stability Patch)
+### Fixed
+- **Dev Server Instability ("Exit 1")**:
+  - **Symptom**: The backend server would crash (`exit 1`) whenever a frontend syntax error (e.g., in CSS or TSX) occurred.
+  - **Root Cause**: `server/vite.ts` contained a "Nuclear Option" in its custom logger: `process.exit(1)` on *any* error intercepted from Vite. This meant a single typo in the client code killed the entire dev environment.
+  - **Fix**: Removed `process.exit(1)`. The server now logs the error but stays alive, allowing hot-reloading to fix the typo.
+  - **Impact**: Massive improvement in Developer Experience (DX) and system uptime.
+
+## [1.9.16] - 2025-12-09 (The TikZ & Visual Fixes)
+### Fixed
+- **TikZ Option Merging ("The Double Bracket" Bug)**:
+  - **Root Cause**: The option extractor strips brackets (e.g., `[x=1cm]` -> `x=1cm`), but the merge logic blindly prepended overrides (e.g., `x=1.5cm,` + `x=1cm`). This produced invalid TikZ syntax `x=1.5cm, x=1cm` without enclosing brackets, simply injecting raw text into the stream.
+  - **Fix Refactored Logic**: The merger now explicitly wraps combined options in `[...]`, ensuring valid syntax like `[x=1.5cm, x=1cm]`.
+  - **Result**: Immediate visual updates for all scaling parameters.
+- **TikZ Vertical Layout**:
+  - **Fix**: Reduced iframe `min-height` from `200px` to `100px` to eliminate massive whitespace below timeline diagrams.
+  - **Fix**: Reverted `scale` to `1.0` (from debug values) while retaining the `FLAT` intent multipliers (`x=1.5`, `y=2.0`), restoring the intended aspect ratio.
+- **Deployment/Caching**:
+  - **Issue**: `npm run dev` servers often serve stale cached bundles.
+  - **Fix**: Verified process requires full server restart and hard refresh to confirm visual changes.
+
 ## [1.9.15] - 2025-12-09 (The "Algorithm & Layout" Update)
 ### Added
 - **Algorithmic Environment Support**:
@@ -73,7 +94,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Root Cause**: Previous edits introduced spaces in class names: `latex - preview` instead of `latex-preview`.
   - **Affected Areas**: Dynamic style injection (lines 916-923) and JSX className attributes (lines 1194, 1206).
   - **Fix**: Corrected all instances to use proper hyphenated class names.
-  - **Lesson**: Template literal edits can corrupt class names if spaces are introduced around hyphens.
+  - **The Lesson**: **Don't Style Ghosts.** Never write a CSS rule without verifying the class name in the Inspector first. A rule that targets nothing fixes nothing.
+
 
 ## [1.6.43] - 2025-12-09 (SSOT Alignment & Indentation Fix)
 ### Fixed

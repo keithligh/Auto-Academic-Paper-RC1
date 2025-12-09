@@ -96,6 +96,8 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       .replace(new RegExp(`\\\\underline\\{${nested}\\}`, 'g'), '<u>$1</u>')
       .replace(new RegExp(`\\\\texttt\\{${nested}\\}`, 'g'), '<code>$1</code>')
       .replace(new RegExp(`\\\\textsc\\{${nested}\\}`, 'g'), '<span style="font-variant: small-caps;">$1</span>')
+      // Markdown Compatibility (v1.9.15) - Handle AI Hallucinations
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/\\bullet/g, '&#8226;')
       .replace(/~/g, '&nbsp;')
       .replace(/\\times/g, '&times;')
@@ -362,8 +364,15 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     // This allows the "Vertical Boost" (v1.6.28) to apply to "Wide" diagrams too, fixing the squashed look.
 
     if (horizontalSpan > 0) {
+      // FIX (v1.9.15): Harmonized FLAT Intent
+      // "Auditor Protocol": If it's a Timeline (Aspect Ratio > 3.0), we MUST override coordinates
+      // to scale it up (x=1.5x) and balance the height (y=2.0x).
+      // Preserving user coordinates (4:1 ratio) caused "Massive Whitespace". 
+      // We force a friendlier aspect ratio (approx 2:1) to fill the visual slot.
       if (isFlat) intent = 'FLAT'; // Timeline-style (Extreme aspect ratio)
       else intent = 'LARGE';       // Absolute Layout (includes WIDE) -> Uses Adaptive Density + Vertical Boost
+
+      console.log(`[IntentEngine] Span: (${horizontalSpan}x${verticalSpan}), Ratio: ${aspectRatio.toFixed(2)}, isFlat: ${isFlat}, Intent: ${intent}`);
     } else if (distMatch) {
       // Explicit intent wins (Relative Layouts)
       if (nodeDist < 2.0) intent = 'COMPACT';
@@ -455,7 +464,12 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       // Actually, with expanded grid, we usually DON'T want transform shape (keep text standard size)
       // So we do nothing else.
 
-    } else if (intent === 'WIDE') {
+    }
+
+    // Prepare for stripping (Lifted Scope)
+    let processedOptions = options.trim();
+
+    if (intent === 'WIDE') {
       // GOAL: Fit wide horizontal pipeline to A4 width
       // Calculate scale factor: target 14cm max width for A4 content area
       const targetWidth = 14; // cm - safe A4 content width
@@ -483,22 +497,19 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       const newX = (baseX * xMultiplier).toFixed(1);
       const newY = (baseY * yMultiplier).toFixed(1);
 
-      // Replace existing x/y or add new ones
-      if (existingX) {
-        // Will be replaced in merge logic below
-        extraOpts += `, x=${newX}cm`;
-      } else {
-        extraOpts += `, x=${newX}cm`;
-      }
-      if (existingY) {
-        extraOpts += `, y=${newY}cm`;
-      } else {
-        extraOpts += `, y=${newY}cm`;
-      }
+      // STRIP OLD VALS FIRST
+      processedOptions = processedOptions.replace(/,?\s*x\s*=\s*[\d.]+\s*(cm)?/gi, '');
+      processedOptions = processedOptions.replace(/,?\s*y\s*=\s*[\d.]+\s*(cm)?/gi, '');
 
-      // FIX (v1.6.41): Add font reduction for FLAT diagrams with many nodes.
-      // When nodes have `minimum width` but long text, x/y multipliers alone
-      // don't prevent text overflow. Smaller font ensures labels fit.
+      // Clean up commas
+      processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
+
+      console.log(`[IntentEngine] FLAT: x=${newX}cm, y=${newY}cm (baseX=${baseX}, baseY=${baseY}, xMult=${xMultiplier}, yMult=${yMultiplier.toFixed(2)})`);
+
+      // Add new vals
+      extraOpts += `, x=${newX}cm, y=${newY}cm, scale=1.0`;
+
+      // FIX (v1.6.41): Add font reduction
       if (nodeMatches.length >= 5 && !options.includes('font=')) {
         extraOpts += ', font=\\small';
       }
@@ -542,16 +553,6 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       extraOpts += ', x=2.2cm, y=1.5cm';
     }
 
-    // FLAT INTENT: Strip old x/y values so new calculated values take precedence
-    let processedOptions = options.trim();
-    if (intent === 'FLAT') {
-      // Remove existing x= and y= values (they'll be replaced with calculated ones)
-      processedOptions = processedOptions.replace(/,?\s*x\s*=\s*[\d.]+\s*(cm)?/gi, '');
-      processedOptions = processedOptions.replace(/,?\s*y\s*=\s*[\d.]+\s*(cm)?/gi, '');
-      // Clean up any double commas or leading/trailing commas
-      processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');
-    }
-
     // LARGE INTENT: Strip node distance if we're overriding it (v1.6.5, v1.6.12 adaptive)
     if (intent === 'LARGE') {
       // Use same adaptive formula as above
@@ -568,17 +569,24 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       }
     }
 
-    // Merge logic
-    let finalOptions = processedOptions;
-    // FIX (v1.6.5): Handle empty brackets after stripping (e.g., "[]" after removing node distance)
-    if (!finalOptions || finalOptions === '[]' || finalOptions.trim() === '[]') {
-      finalOptions = extraOpts ? `[${extraOpts.replace(/^,\s*/, '').trim()}]` : '[]';
-    } else if (finalOptions.startsWith('[') && finalOptions.endsWith(']')) {
-      finalOptions = finalOptions.slice(0, -1) + extraOpts + ']';
-    } else {
-      finalOptions = `[${finalOptions}${extraOpts}]`;
+    // Merge logic (Refactored v1.9.15)
+    // `processedOptions` is UNWRAPPED content (brackets stripped by extractor)
+    // `extraOpts` contains our overrides (starting with comma)
+
+    let combined = extraOpts.trim();
+    if (processedOptions) {
+      combined += (combined ? ',' : '') + processedOptions;
     }
 
+    // Clean up commas/spaces
+    combined = combined
+      .replace(/^,/, '')      // Remove leading comma
+      .replace(/,\s*,/g, ',') // Remove empty slots
+      .replace(/,$/, '');     // Remove trailing comma
+
+    let finalOptions = `[${combined}]`;
+
+    console.log(`[IntentEngine] Final Options: ${finalOptions}`);
     const iframeHtml = `<!DOCTYPE html>
 <html>
 <head>
@@ -654,9 +662,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
          // Hide loading placeholder once SVG appears (v1.6.11)
          const loading = document.getElementById('tikz-loading');
          if (loading) loading.classList.add('hidden');
-         // Add a small buffer for tooltips/shadows, and Enforce Min-Height (200px)
+         // Add a small buffer for tooltips/shadows, and Enforce Min-Height (100px)
          const rect = svg.getBoundingClientRect();
-         const h = Math.max(rect.height + 25, 200); 
+         const h = Math.max(rect.height + 25, 100); 
          window.frameElement.style.height = h + 'px';
       }
     });
@@ -1539,6 +1547,8 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
 
       // Text formatting
       html = html.replace(/\\textbf\{([^}]+)\}/g, '<strong>$1</strong>');
+      // Markdown Compatibility (Global)
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
       html = html.replace(/\\textit\{([^}]+)\}/g, '<em>$1</em>');
       html = html.replace(/\\texttt\{([^}]+)\}/g, '<code>$1</code>');
       html = html.replace(/\\emph\{([^}]+)\}/g, '<em>$1</em>');

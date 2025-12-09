@@ -668,3 +668,27 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 - **The Failure**: The developer *assumed* the container class was `equation-container` based on a variable name or past memory, but the actual rendered DOM element was `.katex-display`.
 - **The Fix**: Check the **Rendered HTML** (via Inspect Element or reviewing the generator code).
 - **The Lesson**: **Don't Style Ghosts.** Never write a CSS rule without verifying the class name in the Inspector first. A rule that targets nothing fixes nothing.
+
+## 50. The Bifurcation Diagnosis (Visual Debugging Protocol)
+- **Context**: Code changes (changing scale from 1.0 to 1.5) were having "Zero Effect" on the screen. We suspected caching, logic failure, silent errors, or incorrect file editing.
+- **The Technique**: **Aggressive Visual Bifurcation.**
+  - We injected a **"Blue Border"** (`draw=blue, line width=3pt`) AND a **"Massive Scale"** (`scale=1.25`) simultaneously.
+  - **Logic**: If the Border appears but the Scale doesn't -> The Code is running, but the Logic is broken.
+  - **Logic**: If Neither appears -> The Code is NOT running (Caching/Deployment issue).
+- **The Result**: The Blue Border appeared, proving the code was running. This immediately ruled out Caching and pinpointed the logic error (the "Double Bracket" syntax).
+- **The Lesson**: **When in doubt, paint it Blue.** Use indisputable visual signals (borders, backgrounds) to prove code execution before debugging logic math.
+
+## 51. The Double Bracket Logic (TikZ Syntax Safety)
+- **Incident**: TikZ scaling fixes were being ignored. `x=1.5cm` was injected but had no effect.
+- **Root Cause**: The Extractor stripped the `[]` brackets from the source. The Merger added new options but *forgot to put the brackets back*.
+  - `Source`: `[a=1]` -> Extracted: `a=1`
+  - `Merger`: `b=2` + `a=1` -> Result: `b=2, a=1` (No brackets!)
+  - `Injection`: `\begin{tikzpicture} b=2, a=1 ...` (Invalid Syntax). TikZ ignored the loose text.
+- **The Fix**: The Merger *must* wrap the final string: `` `[${combined}]` ``.
+- **The Lesson**: **Transformation requires Re-Packaging.** If you unwrap a gift to add a localized item, you must re-wrap it. Passing around "raw contents" (unbracketed options) is dangerous because the consumer expects a package.
+
+## 52. The Deployment Mirage (Caching)
+- **Incident**: A developer spent 20 minutes tweaking CSS/JS with "No Change" observed.
+- **The Reality**: The `npm run dev` server had stopped hot-reloading or the browser was caching the bundle excessively.
+- **The Fix**: `CTRL+C`, `npm run dev`, `CTRL+F5` (Hard Refresh).
+- **The Lesson**: **If the code makes no sense, restart the server.** Before questioning the laws of logic, question the medium of delivery. Stale code is the most expensive bug to debug.

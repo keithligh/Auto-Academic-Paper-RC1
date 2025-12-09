@@ -797,7 +797,8 @@ To prevent "Blank Diagrams" (silent crashes), the TikZ engine now performs aggre
 2.  **Library Injection**: Standard libraries (`arrows, shapes, calc, positioning`) are explicitly injected into every script block.
 3.  **Font Safety**: `\sffamily` (Sans Serif) and other font commands are stripped to prevent engine crashes (missing metrics).
 4.  **Environment Sanitization**: `itemize` and `enumitem` parameters (e.g., `[leftmargin=*]`) are removed or converted to manual `$\bullet$` lists.
-5.  **Collapse Prevention**: The iframe enforces `min-height: 200px` to ensure visibility even if auto-resizing fails.
+5.  **Collapse Prevention**: The iframe enforces `min-height: 100px` (reduced from 200px in v1.9.16) to ensure visibility without excessive whitespace.
+6.  **Option Safety (Double Bracket)**: The merger logic explicitly re-wraps combined options in `[...]` to prevent invalid syntax (`x=1, y=2` vs `[x=1, y=2]`) which causes silent render failures.
 
 ### 24.3 Citation Logic (Ref ID Force)
 -   **Old Logic**: Sequential ID based on appearance order (`[1], [2]`).
