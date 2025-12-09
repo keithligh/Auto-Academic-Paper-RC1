@@ -644,6 +644,26 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 - **The Lesson**: **Inspect the Leaf Node.** When inheritance fails, checking the parent is useless. You must check the computed style of the *element itself* to find direct overrides. And never write "nuclear resets" like `li { ... }` in a base theme unless you really, really mean it.
 
 ## 21. The "Ghost Class" Fallacy (CSS Debugging)
+- **The Problem**: We added `overflow-y: hidden` to `.equation-container` to fix scrollbars. It did nothing. We added `!important`. Nothing.
+- **The Reality**: `.equation-container` did not exist. KaTeX generates `.katex-display`.
+- **The Formatting Trap**: We assumed our *wrapper* code determined the class, but the *library* (KaTeX) generated its own structure.
+- **The Lesson**: **Inspect BEFORE You Style.** Never assume a class name exists based on source code intent. Always verify the *rendered* DOM class list in the browser devtools before writing a single line of CSS.
+
+## 22. The "Double Escape" Paradox (HTML Injection)
+- **The Problem**: We implemented a cool algorithm parser that injected `<span class="keyword">if</span>`. The browser rendered it as `&lt;span class="keyword"&gt;if&lt;/span&gt;`.
+- **The Trap**: We ran our text formatter (`parseLatexFormatting`) *after* injecting our HTML tags. The formatter (rightly) saw the tags as "user input" and escaped them for safety.
+- **The Solution**: **Format First, Inject Second.**
+    1.  Clean/Format the user's content (LaTeX -> HTML text).
+    2.  *Then* wrap it in your structural HTML tags.
+- **The Lesson**: **Pipeline Order Matters.** If you are building a document from mix of User Content and System Structure, always process the User Content *before* combining it with System Structure to avoid "Friendly Fire" from your own sanitizers.
+
+## 23. The "Missing Environment" Blindspot
+- **The Problem**: Tables looked great, but `\begin{center}` tags were visible around them as ugly text.
+- **The Assumption**: We thought "The Table Engine handles tables."
+- **The Reality**: The Table Engine handled `tabular`. It ignored the *container* (`center`). Since no other parser claimed `center`, it fell through to the "Raw Text" bucket.
+- **The Lesson**: **Parsers must be Comprehensive.** If you support a feature (Tables), you must support its standard habitat (Center, Float, Caption). "Supporting the content" is not enough; you must support the *context*.
+
+## 21. The "Ghost Class" Fallacy (CSS Debugging)
 - **The Problem**: A scrollbar persisted on an equation despite applying `overflow: hidden` to `.equation-container`.
 - **The Failure**: The developer *assumed* the container class was `equation-container` based on a variable name or past memory, but the actual rendered DOM element was `.katex-display`.
 - **The Fix**: Check the **Rendered HTML** (via Inspect Element or reviewing the generator code).

@@ -929,6 +929,110 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
 
 
 
+
+  // --- ALGORITHMIC ENVIRONMENT PARSER (v1.9.15) ---
+  const processAlgorithms = (content: string): string => {
+    return content.replace(/\\begin\{algorithmic\}(\[[^\]]*\])?([\s\S]*?)\\end\{algorithmic\}/g, (m, opt, body) => {
+      let lines = body.split(/\\STATE\s+/).filter((l: string) => l.trim().length > 0);
+
+      // If no STATE commands, try splitting by newline if it looks like raw code
+      if (lines.length <= 1 && body.includes('\n')) {
+        lines = body.split('\n').filter((l: string) => l.trim().length > 0);
+      }
+
+      let html = '<div class="latex-algorithm">';
+      let indentLevel = 0;
+      let lineNum = 1;
+
+      // Rough parser for control structures
+      const parseLine = (line: string): string => {
+        let lineContent = line.trim();
+        let currentIndent = indentLevel;
+
+        // Adjust indent based on command
+        if (/^\\IF/i.test(lineContent) || /^\\FOR/i.test(lineContent) || /^\\WHILE/i.test(lineContent)) {
+          indentLevel++;
+        } else if (/^\\ENDIF/i.test(lineContent) || /^\\ENDFOR/i.test(lineContent) || /^\\ENDWHILE/i.test(lineContent)) {
+          indentLevel--;
+          currentIndent = indentLevel; // Dedent this line
+          lineContent = lineContent.replace(/^\\(ENDIF|ENDFOR|ENDWHILE)/i, '<span class="latex-alg-keyword">$1</span>');
+        } else if (/^\\ELSE/i.test(lineContent)) {
+          currentIndent = indentLevel - 1; // Temporary dedent for ELSE
+          lineContent = lineContent.replace(/^\\ELSE/i, '<span class="latex-alg-keyword">else</span>');
+        }
+
+        // Process formatting FIRST (to handle \textbf, etc. and escape UNWANTED HTML)
+        // This converts \textbf{X} -> <strong>X</strong>, but also escapes < -> &lt;
+        let formattedContent = parseLatexFormatting(lineContent);
+
+        // Keyword highlighting (Inject HTML *after* formatting)
+        formattedContent = formattedContent
+          .replace(/^\\IF(?![a-zA-Z])/i, '<span class="latex-alg-keyword">if</span>')
+          .replace(/^\\FOR(?![a-zA-Z])/i, '<span class="latex-alg-keyword">for</span>')
+          .replace(/^\\WHILE(?![a-zA-Z])/i, '<span class="latex-alg-keyword">while</span>')
+
+          // Handle parameterized commands that might have been partially processed or remain raw
+          // If parseLatexFormatting processed \textbf{}, it might have left \IF{...} alone or messy?
+          // Actually, \IF{condition} might look like \IF{condition} still if not matched.
+          // We need to handle the logical structure: \IF{x} -> matches \IF, but what about {x}?
+          // If parseLatexFormatting didn't touch it, it's still {x}.
+          // We'll simplisticly string replace common patterns.
+          .replace(/\\IF\s*\{([^}]+)\}/i, '<span class="latex-alg-keyword">if</span> $1 <span class="latex-alg-keyword">then</span>')
+          .replace(/\\FOR\s*\{([^}]+)\}/i, '<span class="latex-alg-keyword">for</span> $1 <span class="latex-alg-keyword">do</span>')
+          .replace(/\\WHILE\s*\{([^}]+)\}/i, '<span class="latex-alg-keyword">while</span> $1 <span class="latex-alg-keyword">do</span>')
+
+          // Closers (already replaced in dedent block? No, that was lineContent logic for INDENTATION)
+          // We need to visually replace the text too.
+          .replace(/^\\ENDIF/i, '<span class="latex-alg-keyword">endif</span>')
+          .replace(/^\\ENDFOR/i, '<span class="latex-alg-keyword">endfor</span>')
+          .replace(/^\\ENDWHILE/i, '<span class="latex-alg-keyword">endwhile</span>')
+          .replace(/^\\ELSE/i, '<span class="latex-alg-keyword">else</span>')
+          .replace(/^\\STATE\s*/i, ''); // Clean up any lingering STATE
+
+        const indentStyle = `style="padding-left: ${currentIndent * 1.5}em"`;
+
+        return `<div class="latex-alg-line" ${indentStyle}>
+                    <span class="latex-alg-lineno">${lineNum++}.</span>
+                    <span class="latex-alg-content">${formattedContent}</span>
+                  </div>`;
+      };
+
+      // Split by common commands if \STATE is missing or intermixed
+      // Actually, a better approach is to tokenise by command? 
+      // Simplified: We assume \STATE delimits lines, or if not, we use regex to find commands.
+      // The user input shows \STATE explicitly.
+
+      // Re-split logic: The regex split above removes \STATE. 
+      // We need to handle IF/FOR/etc that might NOT be preceded by STATE in some variants, 
+      // but usually STATE is the line starter.
+      // Let's iterate through the raw body to be safe?
+      // No, let's stick to the split lines for now, assuming standard usage.
+
+      // Handle the case where IF/FOR are THEIR OWN lines without STATE (common var)
+      // We'll iterate lines. Newlines might matter.
+
+      // Let's refine: Split by `\STATE` matches standard algorithmic. 
+      // Anything between STATEs is a line.
+      // Inside a line, we might have `\IF`.
+
+      // REVISED APPROACH: Tokenize by command start
+      const commands = body.split(/(?=\\(?:STATE|IF|FOR|WHILE|ENDIF|ENDFOR|ENDWHILE|ELSE))/g).filter((s: string) => s.trim().length > 0);
+
+      commands.forEach((cmd: string) => {
+        let cleanCmd = cmd.trim();
+        // Remove leading \STATE if present
+        if (cleanCmd.startsWith('\\STATE')) {
+          cleanCmd = cleanCmd.replace(/^\\STATE\s*/, '');
+        }
+        html += parseLine(cleanCmd);
+      });
+
+      html += '</div>';
+      return createPlaceholder(html);
+    });
+  };
+  content = processAlgorithms(content);
+
   // --- ENVIRONMENT NORMALIZATION (theorem, lemma, proof) ---
   content = content.replace(/\\begin\{theorem\}([\s\S]*?)\\end\{theorem\}/g, (m, body) => {
     return createPlaceholder(`<div class="theorem"> <strong>Theorem.</strong> ${parseLatexFormatting(body.trim())}</div> `);
@@ -1422,6 +1526,9 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
       html = html.replace(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/g,
         '<div class="abstract"><h3>Abstract</h3><p>$1</p></div>'
       );
+
+      // Center (v1.9.15) - Fixes Unparsed \begin{center} tags
+      html = html.replace(/\\begin\{center\}([\s\S]*?)\\end\{center\}/g, '<div style="text-align: center;">$1</div>');
 
       // Sections
       // Sections - Allow whitespace and NEWLINES inside braces (robust matching)

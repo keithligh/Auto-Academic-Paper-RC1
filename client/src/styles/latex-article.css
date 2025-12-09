@@ -119,12 +119,12 @@
     margin-bottom: 0.6em;
 }
 
-/* Sub-subsections - Italic, 11pt */
+/* Sub-subsections - Bold, 11pt (Normal article class style) */
 .latex-preview h4,
 .latex-preview .subsubsection {
     font-size: 11pt;
-    font-weight: normal;
-    font-style: italic;
+    font-weight: bold;
+    font-style: normal;
     margin-top: 1.0em;
     margin-bottom: 0.5em;
 }
@@ -237,6 +237,43 @@
 
 .latex-preview .katex-display::-webkit-scrollbar {
     display: none;
+}
+
+/* =============================================
+ * ALGORITHMS (v1.9.15)
+ * ============================================= */
+.latex-preview .latex-algorithm {
+    margin: 1.5em 0;
+    padding: 1em;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    /* Default generic monospace */
+    font-size: 0.9em;
+    overflow-x: auto;
+}
+
+.latex-preview .latex-alg-line {
+    display: flex;
+    line-height: 1.5;
+}
+
+.latex-preview .latex-alg-lineno {
+    min-width: 2em;
+    color: #888;
+    user-select: none;
+    text-align: right;
+    margin-right: 1em;
+}
+
+.latex-preview .latex-alg-content {
+    flex: 1;
+}
+
+.latex-preview .latex-alg-keyword {
+    font-weight: bold;
+    color: #333;
 }
 
 /* =============================================

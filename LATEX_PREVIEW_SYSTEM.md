@@ -225,6 +225,20 @@ We manually extract the bibliography environment to ensure citations are rendere
   - **Styling**: We wrap the content in a `<pre class="latex-verbatim">` block.
 - **Output**: A monospaced code block that preserves whitespace exactly as typed.
 
+### 6c. Algorithm Environment (The "Parsed" Code Zone - v1.9.15)
+
+**Engine**: `algorithmic` Parser
+Unlike `verbatim` (which is stupid/raw), `algorithmic` is smart and structural.
+
+- **Extraction**: Regex finds `\begin{algorithmic}` blocks.
+- **Parsing**:
+  - We do NOT use regex for lines. We use a **Command Tokenizer** that splits by `\STATE`, `\IF`, `\FOR`, `\WHILE`, etc.
+  - **Structure**: We track indentation depth (nested loops/conditionals) manually.
+- **Rendering**:
+  - **Keywords**: Commands like `\IF{x}` are transformed to **if** `x` **then**.
+  - **Styling**: Wrapped in `<div class="latex-algorithm">` with line numbers and monospace font.
+- **Safety**: We apply text formatting *before* injecting HTML tags to prevent "Double Escaping".
+
 ### 7. Advanced Layout & CSS
 
 To achieve a "What You See Is What You Get" (WYSIWYG) feel, we implement several layout strategies:

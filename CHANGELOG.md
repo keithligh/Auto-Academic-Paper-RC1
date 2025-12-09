@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.15] - 2025-12-09 (The "Algorithm & Layout" Update)
+### Added
+- **Algorithmic Environment Support**:
+    - **Feature**: Full parsing for `\begin{algorithmic}` blocks (States, loops, conditionals).
+    - **Styling**: `Courier New`, gray line numbers, and bold keywords (`if`, `then`, `for`).
+    - **Logic**: Implemented `processAlgorithms` with smart indentation handling.
+- **Center Environment Support**:
+    - **Feature**: Added universal support for `\begin{center}` ... `\end{center}`.
+    - **Fix**: Resolves "orphaned tags" around tables and figures.
+
+### Fixed
+- **Exposed HTML Tags in Algorithms**:
+    - **Root Cause**: `parseLatexFormatting` was "double-escaping" injected HTML.
+    - **Fix**: Inverted pipeline to format content *before* injecting structural HTML keywords.
+- **Subsubsection Styling**:
+    - **Fix**: Changed `\subsubsection` (h4) from Italic/Normal to **Bold/Normal** to match standard LaTeX `article` class.
+
 ## [1.9.14] - 2025-12-09 (The "Ghost Class" Fix)
 ### Fixed
 - **Persistent Math Scrollbars**:
