@@ -211,7 +211,10 @@ ${abstract}
                 const secName = escapeLatex(sec.name);
 
                 // Run COMPILER on section content
-                const secContent = compileCitations(sec.content, analysis.references || []);
+                let secContent = compileCitations(sec.content, analysis.references || []);
+
+                // SANITIZATION: Remove redundant \section{...} if the AI hallucinated it at the start
+                secContent = secContent.replace(/^\s*\\section\{[^}]+\}\s*/i, "");
 
                 // Add Section Header
                 latex += `\\section{${secName}}\n\n`;

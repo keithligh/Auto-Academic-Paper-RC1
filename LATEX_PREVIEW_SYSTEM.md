@@ -759,3 +759,30 @@ For **COMPACT** intent (Many Nodes):
 ## 30. Display Math Scrollbar Fix
 
 Display math equations (`\[...\]`) were showing horizontal scrollbars when wider than the container. **Fix**: Changed `.katex-display` CSS from `overflow-x: auto` to `overflow-x: hidden` and added `max-width: 100%`. **Result**: Wide equations are now clipped rather than scrolled, providing a cleaner appearance.
+## 24. Layout & Rendering Robustness (v1.9.4 - v1.9.6)
+
+A series of architectural hardening steps were taken to handle "Sloppy" human/AI input and browser engine limitations.
+
+### 24.1 Header Rendering (The Semantic Realignment)
+-   **Old Logic**: `\section` mapped to `<h2>`. CSS only styled `<h3>` (Sections) and `<h4>` (Subsections). Result: Headers were tiny/unstyled.
+-   **New Logic**: Semantic realignment.
+    -   `\section` -> `<h2>` (CSS: 14pt Bold)
+    -   `\subsection` -> `<h3>` (CSS: 12pt Bold)
+    -   `\subsubsection` -> `<h4>` (CSS: 11pt Italic)
+-   **Sloppy Regex**: Headers are now matched using `[\s\S]*?` to capture titles containing newlines or extra whitespace.
+
+### 24.2 TikZ Robustness Suite
+To prevent "Blank Diagrams" (silent crashes), the TikZ engine now performs aggressive pre-flight sanitization:
+1.  **Comment Stripping**: All `%` comments are stripped *before* flattening code to newlines. (Prevents code being commented out by flattened `%`).
+2.  **Library Injection**: Standard libraries (`arrows, shapes, calc, positioning`) are explicitly injected into every script block.
+3.  **Font Safety**: `\sffamily` (Sans Serif) and other font commands are stripped to prevent engine crashes (missing metrics).
+4.  **Environment Sanitization**: `itemize` and `enumitem` parameters (e.g., `[leftmargin=*]`) are removed or converted to manual `$\bullet$` lists.
+5.  **Collapse Prevention**: The iframe enforces `min-height: 200px` to ensure visibility even if auto-resizing fails.
+
+### 24.3 Citation Logic (Ref ID Force)
+-   **Old Logic**: Sequential ID based on appearance order (`[1], [2]`).
+-   **New Logic**: If the key matches `ref_X`, strictly force ID `X`. (`ref_5` -> `[5]`). Fallback to sequential for named references (`Smith2020`).
+
+### 24.4 Table Robustness
+-   **Ampersand Glitch**: Specific regex patches exist for known AI typos like `Built-in & Comprehensive` (unescaped `&`).
+-   **Width**: Tables are forced to `width: 100%` via CSS to prevent aggressive text wrapping in narrow columns.

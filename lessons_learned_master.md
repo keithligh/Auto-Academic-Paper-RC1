@@ -594,3 +594,29 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 - **Truth**: **Regex cannot parse nested structures.** There is no regex that can reliably match balanced braces in a non-recursive regex engine (like JS).
 - **The Only Way**: **A Manual State Machine.** You *must* iterate character-by-character, counting `depth++` on `{` and `depth--` on `}`.
 - **Lesson**: If the syntax allows nesting (like LaTeX), **Delete the Regex.** Write the `while` loop. It feels "raw", but it is the only way to be robust.
+
+### Lesson 49: The "Show Something" Principle Applied to Error Correction (v1.9.1)
+- **Context**: Users reported missing content (footnotes, inputs) that the AI claimed to have written.
+- **The Failure**: The custom parser (`latex-to-html.ts`) was strictly whitelisting commands. Anything unknown (or hard to parse like `\input`) was replaced with `''` (empty string).
+- **The Insight**: **Silence is indistinguishable from Failure.** If the AI hallucinates `\input{chapter1}`, deleting it hides the hallucination. If the AI writes a `\footnote`, deleting it destroys value.
+- **The Fix**: **Reveal, Don't Delete.**
+    - `\input{...}` -> `[Include: ...]` (Reveals hallucination/laziness).
+    - `\footnote{...}` -> `[Note: ...]` (Preserves content).
+- **The Lesson**: **A Red Box is better than Empty Space.** Always render *something* that represents the intent, even if the feature isn't fully supported. This allows the user to debug the AI (is it lazy?) vs the System (is it broken?).
+
+## 17. Layout Rendering Robustness (The "Introduction", "Diagram" & "Table" Case Study)
+-   **Header Typography Mismatch**: The implementation had a fundamental "Semantic Mismatch" between the Parser (HTML output) and the Stylesheet.
+    -   **Problem**: `\section` parsed to `<h2>`, but CSS only styled `<h3>` as "Section Header". This left headers unstyled and tiny.
+    -   **Lesson**: Always align Semantic HTML (`h1`->`h2`->`h3`) with CSS typography. Don't assume arbitrary tags.
+-   **Regex vs. Newlines (The "Sloppy Parsing" Necessity)**: Strict regexes like `/\\section\{([^}]+)\}/` fail when humans (or AI) add whitespace or newlines inside the command.
+    -   **Fix**: Switch to "Sloppy-Tolerant Parsing" using `[\s\S]*?` and whitespace tolerance `\s*`. It is better to over-match slightly than to fail silently.
+-   **The "Comment Catastrophe" in Code Flattening**: When preparing code for browser execution (like TikZ), **never purely flatten lines** without stripping comments first.
+    -   **Fail**: `\draw (0,0); % Line` -> flattened -> `\draw (0,0); % Line \draw (1,1);`. The comment consumed the entire rest of the diagram code.
+    -   **Fix**: Strip comments (`%.*$`) *before* flattening.
+-   **Browser Engine Fragility (TikZJax)**:
+    -   **Fonts**: `\sffamily` crashes the standard browser engine (missing font metrics). Strip it.
+    -   **Environments**: `itemize` or `enumitem` params (`[leftmargin=*]`) crash the engine. Sanitize them to manual `$\bullet$` bullets.
+    -   **Libraries**: Advanced features (arrows) require explicit `\usetikzlibrary` injection in the script block.
+-   **The Unfixable "Table Ampersand" (CSV Ambiguity)**:
+    -   **Problem**: Determining if `Sales & Marketing` means "Text" or "Next Column" is mathematically impossible without context.
+    -   **Reality Check**: There is no universal code fix. We must rely on prompt engineering to force escaped `\&` output for text, or accept occasional heuristic patches for known failures.

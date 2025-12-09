@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.6] - 2025-12-09 (Layout Robustness: Headers, TikZ, Tables)
+### Fixed
+- **Section Headers ("Introduction")**: Corrected Semantic HTML/CSS mismatch.
+    - Updated CSS to style `h2` as Section (previously expected `h3`).
+    - Updated Regex to `[\s\S]*?` to support newlines in titles.
+- **Blank TikZ Diagrams**:
+    - **Comment Stripping**: Regex `safeTikz.replace(/%.*$/gm, '')` prevents comments from killing flattened code.
+    - **Library Injection**: Added `arrows, shapes, calc` to script block.
+    - **Crash Prevention**: Stripped `\sffamily` and sanitized `itemize`/`[leftmargin=*]` to `$\bullet$`.
+    - **Visibility**: Added `min-height: 200px` to iframe.
+- **Table Layout**:
+    - **Width**: Forced to `100%` (was `auto`) to prevent text wrapping.
+    - **Data Sanitation**: Added regex to escape specific AI typos (`Built-in & Comprehensive` -> `\&`).
+- **Citation Rendering**:
+    - **ID Logic**: Enforced "ID Match" mode. `ref_5` -> `[5]` instead of sequential `[1]`.
+
 ## [1.8.2] - 2025-12-09 (Intent Engine Restoration & CSS Corruption Fix)
 ### Fixed
 - **CSS Class Name Corruption**: Template literals with spaces in class names broke all styling.

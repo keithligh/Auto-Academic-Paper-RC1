@@ -173,6 +173,34 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
     let safeTikz = tikzCode.replace(/[^\x00-\x7F]/g, '');
 
+    // Robust Fix for Fonts inside Nodes
+    safeTikz = safeTikz
+      .replace(/%.*$/gm, '') // CRITICAL: Strip comments before flattening newlines, otherwise "% Comment \draw" becomes one line and \draw is lost!
+      .replace(/\\textbf\s*\{/g, '{\\bfseries ')
+      .replace(/\\textit\s*\{/g, '{\\itshape ')
+      .replace(/\\sffamily/g, '') // Crash prevention
+      .replace(/\\rmfamily/g, '')
+      .replace(/\\ttfamily/g, '')
+      // Fix \n (literal) only if not followed by letters (protects \node, \newline, etc)
+      .replace(/\\n(?![a-zA-Z])/g, ' ')
+      .replace(/\n/g, ' ');
+
+    // SANITIZATION: Remove enumitem/itemize which crashes TikZJax in nodes
+    // 1. Remove [leftmargin=*] or similar params
+    safeTikz = safeTikz.replace(/\\begin\{itemize\}\[[^\]]*\]/g, '\\begin{itemize}');
+
+    // 2. Replace itemize with manual bullets (Fake List) because TikZJax interaction with Lists inside Nodes is flaky
+    if (safeTikz.includes('\\begin{itemize}')) {
+      safeTikz = safeTikz
+        .replace(/\\begin\{itemize\}/g, '')
+        .replace(/\\end\{itemize\}/g, '')
+        .replace(/\\item\s+/g, '\\par $\\bullet$ ');
+    }
+
+    // DEBUG LOGGING (To confirm fix runs in browser)
+    console.log("[LatexPreview TikZ Fix] Original:", tikzCode.substring(0, 50));
+    console.log("[LatexPreview TikZ Fix] Safe:", safeTikz.substring(0, 50));
+
     // FIX (v1.6.10): Escape ampersands in TikZ code using simpler direct approach
     // LaTeX interprets & as alignment tab in tables. In TikZ node text, we need \&
     // Direct pattern replacements (order matters!)
@@ -592,6 +620,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   </div>
   <div class="tikzjax-container">
     <script type="text/tikz">
+      \\usetikzlibrary{arrows,shapes,calc,positioning,decorations.pathreplacing}
       \\begin{tikzpicture}${finalOptions}
       ${safeTikz}
       \\end{tikzpicture}
@@ -606,9 +635,10 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
          // Hide loading placeholder once SVG appears (v1.6.11)
          const loading = document.getElementById('tikz-loading');
          if (loading) loading.classList.add('hidden');
-         // Add a small buffer for tooltips/shadows
+         // Add a small buffer for tooltips/shadows, and Enforce Min-Height (200px)
          const rect = svg.getBoundingClientRect();
-         window.frameElement.style.height = (rect.height + 5) + 'px';
+         const h = Math.max(rect.height + 25, 200); 
+         window.frameElement.style.height = h + 'px';
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -804,6 +834,9 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   });
 
   // --- FIGURE/TABLE ENVIRONMENT FLATTENING ---
+  // FIX (v1.9.6): Pre-sanitize known AI typos in Tables that cause column overflow (e.g. "Built-in & Comprehensive" -> unescaped &)
+  content = content.replace(/Built-in\s+&\s+Comprehensive/g, 'Built-in \\& Comprehensive');
+
   content = content.replace(/\\begin\{(figure|table)\}(\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, env, opt, body) => {
     let cleaned = body
       .replace(/\\centering/g, '')
@@ -1118,6 +1151,7 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
 
       // 2. Custom Parser (Replacements) - REPLACES latex.js
       let html = sanitized;
+      console.log("[LatexPreview Debug] RAW HTML:", html.substring(0, 500)); // Debug Header rendering
 
       // --- A. METADATA EXTRACTION (BEFORE PREAMBLE STRIP) ---
       let title = '';
@@ -1181,9 +1215,19 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
           // Normalize key: remove escaped underscores
           const normalizedKey = key.replace(/\\_/g, '_');
           if (!citationMap.has(normalizedKey)) {
-            citationMap.set(normalizedKey, nextCitationId);
+            // FIX (v1.9.5): Respect explicit ref numbers (e.g. ref_5 -> [5])
+            const match = normalizedKey.match(/^ref_(\d+)$/i);
+            let id = nextCitationId;
+            if (match) {
+              id = parseInt(match[1], 10);
+              // Update nextCitationId to avoid collisions if we're jumping ahead
+              if (id >= nextCitationId) nextCitationId = id + 1;
+            } else {
+              nextCitationId++;
+            }
+
+            citationMap.set(normalizedKey, id);
             references.push(normalizedKey);
-            nextCitationId++;
           }
           ids.push(citationMap.get(normalizedKey)!);
         });
@@ -1222,18 +1266,20 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
         return match;
       });
 
-      // 3. Handle escaped underscores: (ref\_1)(ref\_2)
-      html = html.replace(/(\(ref\\_\d+\))+/g, (match) => {
-        const allRefs = match.match(/ref\\_\d+/g);
-        if (allRefs) {
-          return formatCitations(allRefs.join(','));
-        }
-        return match;
+      // 2b. FIX (v1.9.3): Handle comma-separated list inside parentheses: (ref_1, ref_5)
+      // UPDATED v1.9.4: Handle escaped underscores (ref\_6) and spaces (ref_2 )
+      html = html.replace(/\(\s*((?:ref\\?_?\d+)(?:\s*,\s*ref\\?_?\d+)*)\s*\)/gi, (match, content) => {
+        console.log("[LatexPreview Debug] Processing Ref Match:", match, "Content:", content);
+        return formatCitations(content);
       });
 
-      // 4. Handle single (ref_x) or (ref\_x) that weren't caught above
-      html = html.replace(/\(ref_?(\d+)\)/gi, (match, num) => formatCitations(`ref_${num} `));
-      html = html.replace(/\(ref\\_(\d+)\)/g, (match, num) => formatCitations(`ref_${num} `));
+      // 3. Handle escaped underscores: (ref\_1)(ref\_2) -> Standardize logic
+      // Note: "Consecutive" handler (2) might fail on spaces/escapes. 
+      // Let's rely on a more aggressive general pass or just fix the single case below.
+
+      // 4. Handle single (ref_x) or (ref\_x) with potential spaces
+      // Matches: (ref_1), ( ref_1 ), (ref\_1)
+      html = html.replace(/\(\s*ref\\?_?(\d+)\s*\)/gi, (match, num) => formatCitations(`ref_${num} `));
 
       // --- D. HEADER CONSTRUCTION & INJECTION ---
 
@@ -1258,9 +1304,10 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
       );
 
       // Sections
-      html = html.replace(/\\section\*?\{([^}]+)\}/g, '<h2>$1</h2>');
-      html = html.replace(/\\subsection\*?\{([^}]+)\}/g, '<h3>$1</h3>');
-      html = html.replace(/\\subsubsection\*?\{([^}]+)\}/g, '<h4>$1</h4>');
+      // Sections - Allow whitespace and NEWLINES inside braces (robust matching)
+      html = html.replace(/\\section\*?\s*\{([\s\S]*?)\}/g, '<h2>$1</h2>');
+      html = html.replace(/\\subsection\*?\s*\{([\s\S]*?)\}/g, '<h3>$1</h3>');
+      html = html.replace(/\\subsubsection\*?\s*\{([\s\S]*?)\}/g, '<h4>$1</h4>');
 
       // Text formatting
       html = html.replace(/\\textbf\{([^}]+)\}/g, '<strong>$1</strong>');
@@ -1270,6 +1317,9 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
       html = html.replace(/\\today/g, new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
 
       // Paragraphs
+      // Fix: Normalize AI usage of literal "\n" to real newlines
+      html = html.replace(/\\n/g, '\n');
+
       html = html.split(/\n\n+/).filter(p => p.trim()).map(para => {
         para = para.trim();
         if (!para) return '';

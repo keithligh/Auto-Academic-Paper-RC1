@@ -83,18 +83,17 @@ export function extractJson(content: string): any {
     // Determine if it's an Object or Array based on which appears first
     if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
         start = firstBrace;
-        end = clean.lastIndexOf('}');
+        end = findBalancedJsonEnd(clean, start, '{', '}');
     } else if (firstBracket !== -1) {
         start = firstBracket;
-        end = clean.lastIndexOf(']');
+        end = findBalancedJsonEnd(clean, start, '[', ']');
     }
 
     if (start !== -1 && end !== -1) {
         clean = clean.substring(start, end + 1);
-    } else {
-        // Fallback: if no braces found, maybe it's just the content
-        // But if we can't find braces, it's likely not valid JSON.
-        // We'll try to parse 'clean' as is.
+    } else if (start !== -1) {
+        // Truncated or malformed (no closing found) - take everything from start
+        clean = clean.substring(start);
     }
 
     // 3. Fix escaping issues (Legacy helper)
@@ -141,4 +140,44 @@ export function escapeLatex(text: string): string {
         .replace(/[%$#&_]/g, (m) => `\\${m}`)
         .replace(/~/g, "\\textasciitilde{}")
         .replace(/\^/g, "\\textasciicircum{}");
+}
+
+/**
+ * Finds the matching closing brace for a JSON structure, respecting strings and escapes.
+ * Returns the index of the matching closeChar, or -1 if not found.
+ */
+function findBalancedJsonEnd(text: string, startIndex: number, openChar: string, closeChar: string): number {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = startIndex; i < text.length; i++) {
+        const char = text[i];
+
+        if (inString) {
+            if (char === '\\' && !escaped) {
+                escaped = true;
+            } else if (char === '"' && !escaped) {
+                inString = false;
+            } else {
+                escaped = false;
+            }
+            continue;
+        }
+
+        if (char === '"') {
+            inString = true;
+            continue;
+        }
+
+        if (char === openChar) {
+            depth++;
+        } else if (char === closeChar) {
+            depth--;
+            if (depth === 0) {
+                return i;
+            }
+        }
+    }
+    return -1;
 }

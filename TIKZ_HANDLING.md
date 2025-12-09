@@ -258,3 +258,17 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 5.  **NEVER** use `transform shape` for **LARGE** diagrams (keeps text readable).
 6.  **ALWAYS** extract **ALL** `(x,y)` coordinate pairs (not just `at (x,y)`) for span/aspect calculations.
 7.  **ALWAYS** strip and replace existing `x=`/`y=` values for **FLAT** intent (cannot skip, must fix ratio).
+
+#### 15. The Browser Engine Protection Suite (v1.9.5)
+The TikZ engine was prone to "Blank" renders due to browser limitations. We implemented a protection suite:
+
+1.  **Comment Stripping (Critical)**: `safeTikz.replace(/%.*$/gm, '')`
+    *   **Why**: We flatten code to single lines for processing. If a comment `%` exists, it consumes the entire rest of the flattened line. This caused valid code to be commented out.
+2.  **Library Injection**: We inject `\usetikzlibrary{arrows,shapes,calc,positioning,decorations.pathreplacing}`.
+    *   **Why**: The browser doesn't autoload libraries. Missing `arrows` causes a silent crash.
+3.  **Unsupported Feature Strip**:
+    *   **Fonts**: `\sffamily`, `\ttfamily`. (Reason: Missing WASM font metrics).
+    *   **Environments**: `itemize` or `enumitem`. (Reason: Incompatible with WASM nodes).
+        *   **Fix**: Auto-convert `\item` to `$\bullet$`.
+4.  **Collapse Prevention**: `min-height: 200px` on the iframe.
+    *   **Why**: If `MutationObserver` fails to detect height (0px), the diagram vanishes. This forces visibility.

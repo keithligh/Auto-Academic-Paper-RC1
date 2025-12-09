@@ -159,13 +159,29 @@ const processEnvironment = (text: string, envName: string, processor: (content: 
 // ==========================================
 
 const renderTikz = (tikzCode: string, options: string = ''): string => {
+    // Sanitize TikZ Code specifically for TikZJax limitations
+    let safeTikz = tikzCode
+        // Aggressive Sanitization: Strip the commands entirely if regex is failing on nesting
+        // Trying to convert \textit{...} -> ... (just text) or {\itshape ...}
+        // The previous regex failed on quotes/newlines. Let's try a simpler approach for TikZ:
+        // Remove the command wrapper but keep content.
+        .replace(/\\textbf\s*\{/g, '{\\bfseries ')
+        .replace(/\\textit\s*\{/g, '{\\itshape ')
+        // Also catch cases without braces if they exist (unlikely in generated code but safe to add)
+        // And fix the newline issue more aggressively
+        .replace(/\\n/g, ' ')
+        .replace(/\n/g, ' ');
+
+    console.log("[TikZ Debug] Original:", tikzCode.substring(0, 100));
+    console.log("[TikZ Debug] Safe:", safeTikz.substring(0, 100));
+
     const iframeHtml = `<!DOCTYPE html>
 <html><head>
 <link rel="stylesheet" href="https://tikzjax.com/v1/fonts.css">
 <script src="https://tikzjax.com/v1/tikzjax.js"></script>
 <style>body{margin:0;padding:0;overflow:hidden;}svg{width:auto;height:auto;max-width:100%;}</style>
 </head><body>
-<script type="text/tikz">\\begin{tikzpicture}[scale=0.85,transform shape]${tikzCode}\\end{tikzpicture}</script>
+<script type="text/tikz">\\begin{tikzpicture}[scale=0.85,transform shape]${safeTikz}\\end{tikzpicture}</script>
 <script>
 const observer=new MutationObserver(()=>{
     const svg=document.querySelector('svg');
@@ -298,12 +314,12 @@ export function convertLatexToHtml(latex: string): string {
         .replace(/\\tableofcontents/g, '')
         .replace(/\\listoffigures/g, '')
         .replace(/\\listoftables/g, '')
-        .replace(/\\input\{.*?\}/g, '')
-        .replace(/\\include\{.*?\}/g, '')
-        .replace(/\\label\{.*?\}/g, '')
-        .replace(/\\ref\{.*?\}/g, '[?]')
-        .replace(/\\eqref\{.*?\}/g, '(eqn)')
-        .replace(/\\footnote\{.*?\}/g, '')
+        .replace(/\\input\{(.*?)\}/g, '<div class="latex-warning">[Include: $1]</div>')
+        .replace(/\\include\{(.*?)\}/g, '<div class="latex-warning">[Include: $1]</div>')
+        .replace(/\\label\{(.*?)\}/g, '<span class="latex-debug">[Label: $1]</span>')
+        .replace(/\\ref\{(.*?)\}/g, '<span class="latex-citation">[Ref: $1]</span>')
+        .replace(/\\eqref\{(.*?)\}/g, '($1)')
+        .replace(/\\footnote\{(.*?)\}/g, '<span class="latex-footnote"><sup>[Note: $1]</sup></span>')
         .replace(/\\url\{([^{}]*)\}/g, '<span class="url">$1</span>');
 
     // TikZ

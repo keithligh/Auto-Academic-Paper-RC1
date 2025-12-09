@@ -1,0 +1,48 @@
+
+const { convertLatexToHtml } = require('./client/src/lib/latex-to-html');
+
+const testCases = [
+    {
+        name: "Unknown Command Fallthrough",
+        input: "Before \\unknowncommand{Hidden Content} After"
+    },
+    {
+        name: "Unknown Environment Fallthrough",
+        input: "Before \\begin{unknownenv}Hidden Block\\end{unknownenv} After"
+    },
+    {
+        name: "Input Command (Should be stripped)",
+        input: "Before \\input{secret.tex} After"
+    },
+    {
+        name: "Footnote Command (Should be stripped)",
+        input: "Text \\footnote{This is lost} Continued"
+    }
+];
+
+// Mock basic deps if needed (regex logic is self-contained in convertLatexToHtml usually, 
+// but it imports 'katex'. We might need to mock katex if running in plain node without install, 
+// but project has it.)
+
+// Actually, since we are in simple JS script, let's just inspect the file behavior conceptually 
+// or try to run it if we can bundle dependencies. 
+// Given the environment, running a TS file directly requiring 'katex' import might fail if ts-node isn't setup for simple execution 
+// or if imports are ES modules. 
+
+// Let's rely on reading the code flow first as per "Deep Investigation".
+// Code analysis of latex-to-html.ts:
+// line 108: result = result.substring(0, idx) + result.substring(idx + cmd.length);
+// This is inside replaceCommand. If we use replaceCommand, it removes the command AND keeps the content? 
+// Wait. replaceCommand logic:
+// it finds match, finds braces, extracts body.
+// replacer(body). 
+// If replacer returns empty string, content is gone.
+// If replacer returns body, content stays (minus command).
+
+// But 'unknown commands' are NOT VALIDATED by replaceCommand unless we call it.
+// The parser manually calls replaceCommand for \section, \subsection etc.
+// It DOES NOT iterate over "all commands".
+// So \unknowncommand{Content} will simply render as "\unknowncommand{Content}" (raw text)?
+// Or will it be stripped?
+
+// Let's create a small reproduction file to be sure about "Parsing Logic" without needing full execution env.
