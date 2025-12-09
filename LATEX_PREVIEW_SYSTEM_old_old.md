@@ -247,7 +247,7 @@ To handle arbitrarily nested lists (e.g., `itemize` inside `enumerate`) and opti
 3. **Pipeline Ordering**: To prevent incorrect parsing, **Verbatim/Code extraction happens BEFORE List parsing**. This ensures `\item` commands inside code blocks are ignored by the list parser.
 4. **Math Safety**: Content is passed through `resolvePlaceholders()` to restore math *before* HTML generation.
 5. **Manual Formatting**: We manually parse formatting macros (`\emph`, `\textbf`, `\textsc`) within list items, including support for nested braces (e.g., `\textbf{\textit{text}}`).
-6. **Trojan Horse**: Final HTML lists are wrapped in `createPlaceholder()` so `latex.js` treats them as black boxes.
+6. **Hybrid Encapsulation**: Final HTML lists are wrapped in `createPlaceholder()` so `latex.js` treats them as black boxes.
 
 **Why?**
 

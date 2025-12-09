@@ -58,7 +58,7 @@ This document outlines the core coding philosophy and standards for the **Auto A
 ### 9. THE "CODE IS LAW" RULE (LATEX.JS CONTAINMENT)
 **Never Trust Latex.js with Complex Logic.**
 - **Strict Containment:** `latex.js` is a dumb text formatter. It must NEVER parse Math, TikZ, Tables, Algorithms, or Citations.
-- **The Trojan Horse:** Complex elements must be extracted, sanitized, and re-injected.
+- **The Hybrid Encapsulation:** Complex elements must be extracted, sanitized, and re-injected.
 - **Why**: `latex.js` is fragile. Trusting it with complex macros leads to crashes. We verify; we do not trust.
 
 ### 10. INTENTIONAL DESIGN (NO GUESSWORK)

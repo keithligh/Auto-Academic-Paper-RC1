@@ -59,7 +59,7 @@ function robustExtract(text) {
             // But usually we can just search for the specific end string if we assume standard format.
             // However, to be robust, we should probably regex search for the end tag?
             // Or just search for \end{name} loosely?
-            // The Architecture "Trojan Horse" means we steal it.
+            // The Architecture "Hybrid Encapsulation Strategy" means we steal it.
             // If the user wrote \end {align*}, we must find that too.
             // So we need a regex for the end tag too.
 

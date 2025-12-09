@@ -169,7 +169,7 @@ Do NOT add citation markers ((ref_X)) yet. Just integrate the ideas.
 
 ---
 
-## 4. The Compiler & Trojan Horse
+## 4. The Compiler & Hybrid Encapsulation
 **Agent:** System (No AI)
 **Logic:**
 1.  **Bibliography:** Deterministically generated from the `references` list.

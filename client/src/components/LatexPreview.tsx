@@ -2,7 +2,7 @@
  * LatexPreview.tsx
  * 
  * IMPLEMENTS: Hybrid "Auditor Spec" Parser (Refined v4)
- * 1. Sanitization: "Trojan Horse" logic (Math, TikZ, Lists from LatexPreview - Copy (3).tsx)
+ * 1. Sanitization: "Hybrid Encapsulation" logic (Math, TikZ, Lists from LatexPreview - Copy (3).tsx)
  * 2. Rendering: Custom Regex HTML Converter (No latex.js)
  * 3. Styling: Strict latex-article.css (A4 Paper, Times New Roman)
  * 
@@ -34,7 +34,7 @@ interface SanitizeResult {
 }
 
 /**
- * THE TROJAN HORSE SANITIZER (REUSED FROM BACKUP)
+ * THE HYBRID ENCAPSULATION SANITIZER (REUSED FROM BACKUP)
  * Extracts complex elements (Math, TikZ, Tables, Lists) into safe placeholders.
  */
 function sanitizeLatexForBrowser(latex: string): SanitizeResult {

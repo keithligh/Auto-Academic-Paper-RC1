@@ -141,7 +141,7 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Fix**: Aggressive use of `!important` in the component stylesheet (`latex-article.css`).
 -   **The Lesson**: **Frameworks are invasive.** When mixing a "Clean Slate" framework (Tailwind) with a "Legacy Style" component (LaTeX Preview), you must explicitly and aggressively override the framework's resets. Implicit specificity is often not enough.
 
-## 18. The "Dumb Formatter" Reality (Trojan Horse Redux)
+## 18. The "Dumb Formatter" Reality (Encapsulation Strategy Redux)
 -   **The Insight**: `latex.js` is not a LaTeX engine; it is a text renderer that crashes on anything complex.
 -   **The Pattern**: We tried to "fix" its list rendering. It failed ("1Text" jamming).
 -   **The Shift**: We stopped trying to fix `latex.js` and instead **removed the feature from it**.
