@@ -692,11 +692,25 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     content = content.substring(0, startIdx) + placeholder + content.substring(endIdx + '\\end{tikzpicture}'.length);
   }
 
-  // Extract Math
+  // --- VERBATIM / CODE BLOCK EXTRACTION ---
+  // MUST Run before Math/Lists to protect code content
+  content = content.replace(/\\begin\{verbatim\}([\s\S]*?)\\end\{verbatim\}/g, (m, code) => {
+    // HTML escape the content
+    const escaped = code
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    return createPlaceholder(`<pre class="latex-verbatim"> ${escaped}</pre> `);
+  });
+
+  // Create Math Block Helper (Moved up for scope access if needed, but it is available)
+
+  // Extract Math (SSOT Order: Structured -> Display -> Standard Inline -> Legacy Inline)
   content = content.replace(/\\begin\{(equation|align|gather|multline)(\*?)\}([\s\S]*?)\\end\{\1\2\}/g, (m, env, star, math) => createMathBlock(m, true));
   content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, math) => createMathBlock(math, true));
-  content = content.replace(/(?<!\\)\$\$([\s\S]*?)(?<!\\)\$\$/g, (m, math) => createMathBlock(math, true)); // Double dollar
-  content = content.replace(/(?<!\\)\$(?!\$)([^$]+?)(?<!\\)\$/g, (m, math) => createMathBlock(math, false)); // Inline
+  content = content.replace(/\\\(([\s\S]*?)\\\)/g, (m, math) => createMathBlock(math, false)); // Standard Inline \( ... \)
+  content = content.replace(/(?<!\\)\$\$([\s\S]*?)(?<!\\)\$\$/g, (m, math) => createMathBlock(math, true)); // Double dollar (Legacy Display)
+  content = content.replace(/(?<!\\)\$(?!\$)([^$]+?)(?<!\\)\$/g, (m, math) => createMathBlock(math, false)); // Legacy Inline $ ... $
 
   // Extract Lists (Preserving structure)
   const processLists = (txt: string, depth: number = 0): string => {
@@ -725,7 +739,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
           i++;
         }
         i += 15; // skip \end{enumerate}
-        output += createPlaceholder(`< ol class="latex-enumerate" >\n${processLists(listContent, depth + 1)} \n</ol > `);
+        output += createPlaceholder(`<ol class="latex-enumerate">\n${processLists(listContent, depth + 1)} \n</ol> `);
       } else if (txt.startsWith('\\begin{itemize}', i)) {
         i += 15;
         let listContent = '';
@@ -738,7 +752,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
           i++;
         }
         i += 13;
-        output += createPlaceholder(`< ul class="latex-itemize" >\n${processLists(listContent, depth + 1)} \n</ul > `);
+        output += createPlaceholder(`<ul class="latex-itemize">\n${processLists(listContent, depth + 1)} \n</ul> `);
       } else if (txt.startsWith('\\item', i)) {
         i += 5;
         // Handle \item[x]
@@ -756,7 +770,7 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         }
         // Recurse for internal lists
         const processedItem = processLists(itemContent, depth);
-        output += `< li${label ? ` data-label="${label}"` : ''}> ${parseLatexFormatting(processedItem)}</li > `;
+        output += `<li${label ? ` data-label="${label}"` : ''}> ${parseLatexFormatting(processedItem)}</li> `;
         // Don't advance i here, logic continues loop
       } else {
         output += txt[i];
@@ -767,63 +781,30 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   };
   content = processLists(content);
 
-  // Extract Tables (Robust with \hline handling)
-  content = content.replace(/\\begin\{tabularx?\}\{[^}]*\}([\s\S]*?)\\end\{tabularx?\}/g, (m, body) => {
-    // Strip ALL \hline commands
-    let cleanBody = body.replace(/\\hline/g, '');
 
-    // Split by \\ (row separator) and filter empty rows
-    const rows = cleanBody
-      .split('\\\\')
-      .map((r: string) => r.trim())
-      .filter((r: string) => r.length > 0)
-      .map((r: string) => {
-        // Split cells by &
-        const cells = r.split('&').map((c: string) => {
-          const cleaned = c.trim();
-          return `< td > ${parseLatexFormatting(cleaned)}</td > `;
-        });
-        return `< tr > ${cells.join('')}</tr > `;
-      })
-      .join('');
-
-    return createPlaceholder(`< div class="table-wrapper" > <table><tbody>${rows}</tbody></table></div > `);
-  });
-
-  // --- VERBATIM / CODE BLOCK EXTRACTION ---
-  content = content.replace(/\\begin\{verbatim\}([\s\S]*?)\\end\{verbatim\}/g, (m, code) => {
-    // HTML escape the content
-    const escaped = code
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    return createPlaceholder(`< pre class="latex-verbatim" > ${escaped}</pre > `);
-  });
 
   // --- ENVIRONMENT NORMALIZATION (theorem, lemma, proof) ---
   content = content.replace(/\\begin\{theorem\}([\s\S]*?)\\end\{theorem\}/g, (m, body) => {
-    return createPlaceholder(`< div class="theorem" > <strong>Theorem.</strong> ${parseLatexFormatting(body.trim())}</div > `);
+    return createPlaceholder(`<div class="theorem"> <strong>Theorem.</strong> ${parseLatexFormatting(body.trim())}</div> `);
   });
   content = content.replace(/\\begin\{lemma\}([\s\S]*?)\\end\{lemma\}/g, (m, body) => {
-    return createPlaceholder(`< div class="lemma" > <strong>Lemma.</strong> ${parseLatexFormatting(body.trim())}</div > `);
+    return createPlaceholder(`<div class="lemma"> <strong>Lemma.</strong> ${parseLatexFormatting(body.trim())}</div> `);
   });
   content = content.replace(/\\begin\{proof\}([\s\S]*?)\\end\{proof\}/g, (m, body) => {
-    return createPlaceholder(`< div class="proof" > <em>Proof.</em> ${parseLatexFormatting(body.trim())} <span style="float:right;">∎</span></div > `);
+    return createPlaceholder(`<div class="proof"> <em>Proof.</em> ${parseLatexFormatting(body.trim())} <span style="float:right;">∎</span></div> `);
   });
   content = content.replace(/\\begin\{definition\}([\s\S]*?)\\end\{definition\}/g, (m, body) => {
-    return createPlaceholder(`< div class="definition" > <strong>Definition.</strong> ${parseLatexFormatting(body.trim())}</div > `);
+    return createPlaceholder(`<div class="definition"> <strong>Definition.</strong> ${parseLatexFormatting(body.trim())}</div> `);
   });
   content = content.replace(/\\begin\{corollary\}([\s\S]*?)\\end\{corollary\}/g, (m, body) => {
-    return createPlaceholder(`< div class="corollary" > <strong>Corollary.</strong> ${parseLatexFormatting(body.trim())}</div > `);
+    return createPlaceholder(`<div class="corollary"> <strong>Corollary.</strong> ${parseLatexFormatting(body.trim())}</div> `);
   });
   content = content.replace(/\\begin\{remark\}([\s\S]*?)\\end\{remark\}/g, (m, body) => {
-    return createPlaceholder(`< div class="remark" > <em>Remark.</em> ${parseLatexFormatting(body.trim())}</div > `);
+    return createPlaceholder(`<div class="remark"> <em>Remark.</em> ${parseLatexFormatting(body.trim())}</div> `);
   });
 
-  // --- FIGURE ENVIRONMENT FLATTENING ---
-  // Strip the figure wrapper but keep inner content
-  content = content.replace(/\\begin\{figure\}(\[[^\]]*\])?([\s\S]*?)\\end\{figure\}/g, (m, opt, body) => {
-    // Remove \centering, \caption, \label but keep the rest
+  // --- FIGURE/TABLE ENVIRONMENT FLATTENING ---
+  content = content.replace(/\\begin\{(figure|table)\}(\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, env, opt, body) => {
     let cleaned = body
       .replace(/\\centering/g, '')
       .replace(/\\caption\{[^}]*\}/g, '')
@@ -832,8 +813,166 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     return cleaned;
   });
 
-  // --- COMMAND STRIPPING (No-Op List) ---
-  // These commands cannot be rendered in browser, remove silently
+  // --- MANUAL TABLE WALKER (SSOT Compliant) ---
+  const processTables = (text: string): string => {
+    const beginTags = ['\\begin{tabular}', '\\begin{tabularx}', '\\begin{longtable}'];
+    let searchPos = 0;
+    let result = '';
+
+    while (searchPos < text.length) {
+      let firstMatchIndex = -1;
+      let matchedTag = '';
+
+      for (const tag of beginTags) {
+        const idx = text.indexOf(tag, searchPos);
+        if (idx !== -1 && (firstMatchIndex === -1 || idx < firstMatchIndex)) {
+          firstMatchIndex = idx;
+          matchedTag = tag;
+        }
+      }
+
+      if (firstMatchIndex === -1) {
+        result += text.substring(searchPos);
+        break;
+      }
+
+      result += text.substring(searchPos, firstMatchIndex);
+
+      const envName = matchedTag.replace('\\begin{', '').replace('}', '');
+      const endTag = `\\end{${envName}}`;
+
+      let depth = 1;
+      let currentPos = firstMatchIndex + matchedTag.length;
+      let tableContentEnd = -1;
+
+      while (currentPos < text.length) {
+        if (text.startsWith(`\\begin{${envName}}`, currentPos)) {
+          depth++;
+          currentPos += matchedTag.length;
+        } else if (text.startsWith(endTag, currentPos)) {
+          depth--;
+          if (depth === 0) {
+            tableContentEnd = currentPos;
+            break;
+          }
+          currentPos += endTag.length;
+        } else {
+          currentPos++;
+        }
+      }
+
+      if (tableContentEnd === -1) {
+        result += text.substring(firstMatchIndex);
+        break;
+      }
+
+      let contentStart = firstMatchIndex + matchedTag.length;
+
+      // Skip arguments like {lcr} or {|p{3cm}|}
+      let argDepth = 0;
+      let inArgs = false;
+      let bodyStartIndex = contentStart;
+
+      let i = contentStart;
+      while (i < tableContentEnd) {
+        if (text[i] === '{') {
+          argDepth++;
+          inArgs = true;
+        } else if (text[i] === '}') {
+          argDepth--;
+        } else if (!inArgs && text[i] !== ' ' && text[i] !== '[') {
+          // Heuristic: If we hit non-brace/non-space, we might be in body.
+        }
+
+        if (inArgs && argDepth === 0) {
+          let nextCharIdx = i + 1;
+          while (nextCharIdx < tableContentEnd && text[nextCharIdx] === ' ') nextCharIdx++;
+          if (text[nextCharIdx] === '{') {
+            i = nextCharIdx - 1;
+            inArgs = false;
+          } else {
+            bodyStartIndex = i + 1;
+            break;
+          }
+        }
+        i++;
+      }
+
+      const tableBody = text.substring(bodyStartIndex, tableContentEnd);
+
+      // ROW SPLITTING
+      const rows: string[] = [];
+      let currentRow = '';
+      let braceDepth = 0;
+
+      for (let j = 0; j < tableBody.length; j++) {
+        const char = tableBody[j];
+        if (char === '{') braceDepth++;
+        else if (char === '}') braceDepth--;
+
+        if (braceDepth === 0 && char === '\\' && tableBody[j + 1] === '\\') {
+          rows.push(currentRow);
+          currentRow = '';
+          j++;
+        } else {
+          currentRow += char;
+        }
+      }
+      if (currentRow.trim()) rows.push(currentRow);
+
+      // CELL SPLITTING
+      const htmlRows = rows.map(row => {
+        if (row.trim().match(/^\\(hline|midrule|toprule|bottomrule)$/)) return '';
+
+        let cleanRow = row.replace(/\\(hline|midrule|toprule|bottomrule)/g, '');
+
+        const cells: string[] = [];
+        let currentCell = '';
+        braceDepth = 0;
+
+        for (let k = 0; k < cleanRow.length; k++) {
+          const char = cleanRow[k];
+          if (char === '\\' && cleanRow[k + 1] === '&') {
+            currentCell += '&';
+            k++;
+            continue;
+          }
+
+          if (char === '{') braceDepth++;
+          else if (char === '}') braceDepth--;
+
+          if (braceDepth === 0 && char === '&') {
+            cells.push(currentCell.trim());
+            currentCell = '';
+          } else {
+            currentCell += char;
+          }
+        }
+        cells.push(currentCell.trim());
+
+        const htmlCells = cells.map(cell => {
+          const multicolMatch = cell.match(/^\\multicolumn\{(\d+)\}\{[^}]+\}\{([\s\S]*)\}$/);
+          if (multicolMatch) {
+            const span = multicolMatch[1];
+            const content = parseLatexFormatting(multicolMatch[2]);
+            return `<td colspan="${span}">${content}</td>`;
+          }
+          return `<td>${parseLatexFormatting(cell)}</td>`;
+        }).join('');
+
+        return `<tr>${htmlCells}</tr>`;
+      }).join('');
+
+      result += createPlaceholder(`<div class="table-wrapper"><table><tbody>${htmlRows}</tbody></table></div>`);
+
+      searchPos = tableContentEnd + endTag.length;
+    }
+
+    return result;
+  };
+  content = processTables(content);
+
+  // --- COMMAND STRIPPING ---
   content = content.replace(/\\tableofcontents/g, '');
   content = content.replace(/\\listoffigures/g, '');
   content = content.replace(/\\listoftables/g, '');
@@ -847,31 +986,80 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   content = content.replace(/\\hspace\{[^}]*\}/g, '');
 
   // --- GHOST HEADER EXORCISM ---
-  // Remove redundant "References" section headers before bibliography
   content = content.replace(/\\section\*?\s*\{\s*(?:References|Bibliography|Works\s+Cited)\s*\}/gi, '');
   content = content.replace(/\\subsection\*?\s*\{\s*(?:References|Bibliography|Works\s+Cited)\s*\}/gi, '');
 
-  // --- PARBOX HANDLING ---
-  // Convert \parbox{width}{content} to div
-  content = content.replace(/\\parbox\{([^}]+)\}\{([\s\S]*?)\}/g, (m, widthArg, body) => {
-    // Convert LaTeX width to CSS
-    let cssWidth = '100%';
-    const textwidthMatch = widthArg.match(/([\d.]+)\\textwidth/);
-    const linewidthMatch = widthArg.match(/([\d.]+)\\linewidth/);
-    if (textwidthMatch) {
-      cssWidth = `${parseFloat(textwidthMatch[1]) * 100}% `;
-    } else if (linewidthMatch) {
-      cssWidth = `${parseFloat(linewidthMatch[1]) * 100}% `;
+  // --- MANUAL PARBOX WALKER (SSOT Compliant) ---
+  const processParboxes = (txt: string): string => {
+    let result = '';
+    let i = 0;
+    while (i < txt.length) {
+      if (txt.startsWith('\\parbox', i)) {
+        i += 7; // skip \parbox
+
+        // Parse 1st arg: Width
+        while (i < txt.length && txt[i] !== '{') i++; // find first {
+        let widthArg = '';
+        if (i < txt.length) {
+          let braceDepth = 0;
+          // Capture brace content
+          if (txt[i] === '{') {
+            braceDepth = 1;
+            i++;
+            while (i < txt.length && braceDepth > 0) {
+              if (txt[i] === '{') braceDepth++;
+              else if (txt[i] === '}') braceDepth--;
+
+              if (braceDepth > 0) widthArg += txt[i];
+              i++;
+            }
+          }
+        }
+
+        // Parse 2nd arg: Content
+        while (i < txt.length && txt[i] !== '{') i++; // find second {
+        let contentArg = '';
+        if (i < txt.length) {
+          let braceDepth = 0;
+          if (txt[i] === '{') {
+            braceDepth = 1;
+            i++;
+            while (i < txt.length && braceDepth > 0) {
+              if (txt[i] === '{') braceDepth++;
+              else if (txt[i] === '}') braceDepth--;
+
+              if (braceDepth > 0) contentArg += txt[i];
+              i++;
+            }
+          }
+        }
+
+        // Logic from previous regex
+        let cssWidth = '100%';
+        const textwidthMatch = widthArg.match(/([\d.]+)\\textwidth/);
+        const linewidthMatch = widthArg.match(/([\d.]+)\\linewidth/);
+        if (textwidthMatch) {
+          cssWidth = `${parseFloat(textwidthMatch[1]) * 100}% `;
+        } else if (linewidthMatch) {
+          cssWidth = `${parseFloat(linewidthMatch[1]) * 100}% `;
+        }
+
+        result += createPlaceholder(`<div class="parbox" style="width: ${cssWidth}; display: inline-block; vertical-align: top;"> ${parseLatexFormatting(contentArg)}</div> `);
+
+      } else {
+        result += txt[i];
+        i++;
+      }
     }
-    return createPlaceholder(`< div class="parbox" style = "width: ${cssWidth}; display: inline-block; vertical-align: top;" > ${parseLatexFormatting(body)}</div > `);
-  });
+    return result;
+  };
+  content = processParboxes(content);
 
   // Extract Bibliography (thebibliography environment)
   let hasBibliography = false;
   content = content.replace(/\\begin\{thebibliography\}\{[^}]*\}([\s\S]*?)\\end\{thebibliography\}/g, (m, body) => {
     hasBibliography = true;
 
-    // Parse \bibitem entries
     const items: string[] = [];
     const bibitemRegex = /\\bibitem\{([^}]+)\}([\s\S]*?)(?=\\bibitem\{|$)/g;
     let match;
@@ -880,21 +1068,18 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
     while ((match = bibitemRegex.exec(body)) !== null) {
       const key = match[1];
       let content = match[2].trim();
-
-      // Apply formatting to citation content
       content = parseLatexFormatting(content);
-
-      items.push(`< li style = "margin-bottom: 0.8em; text-indent: -2em; padding-left: 2em;" > [${refNum}] ${content}</li > `);
+      items.push(`<li style="margin-bottom: 0.8em; text-indent: -2em; padding-left: 2em;"> [${refNum}] ${content}</li> `);
       refNum++;
     }
 
     const bibHtml = `
-    < div class="bibliography" style = "margin-top: 3em; border-top: 1px solid #ccc; padding-top: 1em;" >
+    <div class="bibliography" style="margin-top: 3em; border-top: 1px solid #ccc; padding-top: 1em;">
         <h2>References</h2>
         <ol style="list-style: none; padding: 0; margin: 0;">
           ${items.join('\n')}
         </ol>
-      </div >
+      </div>
     `;
 
     return createPlaceholder(bibHtml);
@@ -1093,7 +1278,7 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
         if (para.startsWith('LATEXPREVIEW')) return para;
         if (para.match(/^<(ul|ol|li|table|tr|td|pre)/)) return para;
 
-        return `< p > ${para}</p > `;
+        return `<p>${para}</p>`;
       }).join('\n');
 
       // 3. Inject HTML
@@ -1153,11 +1338,11 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
         let bibItemsHtml = '<ul style="list-style: none; padding: 0;">';
         references.forEach((refKey, index) => {
           // IEEE Format: [1] J. Doe... (We only have key, so we assume key is name-like or just list it)
-          bibItemsHtml += `< li style = "margin-bottom: 0.5em;" > [${index + 1}] < span style = "margin-left: 0.5em;" > ${refKey.replace(/_/g, ' ')}</span ></li > `;
+          bibItemsHtml += `<li style="margin-bottom: 0.5em;"> [${index + 1}] <span style="margin-left: 0.5em;"> ${refKey.replace(/_/g, ' ')}</span></li> `;
         });
         bibItemsHtml += '</ul>';
 
-        bibDiv.innerHTML = `< h2 > References</h2 > ` + bibItemsHtml;
+        bibDiv.innerHTML = `<h2>References</h2>` + bibItemsHtml;
         containerRef.current.appendChild(bibDiv);
       }
 

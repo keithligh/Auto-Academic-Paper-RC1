@@ -15,6 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Fix**: Corrected all instances to use proper hyphenated class names.
   - **Lesson**: Template literal edits can corrupt class names if spaces are introduced around hyphens.
 
+## [1.6.43] - 2025-12-09 (SSOT Alignment & Indentation Fix)
+### Fixed
+- **Phantom Indentation**: All paragraphs were forcibly indented by 1.5em due to a global CSS variable.
+  - **Correction**: Set `--parindent: 0` in `latex-base.css`.
+  - **Impact**: Restores modern, clean paragraph alignment.
+- **Parbox Crash**: Regex-based parsing failed on nested braces within `\parbox`.
+  - **Correction**: Implemented **Manual Character Walker/Parser** (`processParboxes`).
+  - **Impact**: Correctly handles complex, nested LaTeX commands inside parboxes.
+- **Math Extraction Gaps**: `\( ... \)` inline math was not extracted, causing render glitches.
+  - **Correction**: Added standard inline math extraction and enforced strict SSOT order (Structured -> Display -> Inline -> Legacy).
+
+### Added
+- **SSOT Enforcement**: `LatexPreview.tsx` is now 100% aligned with `LATEX_PREVIEW_SYSTEM.md`.
+
 ### Added
 - **Full TikZ Intent Engine Restoration**: Restored the complete 450-line Intent Engine (`createTikzBlock`) with all v1.5.x-v1.6.40 fixes.
   - **Contents**:

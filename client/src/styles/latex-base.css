@@ -19,7 +19,7 @@
      * So if a fixed width page is desired, simply set --paperwidth to an absolute value.
      */
 
-    --parindent: 1.5em;
+    --parindent: 0;
     --parskip: 0px;
     /* needs to be a length, otherwise calc(2px + var(--parskip)) will return 0 */
 

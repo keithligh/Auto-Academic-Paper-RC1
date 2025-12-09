@@ -50,27 +50,27 @@ export default function ResultPage() {
     };
 
     return (
-        <div className="min-h-screen bg-white text-foreground font-sans">
+        <div className="min-h-screen text-foreground font-sans" style={{ backgroundColor: '#fafafa' }}>
             <header className="border-b border-gray-100 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-                <div className="container mx-auto px-6 h-16 flex items-center justify-between">
+                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
                     <h1
-                        className="font-serif text-lg font-bold text-gray-900 cursor-pointer hover:opacity-80 transition-opacity"
+                        className="font-serif text-2xl font-bold text-gray-900 cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => setLocation("/")}
                     >
                         Auto Academic Paper
                     </h1>
                     <div className="flex items-center gap-4">
-                        <Button variant="outline" onClick={() => setLocation("/")}>
+                        <Button variant="outline" size="lg" className="text-lg h-12 px-6" onClick={() => setLocation("/")}>
                             New Document
                         </Button>
-                        <Button onClick={handleExportLatex}>
+                        <Button size="lg" className="text-lg h-12 px-6" onClick={handleExportLatex}>
                             Export LaTeX
                         </Button>
                     </div>
                 </div>
             </header>
 
-            <main className="container mx-auto py-8 px-6">
+            <main className="max-w-6xl mx-auto py-8 px-6">
                 <UnifiedResultView
                     originalContent={job.originalContent || ""}
                     latexContent={job.latexContent || ""}

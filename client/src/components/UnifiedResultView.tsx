@@ -146,9 +146,11 @@ export function UnifiedResultView({ originalContent, latexContent, fileName }: U
                     </div>
                   </ScrollArea>
                 ) : (
-                  <div className="h-full w-full overflow-y-auto">
+                  <div className="h-full w-full overflow-y-auto" style={{ backgroundColor: '#fafafa' }}>
                     {/* Pass className to manage internal scrolling if needed, or let parent handle */}
-                    <LatexPreview latexContent={latexContent} className="min-h-full py-8" />
+                    <div style={{ zoom: 1.15 }}>
+                      <LatexPreview latexContent={latexContent} className="min-h-full py-8" />
+                    </div>
                   </div>
                 )}
               </div>
