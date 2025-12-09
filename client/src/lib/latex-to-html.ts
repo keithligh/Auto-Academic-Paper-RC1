@@ -175,13 +175,123 @@ const renderTikz = (tikzCode: string, options: string = ''): string => {
     console.log("[TikZ Debug] Original:", tikzCode.substring(0, 100));
     console.log("[TikZ Debug] Safe:", safeTikz.substring(0, 100));
 
+    // ========================================
+    // INTENT ENGINE: Analyze diagram characteristics
+    // ========================================
+
+    // Extract all (x,y) coordinate pairs
+    const coordMatches = safeTikz.match(/\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)/g) || [];
+    const coords = coordMatches.map(match => {
+        const parts = match.match(/(-?[\d.]+)/g);
+        return { x: parseFloat(parts![0]), y: parseFloat(parts![1]) };
+    });
+
+    let horizontalSpan = 0;
+    let verticalSpan = 0;
+    let aspectRatio = 1;
+
+    if (coords.length > 0) {
+        const xVals = coords.map(c => c.x);
+        const yVals = coords.map(c => c.y);
+        const minX = Math.min(...xVals);
+        const maxX = Math.max(...xVals);
+        const minY = Math.min(...yVals);
+        const maxY = Math.max(...yVals);
+
+        horizontalSpan = maxX - minX;
+        verticalSpan = maxY - minY;
+        aspectRatio = verticalSpan > 0 ? horizontalSpan / verticalSpan : horizontalSpan;
+    }
+
+    // Count nodes to detect complexity
+    const nodeMatches = safeTikz.match(/\\node/g) || [];
+    const nodeCount = nodeMatches.length;
+
+    // Extract average text length per node
+    const nodeTextMatches = safeTikz.match(/\\node[^;]*?\{([^}]+)\}/g) || [];
+    const avgTextLength = nodeTextMatches.length > 0
+        ? nodeTextMatches.reduce((sum, match) => {
+            const text = match.match(/\{([^}]+)\}$/)?.[1] || '';
+            return sum + text.length;
+          }, 0) / nodeTextMatches.length
+        : 0;
+
+    // Check for explicit node distance
+    const nodeDistanceMatch = safeTikz.match(/node\s+distance\s*=\s*([\d.]+)\s*cm/);
+    const explicitDistance = nodeDistanceMatch ? parseFloat(nodeDistanceMatch[1]) : null;
+
+    console.log("[TikZ Intent] Coords:", coords.length, "Span:", horizontalSpan.toFixed(1), "x", verticalSpan.toFixed(1),
+                "Aspect:", aspectRatio.toFixed(2), "Nodes:", nodeCount, "AvgText:", avgTextLength.toFixed(0));
+
+    // ========================================
+    // INTENT CLASSIFICATION (Priority Order)
+    // ========================================
+    let intent = 'DEFAULT';
+    let scaleOpts = 'scale=0.85,transform shape';
+    let extraOpts = '';
+
+    // FLAT Intent: Timeline-style diagrams (aspect ratio > 3.0)
+    if (aspectRatio > 3.0 && verticalSpan > 0) {
+        intent = 'FLAT';
+        const targetRatio = 2.0;
+        const yMultiplier = Math.min(3.0, Math.max(1.5, aspectRatio / targetRatio));
+        const xMultiplier = 1.5;
+
+        // Strip existing x/y values and inject new ones
+        safeTikz = safeTikz.replace(/\[([^\]]*)\]/, (match, opts) => {
+            let cleanOpts = opts
+                .replace(/x\s*=\s*[\d.]+\s*(cm)?/g, '')
+                .replace(/y\s*=\s*[\d.]+\s*(cm)?/g, '');
+            return `[${cleanOpts}]`;
+        });
+
+        extraOpts = `x=${xMultiplier}cm,y=${yMultiplier}cm`;
+        scaleOpts = 'scale=1.0';
+
+        // Reduce font size if many nodes to prevent overlap
+        if (nodeCount >= 5 && !safeTikz.includes('font=')) {
+            extraOpts += ',font=\\small';
+        }
+
+        console.log("[TikZ Intent] FLAT: x=" + xMultiplier + "cm, y=" + yMultiplier.toFixed(2) + "cm");
+    }
+    // COMPACT Intent: Dense diagrams with many nodes
+    else if (nodeCount >= 8 && horizontalSpan > 0) {
+        intent = 'COMPACT';
+        scaleOpts = 'scale=0.75,transform shape';
+        extraOpts = 'node distance=1.5cm';
+        console.log("[TikZ Intent] COMPACT: Many nodes detected");
+    }
+    // LARGE Intent: Text-heavy diagrams
+    else if (avgTextLength > 30 && horizontalSpan > 0) {
+        intent = 'LARGE';
+        const targetDistance = 8.4; // cm, for text-heavy paragraphs
+        scaleOpts = 'scale=0.9'; // No transform shape for readability
+
+        // Override small distances for text-heavy diagrams
+        if (explicitDistance !== null && explicitDistance < targetDistance) {
+            safeTikz = safeTikz.replace(/node\s+distance\s*=\s*[\d.]+\s*cm/, `node distance=${targetDistance}cm`);
+        } else if (explicitDistance === null) {
+            extraOpts = `node distance=${targetDistance}cm`;
+        }
+
+        console.log("[TikZ Intent] LARGE: Text-heavy, distance=" + targetDistance + "cm");
+    }
+    // DEFAULT: Standard diagrams
+    else {
+        console.log("[TikZ Intent] DEFAULT: Standard scaling");
+    }
+
+    // Combine options
+    const finalOpts = extraOpts ? `${scaleOpts},${extraOpts}` : scaleOpts;
+
     const iframeHtml = `<!DOCTYPE html>
 <html><head>
 <link rel="stylesheet" href="https://tikzjax.com/v1/fonts.css">
 <script src="https://tikzjax.com/v1/tikzjax.js"></script>
 <style>body{margin:0;padding:0;overflow:hidden;}svg{width:auto;height:auto;max-width:100%;}</style>
 </head><body>
-<script type="text/tikz">\\begin{tikzpicture}[scale=0.85,transform shape]${safeTikz}\\end{tikzpicture}</script>
+<script type="text/tikz">\\begin{tikzpicture}[${finalOpts}]${safeTikz}\\end{tikzpicture}</script>
 <script>
 const observer=new MutationObserver(()=>{
     const svg=document.querySelector('svg');

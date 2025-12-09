@@ -288,3 +288,66 @@ The TikZ engine was prone to "Blank" renders due to browser limitations. We impl
         *   **Fix**: Auto-convert `\item` to `$\bullet$`.
 4.  **Collapse Prevention**: `min-height: 200px` on the iframe.
     *   **Why**: If `MutationObserver` fails to detect height (0px), the diagram vanishes. This forces visibility.
+
+#### 16. Intent Engine Implementation (v1.9.16)
+
+> **Problem**: The intent engine was documented but not actually implemented in the code. All diagrams received hardcoded `scale=0.85,transform shape`, causing timeline diagrams to appear squashed with excessive whitespace.
+
+**The Solution**: Implemented a runtime intent classification system that analyzes TikZ code and applies appropriate scaling strategies.
+
+**Implementation Details:**
+
+1. **Coordinate Extraction**: Extracts all `(x,y)` coordinate pairs using regex `\(\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\)`
+2. **Span Calculation**:
+   - `horizontalSpan = maxX - minX`
+   - `verticalSpan = maxY - minY`
+   - `aspectRatio = horizontalSpan / verticalSpan`
+3. **Node Analysis**:
+   - Count total nodes via `\node` pattern matching
+   - Calculate average text length per node
+   - Detect explicit `node distance=Xcm` values
+
+**Intent Classification (Priority Order):**
+
+| Intent | Trigger Condition | Scaling Strategy | Purpose |
+|--------|------------------|------------------|---------|
+| **FLAT** | `aspectRatio > 3.0` AND `verticalSpan > 0` | `x=1.5cm, y={calculated}cm, scale=1.0` | Timeline diagrams - expands vertical space |
+| **COMPACT** | `nodeCount >= 8` AND `horizontalSpan > 0` | `scale=0.75, transform shape, node distance=1.5cm` | Dense diagrams - shrinks to prevent overflow |
+| **LARGE** | `avgTextLength > 30` AND `horizontalSpan > 0` | `scale=0.9, node distance=8.4cm` (no transform shape) | Text-heavy - expands spacing, keeps text readable |
+| **DEFAULT** | All other cases | `scale=0.85, transform shape` | Standard diagrams - balanced scaling |
+
+**FLAT Intent Details (Timeline Fix):**
+```typescript
+const targetRatio = 2.0;
+const yMultiplier = Math.min(3.0, Math.max(1.5, aspectRatio / targetRatio));
+const xMultiplier = 1.5;
+
+// Strip existing x/y values from options
+safeTikz = safeTikz.replace(/\[([^\]]*)\]/, (match, opts) => {
+    let cleanOpts = opts
+        .replace(/x\s*=\s*[\d.]+\s*(cm)?/g, '')
+        .replace(/y\s*=\s*[\d.]+\s*(cm)?/g, '');
+    return `[${cleanOpts}]`;
+});
+
+// Inject new coordinate scaling
+extraOpts = `x=${xMultiplier}cm, y=${yMultiplier}cm`;
+
+// Add font reduction for dense timelines
+if (nodeCount >= 5) {
+    extraOpts += ', font=\\small';
+}
+```
+
+**Example: Timeline Diagram (aspectRatio = 4.0)**
+- **Input**: `\begin{tikzpicture}[x=1cm,y=1cm]` with span 10×2.5cm
+- **Old Behavior**: `scale=0.85,transform shape` → squashed, small, excessive whitespace
+- **New Behavior**: `scale=1.0,x=1.5cm,y=2.0cm,font=\small` → expanded, balanced, no whitespace
+- **Result**: Fixes both "small boxes" and "massive whitespace" issues
+
+**Debug Logging:**
+All diagrams now log their classification:
+```
+[TikZ Intent] Coords: 12 Span: 10.0 x 2.5 Aspect: 4.00 Nodes: 5 AvgText: 8
+[TikZ Intent] FLAT: x=1.5cm, y=2.00cm
+```
