@@ -740,6 +740,8 @@ CRITICAL RULES:
 5. NO EQREF: Do NOT use \\\\eqref{ }.Use(\\\\ref{}) manually.
 6. Keep the academic tone consistent throughout.
 7. Ensure each claim is strengthened by the most relevant reference.
+8. USE \\begin{description} ... \\end{description} for lists of definitions.
+9. NEVER use \\ref{ref_X}. Wait for Phase 6 to insert citations.
 
 EVIDENCE INTEGRATION TECHNIQUES:
 - "Research by [Author] demonstrates that..."
@@ -866,11 +868,18 @@ ${referencesText} `;
                 const systemPrompt = `You are a citation editor. Your ONLY task is to insert (ref_X) markers into the provided text section.
         
 CRITICAL RULES:
-1. Use (ref_X) format, NOT \\cite{ref_X}.
-2. Match references to appropriate sentences using the provided Reference List.
-3. PRESERVE all existing LaTeX formatting.
-4. Do NOT rewrite the content - only ADD citation markers.
-5. You are seeing ONE section of a larger paper. Use the provided Title/Abstract for context.
+1. Use (ref_X) format ONLY. 
+   - CORRECT: "As shown by Kim (ref_1)..." or "This is known (ref_1, ref_2)."
+   - WRONG: "\\cite{ref_1}", "\\ref{ref_1}", "[1]"
+2. MATCHING: Match references to their sentences using the provided Reference List.
+3. PRESERVATION: PRESERVE all existing LaTeX formatting.
+4. SCOPE: Do NOT rewrite content. Only ADD markers.
+5. NO HALLUCINATION: If a claim has no matching reference, DO NOT fabricate one.
+
+LATEX SYNTAX RULES:
+- Use \\\\ for manual line breaks inside lists if needed.
+- Maintain \\begin{description} ... \\end{description} structures if present.
+- NEVER use \\ref{ref_X} for bibliography citations. \\ref is ONLY for internal tables/figures.
 
 ${lastError ? `\nPREVIOUS ATTEMPT FAILED WITH ERROR:\n${lastError}\n\nFIX THIS ERROR.` : ""}`;
 

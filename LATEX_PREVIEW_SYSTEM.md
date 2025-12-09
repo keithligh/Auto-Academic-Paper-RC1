@@ -48,14 +48,19 @@ The core parser operates on a simple principle: **Recursive Environment Parsing*
 - It handles standard commands (`\section`, `\textbf`) via regex replacement.
 - **Fault Tolerance**: Unknown commands `\foo{bar}` are either stripped to `bar` or ignored, preventing crashes.
 
-## Encapsulation Strategy
+## Encapsulation Strategy ("Hybrid Encapsulation")
 
-We use a multi-stage **Hybrid Encapsulation** pipeline:
+We use a multi-stage pipeline designed to be **Robust to AI Hallucinations**:
 
-1. **Sanitization (The Shield)**: We aggressively strip the document of anything that would crash Custom TypeScript Parser.
+1. **Normalization & Healing (The Doctor)**: Before we even parse, we repair common AI syntax errors:
+   - **Math Healer**: Merges fragmented equations (e.g., `$A$ = $B$`).
+   - **Notation Normalizer**: Fixes orphaned subscripts (e.g., `$\theta$_t` → `$\theta_t$`).
+   - **Sanitizer**: Strips redundant `$` inside `\begin{equation}`.
 2. **Extraction (The Protocol)**: We identify complex elements (Math, TikZ, Tables) and **extract them** from the document.
 3. **Placeholder Injection (The Hybrid Container)**: We replace these elements with unique **Placeholder IDs** (e.g., `LATEXPREVIEWTIKZBLOCK1`).
-4. **Surgical Re-Injection (The Reveal)**: After rendering, we use a `TreeWalker` to hunt down our placeholders in the DOM and swap them with high-fidelity outputs from specialized renderers (KaTeX, TikZJax, HTML Tables).
+4. **String-Level Restoration (The Reveal - v1.9.12)**:
+   - **Old Way**: Walking the DOM after render. (failed on nested lists).
+   - **New Way**: We globally replace `LATEXPREVIEW...` placeholders in the final HTML **string** before injecting it into the DOM. This ensures content appears everywhere, even inside deep structures.
 
 ---
 
@@ -135,6 +140,7 @@ if (el.scrollWidth > el.clientWidth) {
 - **Unified Logic**: We treat large HTML tables exactly like large equations.
 - **Visual vs Physical**: `transform: scale` shrinks the *visual* size, while `width: 1XX%` expands the *layout* size to match.
 - **Scrollbar Elimination**: Once scaled, the scrollbar is redundant and ugly, so we force `overflow-x: hidden`.
+- **The "Ghost Scrollbar" Protocol (v1.9.14)**: We force `overflow: hidden !important` on `.katex-display` via CSS. This prevents sub-pixel rounding errors (common in equation numbering) from triggering "ghost" vertical scrollbars, while the JS scaler handles the gross overflow logic.
 
 ### 3. Diagram Rendering (TikZ via Iframe)
 

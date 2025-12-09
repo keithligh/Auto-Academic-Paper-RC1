@@ -259,6 +259,22 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 6.  **ALWAYS** extract **ALL** `(x,y)` coordinate pairs (not just `at (x,y)`) for span/aspect calculations.
 7.  **ALWAYS** strip and replace existing `x=`/`y=` values for **FLAT** intent (cannot skip, must fix ratio).
 
+### 15. The Browser Engine Protection Suite (v1.9.12)
+
+While the TikZ engine handles the rendering inside the iframe, the **Integration** into the main document relies on the "Hybrid Encapsulation" strategy.
+
+- **The "Missing Link" Fix**: We discovered that TikZ placeholders (`LATEXPREVIEWTIKZBLOCK17`) were sometimes lost when nested inside complex lists or table cells because the `TreeWalker` (DOM post-processing) failed to find them.
+- **The Solution (String Injection)**: We now replace the TikZ placeholder with the iframe HTML **at the string level** before the DOM is built.
+- **Why it matters**: This guarantees that your diagram appears even if you nest it 5 levels deep in an `itemize` list inside a `tabular` cell. It moves the integration point from "Fragile DOM" to "Robust String".
+
+### 15. The Browser Engine Protection Suite (v1.9.12)
+
+While the TikZ engine handles the rendering inside the iframe, the **Integration** into the main document relies on the "Hybrid Encapsulation" strategy.
+
+- **The "Missing Link" Fix**: We discovered that TikZ placeholders (`LATEXPREVIEWTIKZBLOCK17`) were sometimes lost when nested inside complex lists or table cells because the `TreeWalker` (DOM post-processing) failed to find them.
+- **The Solution (String Injection)**: We now replace the TikZ placeholder with the iframe HTML **at the string level** before the DOM is built.
+- **Why it matters**: This guarantees that your diagram appears even if you nest it 5 levels deep in an `itemize` list inside a `tabular` cell. It moves the integration point from "Fragile DOM" to "Robust String".
+
 #### 15. The Browser Engine Protection Suite (v1.9.5)
 The TikZ engine was prone to "Blank" renders due to browser limitations. We implemented a protection suite:
 

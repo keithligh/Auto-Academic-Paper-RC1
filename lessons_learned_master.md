@@ -620,3 +620,31 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Unfixable "Table Ampersand" (CSV Ambiguity)**:
     -   **Problem**: Determining if `Sales & Marketing` means "Text" or "Next Column" is mathematically impossible without context.
     -   **Reality Check**: There is no universal code fix. We must rely on prompt engineering to force escaped `\&` output for text, or accept occasional heuristic patches for known failures.
+
+## 18. The "Encapsulation Strategy" (Formerly Trojan Horse)
+- **Concept**: Instead of "cleaning" a document to make it safe for a fragile tool (latex.js), we **extract** the dangerous parts (Math, TikZ, Tables) into neutral placeholders, process the text safely, then **re-inject** the high-fidelity rendered blocks.
+- **Why**: This avoids the "Arm's Race" of trying to support every LaTeX package. We only support what we extract.
+- **Structure**:
+    1.  **Normalization**: Fix AI errors (`$A$ = $B$`).
+    2.  **Extraction**: Move Math/TikZ to `blocks`.
+    3.  **Parsing**: Convert remaining text to HTML.
+    4.  **Restoration**: Swap placeholders for rendered HTML.
+
+## 19. The "String vs DOM" Restoration Fallacy
+- **The Problem**: We relied on a `TreeWalker` to replace placeholders (`LATEXPREVIEW...`) *after* the browser had parsed the HTML (`innerHTML`).
+- **The Failure**: The browser's HTML parser is quirky. When placeholders were nested deeply inside `<li>` or attribute strings, the `TreeWalker` often missed them, or the browser restructured the DOM such that the text nodes weren't where we expected.
+- **The Solution**: **String-Level Injection**.
+    - Replace the placeholders in the **Raw HTML String** (`html.replace(...)`) *before* assigning `innerHTML`.
+- **The Lesson**: **Don't trust the DOM to hold your hand.** If you have the source string and a simple token replacement, do it in the string. It works 100% of the time. Only use DOM walking for replacing *elements* (nodes), not *content* (text).
+
+## 20. The "Nuclear Reset" Trace (CSS Inheritance)
+- **The Problem**: Bullets disappeared from specific lists. We patched the container (`ul`), added `!important`, added padding. Nothing worked.
+- **The Root Cause**: We found a "Nuclear Option" in the base stylesheet: `li { list-style: none; }`.
+- **The Mechanism**: A direct rule on an element (`li`) **always overrides** an inherited rule from a parent (`ul`), even if the parent has `!important`. The bullet property belongs to the list item, not the list.
+- **The Lesson**: **Inspect the Leaf Node.** When inheritance fails, checking the parent is useless. You must check the computed style of the *element itself* to find direct overrides. And never write "nuclear resets" like `li { ... }` in a base theme unless you really, really mean it.
+
+## 21. The "Ghost Class" Fallacy (CSS Debugging)
+- **The Problem**: A scrollbar persisted on an equation despite applying `overflow: hidden` to `.equation-container`.
+- **The Failure**: The developer *assumed* the container class was `equation-container` based on a variable name or past memory, but the actual rendered DOM element was `.katex-display`.
+- **The Fix**: Check the **Rendered HTML** (via Inspect Element or reviewing the generator code).
+- **The Lesson**: **Don't Style Ghosts.** Never write a CSS rule without verifying the class name in the Inspector first. A rule that targets nothing fixes nothing.

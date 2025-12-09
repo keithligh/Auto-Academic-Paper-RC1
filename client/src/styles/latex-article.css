@@ -186,18 +186,57 @@
     /* Standard LaTeX indent */
 }
 
+/* Explicit style for itemize to ensure bullets appear */
+/* ROOT CAUSE FIX: latex-base.css sets 'li { list-style: none }' which blocks inheritance. 
+   We must target 'li' directly to override it. */
+.latex-preview ul.latex-itemize {
+    margin-left: 1em;
+    /* Ensure some indent */
+}
+
+.latex-preview ul.latex-itemize li {
+    list-style-type: disc !important;
+    list-style-position: outside !important;
+}
+
+/* Explicit style for enumerate */
+.latex-preview ol.latex-enumerate {
+    margin-left: 1em;
+}
+
+.latex-preview ol.latex-enumerate li {
+    list-style-type: decimal !important;
+    list-style-position: outside !important;
+}
+
 .latex-preview li {
     margin-bottom: 0.5em;
+    padding-left: 0 !important;
+    /* Reset any padding, margin handles spacing */
     text-align: justify;
+    display: list-item !important;
+    /* Force display mode */
+    /* Force display mode */
 }
 
 /* =============================================
  * EQUATIONS
  * ============================================= */
-.latex-preview .equation-container {
+/* FIX (v1.9.14): Target ACTUAL KaTeX output container */
+/* .equation-container does not exist in DOM */
+.latex-preview .katex-display {
     margin: 1.5em 0;
     text-align: center;
-    overflow-x: auto;
+    /* scaling logic handles width, hidden prevents subpixel scrollbars */
+    overflow: hidden !important;
+    padding: 0.5em 0;
+    /* Force hiding of any persistent scrollbars */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.latex-preview .katex-display::-webkit-scrollbar {
+    display: none;
 }
 
 /* =============================================

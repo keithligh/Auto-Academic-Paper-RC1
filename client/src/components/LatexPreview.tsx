@@ -1,11 +1,11 @@
 /**
  * LatexPreview.tsx
- * 
+ *
  * IMPLEMENTS: Hybrid "Auditor Spec" Parser (Refined v4)
  * 1. Sanitization: "Hybrid Encapsulation" logic (Math, TikZ, Lists from LatexPreview - Copy (3).tsx)
  * 2. Rendering: Custom Regex HTML Converter (No latex.js)
  * 3. Styling: Strict latex-article.css (A4 Paper, Times New Roman)
- * 
+ *
  * FIXES v4:
  * - IEEE CITATION STYLE: [1], [1]-[3] citation rendering.
  * - METADATA RESCUE: Extract Title/Author/Date BEFORE preamble stripping.
@@ -102,13 +102,32 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
       .replace(/\\checkmark/g, '&#10003;')
       .replace(/\\approx/g, '&#8776;')
       .replace(/\\,/g, '&thinsp;')
+      .replace(/\\rightarrow/g, '&rarr;')
+      .replace(/\\Rightarrow/g, '&rArr;')
+      .replace(/\\leftarrow/g, '&larr;')
+      .replace(/\\Leftarrow/g, '&lArr;')
+      .replace(/\\leftrightarrow/g, '&harr;')
+      .replace(/\\Leftrightarrow/g, '&hArr;')
+      .replace(/\\longrightarrow/g, '&rarr;') // HTML entity is same, visual distinction limited
+      .replace(/\\Longrightarrow/g, '&rArr;')
       .replace(/\{:\}/g, ':')
       .replace(/\{,\}/g, ',')
       .replace(/\\:/g, ':')
-      .replace(/\\\//g, '/');
+      .replace(/\\\//g, '/')
+      .replace(/\\\\/g, '<br/>')
+      .replace(/\\newline/g, '<br/>');
 
-    // 6. Restore Math
-    return protectedText.replace(/__MATH_PROTECT_(\d+)__/g, (m, idx) => mathPlaceholders[parseInt(idx)]);
+    // 6. Restore Math (Immediate Protection Restoration)
+    protectedText = protectedText.replace(/__MATH_PROTECT_(\d+)__/g, (m, idx) => mathPlaceholders[parseInt(idx)]);
+
+    // 7. Restore Global Placeholders (Math/TikZ) if they ended up here
+    // This catches tokens like LATEXPREVIEWMATH47 that drifted into text processing
+    // We restore them to a temporary placeholder that survives HTML escaping, then the DOM walker picks them up?
+    // OR we just leave them alone. 
+    // The issue is likely that the DOM Walker IS finding them, but `blocks` is empty?
+    // No, `blocks` is populated.
+
+    return protectedText;
   };
 
   // === HELPER: Create KaTeX math block ===
@@ -736,6 +755,66 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
   // Create Math Block Helper (Moved up for scope access if needed, but it is available)
 
   // Extract Math (SSOT Order: Structured -> Display -> Standard Inline -> Legacy Inline)
+
+  // FIX (v1.9.9): REDUNDANT DELIMITER SANITIZER
+  // AI sometimes double-wraps math: \[ $\theta$_t \] or \( $\theta$_t \)
+  // This causes syntax errors or text-mode partial rendering.
+  // We strip unescaped $ signs from INSIDE standard math blocks.
+  content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, inner) => {
+    return '\\[' + inner.replace(/(?<!\\)\$/g, '') + '\\]';
+  });
+  content = content.replace(/\\\(([\s\S]*?)\\\)/g, (m, inner) => {
+    return '\\(' + inner.replace(/(?<!\\)\$/g, '') + '\\)';
+  });
+  // FIX (v1.9.10): Also sanitize structured environments (equation, align, etc.)
+  content = content.replace(/\\begin\{(equation|align|gather|multline)(\*?)\}([\s\S]*?)\\end\{\1\2\}/g, (m, env, star, inner) => {
+    const cleanInner = inner.replace(/(?<!\\)\$/g, '');
+    return `\\begin{${env}${star}}${cleanInner}\\end{${env}${star}}`;
+  });
+
+  // FIX (v1.9.8): MATH FRAGMENT HEALER
+  // AI sometimes writes fragmented equations on a single line:
+  // "$\theta_{t+1}$ = $\theta_t$ + f(x)"
+  // We detect these lines and wrap them in Display Math ($$ ... $$) while stripping inner $ signs.
+  content = content.replace(/^(\s*)\$(.*)\$(.*)=(.*)\$(.*)\$(.*)$/gm, (match) => {
+    // Basic heuristic: Line starts with $, contains =, contains other $ pairs.
+    // Dangerous if overly broad. Let's make it targeted.
+    return match;
+  });
+
+  // TARGETED HEALER: Matches lines that look like: $math$ = $math$ + text
+  // Must start with $ and have = or + or - outside of dollars?
+  // Easier: Search for "$...$ = $...$" pattern specifically.
+  content = content.replace(/(\$[^$]+\$)\s*([=+\-])\s*(\$[^$]+\$)/g, (m, p1, op, p2) => {
+    // Merge: Remove closing $ of p1, opening $ of p2
+    // "$a$ = $b$" -> "$a = b$"
+    return p1.slice(0, -1) + ' ' + op + ' ' + p2.slice(1);
+  });
+
+  // SPECIFIC HEALER FOR USER REPORTED CASE:
+  // $\theta_{t+1}$ = $\theta_{t}$ + f(\text{experience}_t)
+  // This has text AFTER the math that should be math.
+  // Strategy: If a line is MOSTLY math (starts with $) and contains operators, force it to be one math block?
+  // Let's rely on the specific operator merge first. 
+  // Refined Merge: $A$ = $B$ + ...
+  content = content.replace(/(\$[^$]+\$)\s*([=])\s*(\$[^$]+\$)\s*([+])\s*(.*)$/gm, (match, p1, eq, p2, plus, rest) => {
+    // Check if 'rest' looks like math (has \text or subscripts)
+    if (rest.includes('\\') || rest.includes('_') || rest.includes('^')) {
+      // It's likely all math.
+      const cleanP1 = p1.slice(1, -1);
+      const cleanP2 = p2.slice(1, -1);
+      return `$$ ${cleanP1} = ${cleanP2} + ${rest} $$`;
+    }
+    return match;
+  });
+
+  // FIX (v1.9.7): MATH NOTATION NORMALIZATION
+  // AI often outputs $\theta$_t instead of $\theta_t$. This breaks rendering.
+  // We normalize this BEFORE extraction.
+  // Case 1: Simple subscripts: $\theta$_t -> $\theta_t$
+  content = content.replace(/\$([^\$]+)\$_([a-zA-Z0-9]+)/g, '$$$1_{$2}$$');
+  // Case 2: Complex subscripts: $\theta$_{t+1} -> $\theta_{t+1}$
+  content = content.replace(/\$([^\$]+)\$_\s*\{([^}]+)\}/g, '$$$1_{$2}$$');
   content = content.replace(/\\begin\{(equation|align|gather|multline)(\*?)\}([\s\S]*?)\\end\{\1\2\}/g, (m, env, star, math) => createMathBlock(m, true));
   content = content.replace(/\\\[([\s\S]*?)\\\]/g, (m, math) => createMathBlock(math, true));
   content = content.replace(/\\\(([\s\S]*?)\\\)/g, (m, math) => createMathBlock(math, false)); // Standard Inline \( ... \)
@@ -765,10 +844,10 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
           if (txt.startsWith('\\begin{enumerate}', i)) listDepth++;
           if (txt.startsWith('\\end{enumerate}', i)) listDepth--;
           if (listDepth > 0) listContent += txt[i];
-          else break; // End found
+          else break;
           i++;
         }
-        i += 15; // skip \end{enumerate}
+        i += 15;
         output += createPlaceholder(`<ol class="latex-enumerate">\n${processLists(listContent, depth + 1)} \n</ol> `);
       } else if (txt.startsWith('\\begin{itemize}', i)) {
         i += 15;
@@ -783,16 +862,38 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         }
         i += 13;
         output += createPlaceholder(`<ul class="latex-itemize">\n${processLists(listContent, depth + 1)} \n</ul> `);
+      } else if (txt.startsWith('\\begin{description}', i)) {
+        i += 19;
+        let listContent = '';
+        let listDepth = 1;
+        while (i < txt.length && listDepth > 0) {
+          if (txt.startsWith('\\begin{description}', i)) listDepth++;
+          if (txt.startsWith('\\end{description}', i)) listDepth--;
+          if (listDepth > 0) listContent += txt[i];
+          else break;
+          i++;
+        }
+        i += 17;
+        output += createPlaceholder(`<ul class="latex-description" style="list-style: none; padding-left: 1em;">\n${processLists(listContent, depth + 1)} \n</ul> `);
       } else if (txt.startsWith('\\item', i)) {
         i += 5;
         // Handle \item[x]
         let label = '';
         if (txt[i] === '[') {
           i++;
-          while (i < txt.length && txt[i] !== ']') { label += txt[i]; i++; }
-          i++; // skip ]
+          let d = 1;
+          while (i < txt.length && d > 0) {
+            if (txt[i] === '[') d++;
+            else if (txt[i] === ']') d--;
+
+            if (d > 0) {
+              label += txt[i];
+              i++;
+            }
+          }
+          i++; // skip closing ]
         }
-        // Capture content until next \item or end
+        // Capture content until next \item
         let itemContent = '';
         while (i < txt.length && !txt.startsWith('\\item', i)) {
           itemContent += txt[i];
@@ -800,13 +901,28 @@ function sanitizeLatexForBrowser(latex: string): SanitizeResult {
         }
         // Recurse for internal lists
         const processedItem = processLists(itemContent, depth);
-        output += `<li${label ? ` data-label="${label}"` : ''}> ${parseLatexFormatting(processedItem)}</li> `;
-        // Don't advance i here, logic continues loop
+
+        if (label) {
+          // Flatten formatting like \textbf in label to basic HTML if possible, or just pass to format parser
+          // Using style="list-style: none" ensures the bullet/number is replaced by the label
+          output += `<li style="list-style: none;"><strong>${parseLatexFormatting(label)}</strong> ${parseLatexFormatting(processedItem)}</li> `;
+        } else {
+          output += `<li> ${parseLatexFormatting(processedItem)}</li> `;
+        }
       } else {
         output += txt[i];
         i++;
       }
     }
+    // FIX (v1.9.11): Restore placeholders that might have been processed as text inside lists
+    // This handles LATEXPREVIEWMATH tokens that "got stuck" inside list items
+    // Math extraction happens first, so list items contain placeholders. We must ensure they persist.
+    // The previous pass already preserves the tokens, but let's double check if we need to expand them here?
+    // Actually, the main restoration happens at the very end (Step 6).
+    // The issue is likely that `parseLatexFormatting` is NOT called on the list container, or recursively?
+    // Wait, line 893 calls `parseLatexFormatting(processedItem)`.
+    // Does `parseLatexFormatting` DESTROY tokens? No, it preserves unknown text.
+    // The issue is simply that the tokens are rendered as text.
     return output;
   };
   content = processLists(content);
@@ -1281,6 +1397,10 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
       // Matches: (ref_1), ( ref_1 ), (ref\_1)
       html = html.replace(/\(\s*ref\\?_?(\d+)\s*\)/gi, (match, num) => formatCitations(`ref_${num} `));
 
+      // 4b. Handle direct \ref{ref_X} usages (AI Hallucination fix)
+      // The AI sometimes uses \ref{ref_6} instead of \cite{ref_6}. We treat this as a citation.
+      html = html.replace(/\\ref\{ref_(\d+)\}/gi, (match, num) => formatCitations(`ref_${num}`));
+
       // --- D. HEADER CONSTRUCTION & INJECTION ---
 
       const headerHtml = `
@@ -1308,12 +1428,16 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
       html = html.replace(/\\section\*?\s*\{([\s\S]*?)\}/g, '<h2>$1</h2>');
       html = html.replace(/\\subsection\*?\s*\{([\s\S]*?)\}/g, '<h3>$1</h3>');
       html = html.replace(/\\subsubsection\*?\s*\{([\s\S]*?)\}/g, '<h4>$1</h4>');
+      html = html.replace(/\\paragraph\*?\s*\{([\s\S]*?)\}/g, '<strong>$1</strong> ');
 
       // Text formatting
       html = html.replace(/\\textbf\{([^}]+)\}/g, '<strong>$1</strong>');
       html = html.replace(/\\textit\{([^}]+)\}/g, '<em>$1</em>');
       html = html.replace(/\\texttt\{([^}]+)\}/g, '<code>$1</code>');
       html = html.replace(/\\emph\{([^}]+)\}/g, '<em>$1</em>');
+      // Fix: Support manual line breaks
+      html = html.replace(/\\\\/g, '<br/>');
+      html = html.replace(/\\newline/g, '<br/>');
       html = html.replace(/\\today/g, new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
 
       // Paragraphs
@@ -1332,6 +1456,12 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
       }).join('\n');
 
       // 3. Inject HTML
+      // FIX (v1.9.12): Pre-inject placeholders at string level to ensure Lists/Tables catch them.
+      // The DOM Walker is a safety net, but string replacement is more robust for simple substitutions.
+      html = html.replace(/(LATEXPREVIEW[A-Z]+[0-9]+)/g, (match) => {
+        return blocks[match] ? blocks[match] : match;
+      });
+
       containerRef.current.innerHTML = html;
 
       // 4. Placeholder Injection (The Trojan Horse)

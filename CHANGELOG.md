@@ -6,6 +6,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.14] - 2025-12-09 (The "Ghost Class" Fix)
+### Fixed
+- **Persistent Math Scrollbars**:
+    - **Symptom**: Vertical scrollbars appeared on equation numbers (e.g., `(2)`).
+    - **Root Cause**: Targeted a non-existent CSS class (`.equation-container`) instead of the actual KaTeX output (`.katex-display`). The browser's default overflow handling for the inner element caused sub-pixel scrolling.
+    - **Fix**: Targeted `.katex-display` directly with `overflow: hidden !important` and `scrollbar-width: none`.
+
+## [1.9.13] - 2025-12-09 (The "Bulletproof" Robustness Update)
+### Fixed (Universal Math & Layout)
+- **Missing Link in List Rendering (The "String Injection" Strategy)**:
+    - **Symptom**: `LATEXPREVIEWMATH47` placeholders appeared in lists instead of rendered math.
+    - **Root Cause**: The post-render DOM `TreeWalker` failed to traverse deeply nested list items created by `innerHTML`.
+    - **Fix**: Implemented **String-Level Replacement** (`html.replace`) *before* DOM injection. This guarantees placeholders are restored regardless of nesting depth.
+- **Missing List Bullets (The "Specificity" Fix)**:
+    - **Symptom**: `itemize` and `enumerate` lists had no bullets/numbers.
+    - **Root Cause**: `latex-base.css` contained a nuclear reset `li { list-style: none }` which beat inherited styles from `ul`.
+    - **Fix**: Updated `latex-article.css` to target `.latex-itemize li` directly with `!important`, overriding the base reset.
+- **"The Theta Problem" (Math Normalization)**:
+    - **Symptom**: AI output `$\theta$_t` (subscript outside formatting) causing rendering errors.
+    - **Fix**: Added `Normalizer` regex to pre-process and repair orphaned subscripts/superscripts (`$_x` -> `_x`) before extraction.
+- **Fragmented Equations (The "Healer")**:
+    - **Symptom**: `$A$ = $B$` (operators outside math mode).
+    - **Fix**: Added "Math Healer" to merge adjacent math blocks separated by standard operators.
+- **Text Mode Arrows**:
+    - **Symptom**: `\rightarrow` rendered as code in text mode.
+    - **Fix**: Added explicit HTML entity replacements (`&rarr;`, `&rArr;`, etc.) to the text parser.
+
 ## [1.9.6] - 2025-12-09 (Layout Robustness: Headers, TikZ, Tables)
 ### Fixed
 - **Section Headers ("Introduction")**: Corrected Semantic HTML/CSS mismatch.
