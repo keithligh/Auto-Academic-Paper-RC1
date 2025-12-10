@@ -85,47 +85,41 @@ Within the Math extraction phase, we must extract in this specific order:
 - **Rendering**: The math string is rendered to HTML string using `katex.renderToString()` with `throwOnError: false` for graceful degradation.
 - **Injection**: After `Fully Custom TypeScript Parser` finishes, we walk the DOM, find the placeholder text, and replace its parent node with the KaTeX HTML.
 
-#### Math Sizing Strategy (Two-Layer System)
+#### Math Sizing Strategy (The Physics-Based Heuristic v2)
+Current Version: v1.9.36
 
-We use a **two-layer scaling system** to ensure math fits within the A4 page width without becoming unreadable:
+We rely on **Physical Constraints** rather than arbitrary guesses to scale math. This ensures readability on A4 paper while preventing layout breakage.
 
-**Layer 1: Pre-Render Heuristic Scaling (v1.6.0)**
+**Layer 1: Pre-Render Heuristic (The "Intelligent Array" System)**
 
-Applied during `createMathBlock()` before KaTeX renders to HTML:
+Applied during `createMathBlock()` before KaTeX renders.
 
-| Math Type                   | Detection                                | Scaling Action                                                 |
-| --------------------------- | ---------------------------------------- | -------------------------------------------------------------- |
-| **Multi-line environments** | Has `\\` line breaks OR `\begin{align*}` | **NO SCALING** (grows vertically, not horizontally)            |
-| **Long single-line**        | `length * 0.4 > 50em`                    | `transform: scale(X)` where `X = max(0.55, 50/estimatedWidth)` |
-| **Normal equations**        | Default                                  | No scaling applied                                             |
+1.  **Target Selection**:
+    *   **Single-Line Equations**: Scaled if they exceed physical width.
+    *   **Arrays/Matrices**: Scaled aggressively because they grow horizontally.
+    *   **EXEMPT**: Multi-line environments (`align`, `gather`, `multline`) are **never scaled** because they grow *vertically*. Scaling them would shrink legible text unnecessarily.
 
-**Layer 2: Post-Render Deterministic Scaling (v1.6.1)**
+2.  **The Array Heuristic (v1.9.36)**:
+    *   Arrays often have short rows and one long row. A simple character count overestimates width.
+    *   **Formula**: `EstimatedWidth = (TotalChars / Rows) * 0.5`.
+    *   **Logic**: This realistic multiplier (0.5) approximates average text density, ensuring we don't over-shrink tables containing standard text.
 
-Applied synchronously after the DOM is built (via `requestAnimationFrame`), using actual rendered dimensions.
+3.  **Physical Bounds**:
+    *   **Threshold**: **39em**. This matches the printable width of an A4 page (210mm - 25mm margins) at 11pt font.
+    *   **Safety Floor**: Scale is clamped at **0.65x**. We never shrink content below this readable threshold.
 
-**Scope**: Applies to **Both** `.katex-display` (Math) and `.table-wrapper` (HTML Tables).
+4.  **Layout Mechanics (The "No-Clip" Fix)**:
+    *   **Wrapper**: `width: max-content`. Prevents the browser from chopping off the right edge before scaling.
+    *   **Overflow**: `overflow: visible`. We trust the scaler to fit the content; hidden overflow caused data loss.
+    *   **Centering**: `margin: 0 auto`. The scaled block automatically centers itself in the available space.
 
-```typescript
-// Synchronous check (No setTimeout races)
-if (el.scrollWidth > el.clientWidth) {
-  // SAFETY BUFFER: Multiply by 0.98 to prevent pixel-perfect clipping
-  const scale = Math.max(0.55, (el.clientWidth / el.scrollWidth) * 0.98);
+**Layer 2: CSS Margin Collapsing (The "Vertical Rhythm" Fix)**
 
-  if (scale < 1) {
-    el.style.transform = `scale(${scale})`;
-    el.style.width = `${(100 / scale)}%`; // Expand physical width
-    el.style.overflowX = 'hidden'; // UX: Hide scrollbar since it fits now
-  }
-}
-```
-
-**Key Design Decisions:**
-
-- **Safety Buffer (98%)**: Exact mathematical fits often get clipped by browser pixel rounding when `overflow: hidden` is applied. The 2% buffer ensures breathing room.
-- **Unified Logic**: We treat large HTML tables exactly like large equations.
-- **Visual vs Physical**: `transform: scale` shrinks the *visual* size, while `width: 1XX%` expands the *layout* size to match.
-- **Scrollbar Elimination**: Once scaled, the scrollbar is redundant and ugly, so we force `overflow-x: hidden`.
-- **The "Ghost Scrollbar" Protocol (v1.9.14)**: We force `overflow: hidden !important` on `.katex-display` via CSS. This prevents sub-pixel rounding errors (common in equation numbering) from triggering "ghost" vertical scrollbars, while the JS scaler handles the gross overflow logic.
+To prevents excessive whitespace (double gaps) around math blocks:
+*   **Strategy**: The auto-scale wrapper uses `display: block` (instead of `inline-block`).
+*   **Effect**: This allows the paragraph's `margin-bottom` (1em) to **collapse** (merge) with the equation's `margin-top` (0.5em).
+*   **Result**: A clean 1em gap instead of a 1.5em additive gap.
+*   **Spacing**: Reduced `.katex-display` global margins to `0.5em` to tighten the document flow.
 
 ### 3. Diagram Rendering (TikZ via Iframe)
 

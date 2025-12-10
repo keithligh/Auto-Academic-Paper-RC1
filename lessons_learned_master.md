@@ -300,3 +300,12 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 
 ## 58. The Blind Parser (Text Formatting)
 - **Lesson**: **Don't Special Case the Norm.** Apply pipelines to the default path too.
+
+## 59. The Average Heuristic Trap (Table Width)
+- **Incident**: Scaling logic estimated array width using `TotalLength * Constant`. This failed for tables with short rows and one very long row, causing clipping.
+- **Lesson**: **Averages Hide Extremes.** For layout, you must account for the *Widest* element (the bottleneck), not the *Average* element. Logic must assume the "Worst Case" (Widest Row) to prevent data loss.
+
+## 60. The Margin Collapsing Physics
+- **Incident**: Math blocks had huge gaps above them.
+- **Root Cause**: Wrapper was `inline-block`. This prevented CSS Margin Collapsing, so margins stacked (1em + 0.5em = 1.5em).
+- **Lesson**: **Respect the Flow.** Use `display: block` for block-level elements to allow the browser's native vertical rhythm (margin collapsing) to work. Don't fight the layout engine with inline-block unless necessary.

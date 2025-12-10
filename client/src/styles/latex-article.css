@@ -225,18 +225,12 @@
 /* FIX (v1.9.14): Target ACTUAL KaTeX output container */
 /* .equation-container does not exist in DOM */
 .latex-preview .katex-display {
-    margin: 1.5em 0;
+    margin: 0.5em 0;
     text-align: center;
-    /* scaling logic handles width, hidden prevents subpixel scrollbars */
-    overflow: hidden !important;
-    padding: 0.5em 0;
-    /* Force hiding of any persistent scrollbars */
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.latex-preview .katex-display::-webkit-scrollbar {
-    display: none;
+    /* scaling logic handles width, visible allows wide content to sit in margins */
+    overflow: visible !important;
+    padding: 0.1em 0;
+    font-size: 1.15em;
 }
 
 /* =============================================

@@ -31,17 +31,19 @@ export function processMath(latex: string): MathResult {
 
             // STRATEGY: Auto-scale long SINGLE-LINE equations to fit container
             // CRITICAL: Do NOT scale multi-line environments (align*, gather*, etc.)
-            // because they grow VERTICALLY, not horizontally. The length-based
-            // heuristic would over-shrink them.
+            // because they grow VERTICALLY, not horizontally.
+            // EXCEPTION (v1.9.31): Arrays behave like tables (grow Horizontally). We MUST scale them.
             if (displayMode) {
                 const lineCount = (mathContent.match(/\\\\/g) || []).length;
-                // CRITICAL FIX: Skip auto-scaling for ALL structured math environments
-                // They either grow vertically (align) or the wrapper tags inflate char count (equation)
                 const isStructuredEnv = /\\begin\{(equation|align|gather|multline)/.test(mathContent);
-                const isMultiLine = lineCount > 0 || isStructuredEnv;
+                const isArray = /\\begin\{array\}/.test(mathContent);
 
-                if (!isMultiLine) {
-                    // Only apply to single-line equations
+                // Multiline logic: Skip scaling if it is multiline, UNLESS it is an array.
+                // Arrays can have multiple lines (rows) but still be too wide.
+                const shouldSkip = (lineCount > 0 || isStructuredEnv) && !isArray;
+
+                if (!shouldSkip) {
+                    // Only apply to single-line equations OR Arrays
 
                     // IMPROVED HEURISTIC: Strip LaTeX commands that inflate length without width
                     // e.g. \mathrm{Integration} (20 chars) -> Integration (11 chars)
@@ -52,12 +54,27 @@ export function processMath(latex: string): MathResult {
                         .replace(/\\(left|right|big|Big|bigg|Bigg)[lrv]?/g, '')
                         .replace(/\\[a-zA-Z]+/g, 'C'); // Replace other macros with 1 char proxy
 
-                    const estimatedWidthEm = roughContent.length * 0.45; // Slightly bumped factor for safety
-                    const maxEm = 50;
+                    // HEURISTIC ADJUSTMENT FOR ARRAYS
+                    // Correction (v1.9.35): User reported "too small".
+                    // Previous multiplier 0.7 was too pessimistic (treated text as wide math symbols).
+                    // Multiplier 0.5 is closer to average English text width.
+                    // MaxEm 39 aligns with 160mm printable width at 11pt.
+                    let estimatedWidthEm: number;
+                    if (isArray) {
+                        const rows = Math.max(1, lineCount);
+                        estimatedWidthEm = (roughContent.length / rows) * 0.5;
+                    } else {
+                        estimatedWidthEm = roughContent.length * 0.35;
+                    }
+
+                    const maxEm = 39; // Pushing to the very edge of A4 margins
 
                     if (estimatedWidthEm > maxEm) {
-                        const scale = Math.max(0.55, maxEm / estimatedWidthEm);
-                        html = `<div class="katex-autoscale" style="transform: scale(${scale.toFixed(2)}); transform-origin: left center; width: ${(100 / scale).toFixed(1)}%;">${html}</div>`;
+                        const scale = Math.max(0.65, maxEm / estimatedWidthEm); // Clamp at 0.65 to prevent microscopic text
+                        // STRATEGY: display: block + margin: 0 auto restores Margin Collapsing with surrounding paragraphs.
+                        // This eliminates the "double gap" caused by inline-block preventing margin merger.
+                        // width: max-content ensures it still hugs the table width for scaling calculations.
+                        html = `<div class="katex-autoscale" style="display: block; margin: 0 auto; width: max-content; transform: scale(${scale.toFixed(2)}); transform-origin: center center;">${html}</div>`;
                     }
                 }
             }

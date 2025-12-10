@@ -86,7 +86,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Fix**: Explicitly **stripped** the `font=...` option from the user's input string before injecting `font=\Large`.
   - **Update**: Upgraded to `\Large` (Capital L) to better survive the 0.45x browser scaling.
 
-## [1.9.17] - 2025-12-10 (The Server Stability Patch)
+## [1.9.36] - 2025-12-10 (The Math Layout Finalization)
+### Fixed
+-   **Universal Math Scaling (The "Array" Fix)**:
+    -   **Problem**: Wide `array` tables were being clipped or shrunk to unreadable sizes.
+    -   **Fix**: Implemented **Intelligent Array Scaling v2**.
+        -   **Detection**: Now actively targets `\begin{array}` blocks.
+        -   **Heuristic**: `(TotalChars / Rows) * 0.5`. This realistically estimates row width for text-heavy tables.
+        -   **Bounds**: Threshold increased to **39em** (Full A4 Width). Scale floor set to **0.65x**.
+    -   **Result**: Tables are "Fit-to-Page" without becoming microscopic.
+-   **Math Spacing (The "Margin Collapse" Fix)**:
+    -   **Problem**: Excessive whitespace above/below equations.
+    -   **Fix 1**: Reduced global CSS margins (1.5em -> 0.5em) and padding.
+    -   **Fix 2**: Switched auto-scale wrapper to `display: block`. This restores **CSS Margin Collapsing**, merging the paragraph's bottom margin with the equation's top margin (1em + 0.5em -> 1em) instead of stacking them (1.5em).
+-   **Clipping**:
+    -   **Fix**: Switched from `overflow: hidden` to `visible` + `width: max-content` on the wrapper. This ensures the browser calculates the layout based on the full unscaled width, preventing cut-off columns.
 ### Fixed
 - **Dev Server Instability ("Exit 1")**:
   - **Symptom**: The backend server would crash (`exit 1`) whenever a frontend syntax error (e.g., in CSS or TSX) occurred.
