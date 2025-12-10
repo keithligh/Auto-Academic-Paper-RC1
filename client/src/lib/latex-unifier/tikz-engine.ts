@@ -29,7 +29,9 @@ export function processTikz(latex: string): TikzResult {
 
         // Robust Fix for Fonts inside Nodes
         safeTikz = safeTikz
-            .replace(/%.*$/gm, '') // CRITICAL: Strip comments before flattening newlines, otherwise "% Comment \draw" becomes one line and \draw is lost!
+            .replace(/\\%/g, 'LATEXPREVIEWPERCENT') // Protect escaped percents
+            .replace(/%.*$/gm, '') // CRITICAL: Strip comments before flattening newlines
+            .replace(/LATEXPREVIEWPERCENT/g, '\\%') // Restore escaped percents
             .replace(/\\textbf\s*\{/g, '{\\bfseries ')
             .replace(/\\textit\s*\{/g, '{\\itshape ')
             .replace(/\\sffamily/g, '') // Crash prevention
