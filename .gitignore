@@ -12,3 +12,6 @@ npm
 debug-*.html
 test-*.html
 attached_assets/
+*.db
+*.db-shm
+*.db-wal
