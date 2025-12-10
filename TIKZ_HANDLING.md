@@ -23,10 +23,10 @@ Not all TikZ code is safe for the browser. Specifically, `pgfplots` (plots based
 -   **Output**: We inject a warning placeholder: `⚠️ Complex diagram (pgfplots) - not supported in browser preview`.
 
 ### Phase 1: The Heist (Extraction)
-Before the main document is processed by our Custom Parser (`latex-to-html.ts`), we steal the TikZ code.
+Before the main document is processed by our Custom Parser (`processor.ts`), we steal the TikZ code.
 
 -   **Manual Parser**: We do NOT use robust regex alone. We use a character-level parser to handle nested brackets `[...]` inside optional arguments (e.g., `label={[0,1]}`).
--   **Proprietary extraction**: See `latex-to-html.ts` (specifically `extractTikzBlocks`) for the loop safety logic.
+-   **Proprietary extraction**: See `tikz-engine.ts` (specifically `processTikz`) for the loop safety logic.
 -   **Placeholder**: We replace the entire block with a safe ID: `LATEXPREVIEWTIKZBLOCK1`.
 
 ### Phase 2: The Detox (Sanitization)
