@@ -1,6 +1,6 @@
 # Custom LaTeX Preview Architecture ("The Independent Option")
 
-The browser-based preview system uses a **Fully Custom TypeScript Parser** (`latex-to-html.ts`) to render academic documents. We have **abandoned `latex.js` entirely** in favor of a robust, fault-tolerant "SaaS" (Software as a Service) parser chassis that integrates our battle-tested custom rendering engines.
+The browser-based preview system uses a **Fully Custom TypeScript Orchestrator** (`processor.ts`) to render academic documents. We have **abandoned `latex.js` entirely** in favor of a robust, fault-tolerant "SaaS" (Software as a Service) parser chassis that integrates our battle-tested custom rendering engines.
 
 ## The Pivot: Why We Removed `latex.js`
 
@@ -18,10 +18,10 @@ The transformation of `LatexPreview.tsx` represents the shift from "Monolithic S
 
 | Metric | Old Architecture (v1.5) | New Architecture (v1.9) |
 | :--- | :--- | :--- |
-| **Logic Location** | Internal (React Hooks) | External (Pure TypeScript Pipeline) |
-| **File Size** | ~66 KB (3000+ lines) | ~4 KB (120 lines) |
-| **Philosophy** | "Sanitize for Library" | "Generate HTML Directly" |
-| **Dependencies** | `latex.js`, `dompurify` | `katex` (CSS only), `iframe` |
+| **Logic Location** | Internal (React Hooks) | External (Pure TypeScript Library) |
+| **File Structure** | Monolith (~3000 lines) | Modular `client/src/lib/latex-unifier/` |
+| **Entry Point** | `LatexPreview.tsx` | `processor.ts` -> `processLatex()` |
+| **Dependencies** | `dompurify` | `katex` (CSS only), `iframe` |
 | **Stability** | Fragile (Exceptions Crash UI) | Robust (Try/Catch in Pipeline) |
 
 **The New Role of `LatexPreview.tsx`**:
@@ -35,8 +35,16 @@ The transformation of `LatexPreview.tsx` represents the shift from "Monolithic S
 ### 3. Rendering Engine (The "Zero-Library" Core)
 **Status: PURE HTML + ISOLATED TIKZ**
 
-The system has been purged of the monolithic `latex.js` library for document rendering.
-- **Document Body**: Parsed entirely by our custom regex/heuristic pipeline (`processor.ts`) into pure HTML/CSS.
+The system has been purged of the monolithic `latex.js` library. The `processor.ts` orchestrator delegates to specialized engines:
+
+- **`healer.ts`**: Pre-processing (Markdown stripping, Ghost header exorcism).
+- **`tikz-engine.ts`**: Extracts and isolates TikZ diagrams into `<iframe>` placeholders.
+- **`math-engine.ts`**: Extracts/Renders Math via KaTeX (preserving structure).
+- **`citation-engine.ts`**: Parses `(ref_X)` and generates IEEE-style bibliographies.
+- **`table-engine.ts`**: Manually parses complex tables (rows, cells, multicolumn) without regex.
+- **`processor.ts`**: Handles final text formatting, lists, algorithms, and assembly.
+
+- **Document Body**: Parsed entirely by this regex/heuristic pipeline into pure HTML/CSS.
 - **Math**: Rendered by **KaTeX** (fast, semantic).
 - **TikZ Diagrams**: Rendered by **TikZJax** (WebAssembly `jsTeX`) running in **Isolated Iframes**.
     - *Note*: TikZJax is the ONLY remaining "LaTeX" engine, used exclusively for diagrams.

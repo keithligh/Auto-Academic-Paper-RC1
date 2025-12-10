@@ -1,0 +1,12 @@
+\documentclass{article}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows}
+\begin{document}
+\begin{tikzpicture}[node distance=3cm]
+\node (empathize) [rectangle, draw] {Empathize};
+\node (define) [rectangle, draw, below of=empathize] {Define};
+\node (ideate) [rectangle, draw, below of=define] {Ideate};
+\draw[->] (empathize) -- (define);
+\draw[->] (define) -- (ideate);
+\end{tikzpicture}
+\end{document}

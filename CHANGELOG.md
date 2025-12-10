@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.30] - 2025-12-10 (The "Safe Modular Extraction" Refactor)
+### Refactored
+- **Monolith Decomposition**: Split `LatexPreview.tsx` (3000+ lines) into the `latex-unifier` library.
+    - **`processor.ts`**: Main orchestrator.
+    - **`healer.ts`**: Pre-processing and sanitation.
+    - **`tikz-engine.ts`**: TikZ isolation and rendering.
+    - **`math-engine.ts`**: Math extraction and KaTeX rendering.
+    - **`citation-engine.ts`**: Bibliography and citation handling.
+    - **`table-engine.ts`**: Complex table parsing.
+- **Methodology**: Applied "Safe Extraction" (Copy-Paste -> Verify -> Integrate) to ensure zero regressions.
+- **Verification**: Added `processor.test.ts` to verify lists/algorithms, complementing the existing engine test suite.
+- **Impact**: `LatexPreview.tsx` reduced to <150 lines, focused purely on React lifecycle and DOM injection.
+
 ## [1.9.28] - 2025-12-10 (Documentation: The 60KB -> 4KB Refactor)
 ### Added
 - **Architecture Documentation**: Added "The Great Refactor" section to `LATEX_PREVIEW_SYSTEM.md`, visualizing the massive simplification of `LatexPreview.tsx`.

@@ -147,7 +147,6 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Shift**: We stopped trying to fix `latex.js` and instead **removed the feature from it**.
 -   **The Rule**: **If a library fails at a task twice, remove the task from the library.** Don't patch the library; patch the pipeline to bypass the library.
 
-## 19. The "Scorched Earth" Parser (100% No Fallback)
 ## 19. The "Strict Parser" (100% No Fallback)
 -   **The Failure**: A "Universal" regex-based list parser failed when it encountered optional arguments (`\begin{enumerate}[label=\textbf{1.}]`). The regex was too strict, causing the complex list to fall back to the buggy `latex.js` renderer.
 -   **The Insight**: Regex is a "happy path" optimization. It cannot handle arbitrarily nested structures (braces inside brackets inside braces) reliably.
@@ -189,547 +188,115 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 
 ## 25. The "AI JSON Double-Escape Chain" (v1.5.16)
 - **Incident**: Table cells containing escaped ampersands (e.g., "Fear \& Greed") were being split incorrectly across rows and columns, corrupting the table layout.
-- **Root Cause Analysis**:
-  1. AI generates LaTeX: `Fear \& Greed`
-  2. AI sends invalid JSON with `\&` (not a valid JSON escape sequence)
-  3. `fixAIJsonEscaping()` detects this and doubles the backslash: `\\&` (now valid JSON)
-  4. `JSON.parse()` converts `\\&` to the JavaScript string `\&` (backslash + ampersand)
-  5. The table row splitter `smartSplitRows()` sees `\` followed by `\` and interprets it as a row break `\\`
-  6. **Result**: Table row breaks where there should be none.
-- **The Failed Fix**: We initially tried to modify `fixAIJsonEscaping()` to NOT double-escape LaTeX characters. This **BROKE** the system because `fixAIJsonEscaping()` is essential for error recovery when AI sends malformed JSON.
-- **The Correct Fix**: We fixed it at the **consumption point**. `smartSplitRows()` now uses a **structural parser** that distinguishes between:
-  - **Row Break**: `\\` followed by whitespace, newline, `[`, or end-of-string
-  - **Escaped Command**: `\\X` where X is any character (normalizes to `\X`)
-- **Lesson**: **FIX AT CONSUMPTION, NOT GENERATION.** When dealing with AI output that passes through multiple escaping layers, do not try to "clean up" the intermediate representation. Fix the interpretation at the final consumer, using a stateful parser that understands context.
-- **Lesson 2**: **NEVER BREAK ERROR RECOVERY.** Functions like `fixAIJsonEscaping()` exist for robustness. Do not "optimize" them without understanding ALL the cases they protect against.
+- **Root Cause**:
+  - `\&` -> JSON: `\\&` -> JS: `\&`
+  - Table Splitter saw `\` then `&`, but didn't look ahead.
+- **Lesson**: **FIX AT CONSUMPTION.** `smartSplitRows` now explicitly checks `\\` followed by a non-break character.
 
 ## 26. The "Isolation-First" UI Pattern (v1.6.11)
-- **Incident**: We needed to add a loading indicator while TikZ diagrams render (500-2000ms delay).
-- **The Temptation**: Use React `useState` in `LatexPreview.tsx` and coordinate with iframe via `postMessage`.
-- **The Correct Pattern**: Implement the loading UI **entirely inside the iframe**:
-  1. HTML placeholder `<div class="tikz-loading">` rendered inline
-  2. CSS animation for visual feedback
-  3. Existing `MutationObserver` (already watching for SVG) adds `.hidden` class
-- **Why This is Superior**:
-  - **Zero cross-frame complexity**: No `postMessage`, no timing issues, no React/iframe state sync
-  - **Leverages existing infrastructure**: The `MutationObserver` was already there for resizing
-  - **Preserves isolation philosophy**: TikZ iframe remains a self-contained black box
-- **The Lesson**: **WHEN ADDING UI TO ISOLATED COMPONENTS, KEEP THE UI ISOLATED TOO.** If you've already decided a component needs its own iframe for safety/performance, extend that pattern to new features rather than punching holes in the isolation boundary.
+- **Incident**: We needed to add a loading indicator while TikZ diagrams render.
+- **Lesson**: **WHEN ADDING UI TO ISOLATED COMPONENTS, KEEP THE UI ISOLATED TOO.** If you've already decided a component needs its own iframe for safety/performance, extend that pattern to new features rather than punching holes in the isolation boundary.
 
 ## 27. The "Two Spacing Systems" Discovery (v1.6.12)
-- **Incident**: TikZ diagrams with title nodes at `+(0,2)` had massive gaps between the title and the content, even after node distance was tuned correctly.
-- **The Misunderstanding**: We assumed reducing `node distance` would also reduce the title gap. It didn't.
-- **The Discovery**: TikZ has **two independent spacing systems**:
-  1. **Node Distance** (e.g., `node distance=8.4cm`): Controls `below of=`, `right of=` relative positioning. Specified in **absolute cm**.
-  2. **Coordinate Scaling** (e.g., `y=1cm`): Controls coordinate offsets like `+(0,2)`. Defaults to 1cm per unit.
-- **Key Insight**: Modifying `node distance` has **NO EFFECT** on title offsets because they use coordinate units, not node distance.
-- **The Fix**: Inject `y=0.5cm` for LARGE relative diagrams, compressing `+(0,2)` to 1cm while `node distance=8.4cm` remains unaffected.
-- **The Lesson**: **UNDERSTAND THE DOMAIN.** Before tuning parameters, verify they actually control the behavior you're trying to change. TikZ's dual spacing systems are not obvious from the syntax.
+- **Incident**: TikZ diagrams with title nodes at `+(0,2)` had massive gaps.
+- **Lesson**: **UNDERSTAND THE DOMAIN.** TikZ has independent `node distance` and `coordinate scaling`.
 
 ## 28. The "Goldilocks" Trap (Infinite Expansion) (v1.6.17-20)
-- **Incident**: Diagrams with small absolute coordinates (e.g., span=3.5) were being "exploded" by a logic that tried to fill the A4 page width (`14 / span`). This resulted in 9cm gaps.
-- **The Failure**: We assumed "Fill Width" was always good. We forgot that for small-span diagrams, the multiplier becomes massive (`14 / 3.5 = 4x`).
-- **The Fix**: **Symmetrical Clamping**.
-  - We decoupled X and Y scaling.
-  - We implemented a "Glass Ceiling" clamp at **1.3cm** for both axes.
-- **The Lesson**: **Multipliers must be bounded.** Never implement a scaling formula `Target / Input` without a `Math.min(Limit, ...)` clamp. Without a ceiling, edge cases (small inputs) cause layout explosions.
+- **Incident**: Diagrams with small absolute coordinates were being "exploded".
+- **Lesson**: **Multipliers must be bounded.** Never implement `Target / Input` without a `Math.min(Limit, ...)` clamp.
 
 ## 29. The Heuristic Overlap Trap (v1.6.23)
-- **Incident**: A complex diagram with explicit coordinates was misclassified as `COMPACT` because it had many nodes (>8). This triggered `scale=0.75` shrinking, crushing the layout.
-- **The Failure**: We had competing heuristics: `Absolute Coordinates` (Layout) vs `Node Count` (Complexity). The generic "Node Count" rule accidentally won because it was lower in the `else-if` chain.
-- **The Fix**: **Explicit Trumps Implicit.** Signals like "User provided coordinates" (`span > 0`) should always take priority over "Inferred Intent" (`node count`). We moved the check up the priority chain.
-- **The Lesson**: **Prioritize Explicit Intent.** When building classification trees, explicit signals (coordinates, keywords) must always override implicit heuristics (counts, density).
+- **Incident**: A complex diagram was misclassified as `COMPACT` because of node count.
+- **Lesson**: **Prioritize Explicit Intent.** Explicit signals (coordinates) must always override implicit heuristics.
 
-### Lesson 30: The Verification First Protocol (or "The Premature Documentation Trap")
-- **Context**: During the TikZ Fix cycle (v1.6.25-28), the Agent prematurely updated `CHANGELOG.md` and `TIKZ_HANDLING.md` immediately after implementing code fixes, *before* the user verified them.
-- **The Failure**: Several of these "fixes" failed (v1.6.25 Partial, v1.6.27 Reverted), leading to documentation that described a "history of failures" rather than a definitive manual. It confused the reader and polluted the system artifacts.
--   **The Solution**: **Strict Governance Rule**. Do NOT touch documentation until the fix is **confirmed working** by the user (visually or functionally).
+### Lesson 30: The Verification First Protocol
+- **Context**: Premature documentation updates before verification.
 -   **The Protocol**: `Code -> Notify User -> Wait for Confirmation -> Update Docs`. No exceptions.
 
-### Lesson 31: The Bifurcated Logic Pattern (or "One Rule Breaks the Other")
--   **Context**: During TikZ scaling (v1.6.35-40), applying a single threshold for `node distance` overrides broke either Pipelines (explosion) or Cycles (squashing).
--   **The Failure**: Universal rules couldn't handle the diversity of diagram types.
--   **The Solution**: **Bifurcated Logic**. Split the rule into two branches based on a discriminating metric (`isTextHeavy`).
-    -   **Text-Heavy**: Aggressive overrides (needs space for paragraphs).
-    -   **Text-Light**: Permissive respect (tight packing is intentional).
--   **The Lesson**: When a single parameter must satisfy conflicting requirements, **bifurcate the logic** based on a second metric that distinguishes the cases.
+### Lesson 31: The Bifurcated Logic Pattern
+-   **Lesson**: When a single parameter must satisfy conflicting requirements, **bifurcate the logic** based on a second metric that distinguishes the cases.
 
-### Lesson 32: The Accidental Deletion Trap (or "Complex Function Edits")
--   **Context**: During v1.6.38, a large edit to `LatexPreview.tsx` accidentally deleted the critical `extraOpts += x=...cm, y=...cm` line.
--   **The Failure**: All LARGE intent diagrams rendered "tiny" until the user noticed.
--   **The Solution**: **Extreme Caution for Complex Edits.** When editing large functions:
-    1.  **Strict Diff Review**: Manually inspect the diff for lines that are *missing* from the proposed content but present in the original.
-    2.  **Verify the diff includes ONLY intended changes.**
-    3.  **Test immediately after commit.**
--   **The Lesson**: File editing is inherently destructive. Complex functions are fragile. Double-check diffs.
+### Lesson 32: The Accidental Deletion Trap
+-   **Lesson**: File editing is inherently destructive. Complex functions are fragile. Double-check diffs.
 
-### Lesson 33: The "Modal is Not Mobile-Friendly" Pattern (v1.7.0)
--   **Context**: The AI Configuration dialog was implemented as a modal popup. On mobile devices, this was a poor UX: cramped, hard to scroll, awkward touch targets.
--   **The User's Insight**: "Popups are not responsive. Very seldom do people use desktop now."
--   **The Solution**: Convert the modal to a dedicated `/config` page route.
-  -   **Mobile Layout**: Accordion-style expandable cards (stacked vertically).
-  -   **Desktop Layout**: Same accordion pattern in a centered container.
-  -   **Reuse Context**: The existing `useAIConfig()` hook works identically on both modal and page.
--   **The Lesson**: **Modals are for Confirmations, Not Forms.** Complex configuration UIs should be full pages. Modals are appropriate for simple yes/no dialogs, not multi-step forms with dropdowns and inputs.
+### Lesson 33: The "Modal is Not Mobile-Friendly" Pattern
+-   **Lesson**: **Modals are for Confirmations, Not Forms.**
 
-### Lesson 34: The "Viewport Centering" Pattern (v1.7.0)
--   **Context**: The landing page content was pushed to the top, leaving excess whitespace at the bottom (visible on 1920×1080 screens).
--   **The Anti-Pattern (Bandaid)**: Hide scrollbar with CSS (`overflow: hidden`) while not fixing the layout.
--   **The Correct Solution**: Flexbox-based vertical centering.
-  -   **Pattern**: 
-    ```css
-    main {
-      padding-top: 4rem;    /* fixed header offset */
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .content-wrapper {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    ```
-  -   **Key Insight**: Use `h-screen` on main container, `flex-1 justify-center` on inner wrapper.
--   **The Lesson**: **Don't hide layout problems; solve them structurally.** Vertical centering with Flexbox is a standard pattern. Use it instead of arbitrary padding/margin adjustments.
+### Lesson 34: The "Viewport Centering" Pattern
+-   **Lesson**: **Don't hide layout problems; solve them structurally.** Use Flexbox centering.
 
-### Lesson 35: The "Proper Spacing Reduction" Philosophy (v1.7.0)
--   **Context**: The scrollbar appeared because total content height exceeded viewport. The temptation was to simply hide it.
--   **The Anti-Pattern (Bandaid)**: `overflow: hidden`, `scrollbar-hide`, `scrollbarWidth: none`.
--   **The User's Stance**: "I hate bandaids and dirty patches."
--   **The Correct Solution**: Reduce actual content spacing to fit viewport:
-  -   Hero margin: `mb-12` → `mb-6`
-  -   Upload zone height: `min-h-[220px]` → `min-h-[180px]`
-  -   Container spacing: `space-y-8` → `space-y-4`
-  -   Feature cards gap: `gap-6` → `gap-4`
-  -   Remove decorative separators (border-t)
--   **The Lesson**: **Fix the content, not the symptom.** If there's a scrollbar, the content is too tall. Reduce the content height. Hiding the scrollbar is like putting tape over a "Check Engine" light.
+### Lesson 35: The "Proper Spacing Reduction" Philosophy
+-   **Lesson**: **Fix the content, not the symptom.** If there's a scrollbar, reduce structure, don't just hide overflow.
 
-### Lesson 36: The "Zoom Hack" Trap (or "Global vs Component Scaling")
--   **Context**: The user complained the UI was "tiny". The quick fix was `html { font-size: 115% }`.
--   **The Failure**: The user rejected this as a "dirty patch". Scaling everything globally creates pixelation, breaks 3rd party components (portals), and feels "cheap".
--   **The Insight**: When a user wants "Big UI", they want "Professional Big" (Design System choices), not "Zoomed In" (Browser hack).
--   **The Solution**: **Aggressive Component Scaling**.
-    -   Shift the baseline: `text-sm` is banned. `text-lg` (18px) is the new normal.
-    -   Component Resizing: Buttons go from `h-10` to `h-12` or `h-14`.
--   **The Lesson**: **Do not mimic the browser zoom.** Re-design the system tokens. It takes more work (changing 50 classes), but the result has "Dignity" and sharpness that a zoom hack lacks.
+### Lesson 36: The "Zoom Hack" Trap
+-   **Lesson**: **Do not mimic the browser zoom.** Re-design the system tokens for professional sizing.
 
-### Lesson 37: The "Visual Weight" Paradox (The Squash Technique)
--   **Context**: After making fonts huge (`text-2xl`), the container felt "too big" and empty.
--   **The Instinct**: Reducing the font size back down using `text-xl` or `text-base`.
--   **The Mistake**: The user *wanted* the big text, but hated the big *box*.
--   **The Solution**: **Squash the Container.**
-    -   Keep text large (`text-2xl`, `text-lg`).
-    -   Drastically reduce padding/height (`360px` -> `240px`).
--   **The Insight**: Large typography needs *less* surrounding whitespace to feel balanced than small typography. Small text needs whitespace to breathe; large text *is* the structure.
--   **The Lesson**: **If it feels "too big", shrink the box, not the text.** High-Visibility UI combines Massive Fonts with Compact Containers.
+### Lesson 37: The "Visual Weight" Paradox
+-   **Lesson**: **If it feels "too big", shrink the box, not the text.**
 
-### Lesson 38: The "Frontend-Backend State Wall" (or "The Stuck Progress Bar") (v1.7.2)
--   **Context**: Users reported the progress bar staying at "Phase 1" while the console logs showed the job was nearly finished.
--   **The Failure**: The Frontend was hardcoded to listen for a 5-Phase pipeline (`[Phase X/5]`), but the Backend had silently upgraded to a 6-Phase pipeline (`[Phase X/6]`).
--   **The Logic**: The Frontend regex `\[Phase \d+/5\]` returned `null` against the new logs, so the state never updated.
--   **The Lesson**: **Tightly Coupled Strings Break Distributed Systems.** When refining backend logic (adding a phase), you MUST grep the entire codebase for clients that depend on that specific string format.
--   **The Solution**: Updated frontend to be flexible/aware of the new 6-Phase reality and added specific keyword triggers ("Thinker", "Librarian") as fail-safes.
+### Lesson 38: The "Frontend-Backend State Wall"
+-   **Lesson**: **Tightly Coupled Strings Break Distributed Systems.**
 
-### Lesson 39: The "Verbie" Philosophy (or "Sophisticated Terminology") (v1.7.3)
--   **Context**: The user rejected labels like "Drafting" and "Research" as "boring" and "not technical".
--   **The Mistake**: I assumed simple, consumer-friendly language was best.
--   **The Insight**: For complex tools, users want **Competence Signaling**. They want to feel like a "Pilot" controlling a powerful machine.
--   **The Solution**: **High-Tech Active Verbs**.
-    -   "Research" -> "Conducting Online Research"
-    -   "Drafting" -> "Synthesizing Core Arguments"
-    -   "Review" -> "Executing AI Peer Review"
-    -   "Formatting" -> "Verify and Injecting Citations"
-### Lesson 40: The "Ephemeral Options" Finding (Zero Schema Risk)
--   **Context**: We investigated persisting `generationMode` in the database.
--   **The Finding**: `advancedOptions` are currently passed in-memory and not stored. Adding a column requires a DB migration, which carries risk.
--   **The Decision**: **Accept the Limitation.** If a user manually retries a job via API, they lose the flag. This is a rare edge case.
--   **The Lesson**: **Don't touch the DB unless absolutely necessary.** "Zero DB Risk" is often worth the trade-off of minor feature limitations (like non-persisted settings on manual retry).
+### Lesson 39: The "Verbie" Philosophy
+-   **Lesson**: **Use High-Tech Active Verbs** for tool labeling.
 
-### Lesson 41: The "Full Context Propagation" Discovery (vs Summarization)
--   **Context**: Planning the "Long Form" iterative generation.
--   **The Assumption**: We need to summarize previous sections to save tokens.
--   **The Reality**: Modern "weak" models (Haiku, Flash) have massive *input* windows (100k+).
--   **The Strategy**: **Don't Summarize. Propagate.** Pass the *entire* accumulated draft to the next step.
--   **The Lesson**: **Hardware capabilities change architecture.** Old constraints (4k input) forced complexity (summarization). New capabilities (100k input) allow simplicity (brute force context).
+### Lesson 40: The "Ephemeral Options" Finding
+-   **Lesson**: **Don't touch the DB unless absolutely necessary.**
 
-### Lesson 42: The "Redundancy is Distraction" Principle (UI Cleanup)
--   **Context**: The Result Page had a "Document Editor" header *above* the pane headers "Source" and "Live Preview".
--   **The User's Feedback**: "Merge these. Too redundant."
--   **The Logic**: If you have a global header, you don't need local headers repeating the context.
--   **The Fix**: Consolidated all controls into one bar.
--   **The Lesson**: **Every vertical pixel costs cognitive load.** If a header doesn't offer a unique control, kill it. Use visual hierarchy (active state), not text labels, to distinguish panes.
+### Lesson 41: The "Full Context Propagation" Discovery
+-   **Lesson**: **Hardware capabilities change architecture.**
 
-### Lesson 43: The "Clean Slate" Strategy (Abandoning the Sinking Ship) (v1.8.1)
--   **Context**: `latex.js` was crashing on everything: unsupported macros, tabularx, math. We spent weeks building "Containment Protocols" to isolate it.
--   **The Failure**: We were fighting the library, not using it. The "Hybrid" approach was 90% custom code and 10% `latex.js`, but `latex.js` caused 100% of the crashes.
--   **The Decision**: **Abandon `latex.js` entirely.** We wrote a lightweight, fault-tolerant custom parser (`latex-to-html.ts`) that handles the 20% of LaTeX we actually need (sections, standard formatting) and integrates our existing custom engines (TikZ, Math, Tables).
--   **The Lesson**: **If you have to wrap a library in a 'Containment Field' to keep it from exploding, you shouldn't be using that library.** Don't fall for the "Sunk Cost Fallacy" of an existing dependency. If it's broken, build a dumber, safer replacement.
--   **The Result**: The new parser *never* crashes. If it sees something it doesn't know, it ignores it or shows raw text. It obeys the "Show Something" principle.
+### Lesson 42: The "Redundancy is Distraction" Principle
+-   **Lesson**: **Every vertical pixel costs cognitive load.**
 
-### Lesson 44: The "Structural Underscore" Trap (Context-Aware Stability) (v1.8.1)
--   **Context**: To stop `latex.js` from crashing on `_`, we blindly replaced `_` with `\_` globally.
--   **The Failure**: This broke all Math. `$x_i$` became `$x\_i$`, which renders as literal backslash-underscore, not a subscript.
--   **The Insight**: **Safety < Structure.** You cannot "sanitize" a language like LaTeX with global string replacements because the same character (`_`) is a crash-hazard in Text Mode but a vital operator in Math Mode.
--   **The Fix**: Removed global replacement. Moved sanitation into the **Context-Aware Parser** (`parseLatexFormatting`). It only escapes underscores when it knows it is processing *text*, not math.
--   **The Lesson**: **Global Regex Replacements are evil for structured languages.** You effectively corrupt the code before the parser even sees it. Always parse first, then sanitize based on the context (Text vs Code).
+### Lesson 43: The "Nuclear Option" (Abandoning the Sinking Ship)
+-   **Lesson**: **If you have to wrap a library in a 'Containment Field' to keep it from exploding, you shouldn't be using that library.**
 
-### Lesson 45: The "Template Literal Space Corruption" Trap (v1.8.2)
--   **Context**: During bulk code restoration/editing, template literals containing CSS class names were corrupted.
--   **The Failure**: The preview rendered as completely unstyled plain text. No title formatting, no sections, just raw paragraphs.
--   **The Root Cause**: Template literals had spaces injected around hyphens:
-    -   **Corrupted**: `.latex - preview { line - height: 1.8!important; }`
-    -   **Correct**: `.latex-preview { line-height: 1.8 !important; }`
-## 25. The "AI JSON Double-Escape Chain" (v1.5.16)
-- **Incident**: Table cells containing escaped ampersands (e.g., "Fear \& Greed") were being split incorrectly across rows and columns, corrupting the table layout.
-- **Root Cause Analysis**:
-  1. AI generates LaTeX: `Fear \& Greed`
-  2. AI sends invalid JSON with `\&` (not a valid JSON escape sequence)
-  3. `fixAIJsonEscaping()` detects this and doubles the backslash: `\\&` (now valid JSON)
-  4. `JSON.parse()` converts `\\&` to the JavaScript string `\&` (backslash + ampersand)
-  5. The table row splitter `smartSplitRows()` sees `\` followed by `\` and interprets it as a row break `\\`
-  6. **Result**: Table row breaks where there should be none.
-- **The Failed Fix**: We initially tried to modify `fixAIJsonEscaping()` to NOT double-escape LaTeX characters. This **BROKE** the system because `fixAIJsonEscaping()` is essential for error recovery when AI sends malformed JSON.
-- **The Correct Fix**: We fixed it at the **consumption point**. `smartSplitRows()` now uses a **structural parser** that distinguishes between:
-  - **Row Break**: `\\` followed by whitespace, newline, `[`, or end-of-string
-  - **Escaped Command**: `\\X` where X is any character (normalizes to `\X`)
-- **Lesson**: **FIX AT CONSUMPTION, NOT GENERATION.** When dealing with AI output that passes through multiple escaping layers, do not try to "clean up" the intermediate representation. Fix the interpretation at the final consumer, using a stateful parser that understands context.
-- **Lesson 2**: **NEVER BREAK ERROR RECOVERY.** Functions like `fixAIJsonEscaping()` exist for robustness. Do not "optimize" them without understanding ALL the cases they protect against.
+### Lesson 44: The "Structural Underscore" Trap
+-   **Lesson**: **Global Regex Replacements are evil for structured languages.**
 
-## 26. The "Isolation-First" UI Pattern (v1.6.11)
-- **Incident**: We needed to add a loading indicator while TikZ diagrams render (500-2000ms delay).
-- **The Temptation**: Use React `useState` in `LatexPreview.tsx` and coordinate with iframe via `postMessage`.
-- **The Correct Pattern**: Implement the loading UI **entirely inside the iframe**:
-  1. HTML placeholder `<div class="tikz-loading">` rendered inline
-  2. CSS animation for visual feedback
-  3. Existing `MutationObserver` (already watching for SVG) adds `.hidden` class
-- **Why This is Superior**:
-  - **Zero cross-frame complexity**: No `postMessage`, no timing issues, no React/iframe state sync
-  - **Leverages existing infrastructure**: The `MutationObserver` was already there for resizing
-  - **Preserves isolation philosophy**: TikZ iframe remains a self-contained black box
-- **The Lesson**: **WHEN ADDING UI TO ISOLATED COMPONENTS, KEEP THE UI ISOLATED TOO.** If you've already decided a component needs its own iframe for safety/performance, extend that pattern to new features rather than punching holes in the isolation boundary.
-
-## 27. The "Two Spacing Systems" Discovery (v1.6.12)
-- **Incident**: TikZ diagrams with title nodes at `+(0,2)` had massive gaps between the title and the content, even after node distance was tuned correctly.
-- **The Misunderstanding**: We assumed reducing `node distance` would also reduce the title gap. It didn't.
-- **The Discovery**: TikZ has **two independent spacing systems**:
-  1. **Node Distance** (e.g., `node distance=8.4cm`): Controls `below of=`, `right of=` relative positioning. Specified in **absolute cm**.
-  2. **Coordinate Scaling** (e.g., `y=1cm`): Controls coordinate offsets like `+(0,2)`. Defaults to 1cm per unit.
-- **Key Insight**: Modifying `node distance` has **NO EFFECT** on title offsets because they use coordinate units, not node distance.
-- **The Fix**: Inject `y=0.5cm` for LARGE relative diagrams, compressing `+(0,2)` to 1cm while `node distance=8.4cm` remains unaffected.
-- **The Lesson**: **UNDERSTAND THE DOMAIN.** Before tuning parameters, verify they actually control the behavior you're trying to change. TikZ's dual spacing systems are not obvious from the syntax.
-
-## 28. The "Goldilocks" Trap (Infinite Expansion) (v1.6.17-20)
-- **Incident**: Diagrams with small absolute coordinates (e.g., span=3.5) were being "exploded" by a logic that tried to fill the A4 page width (`14 / span`). This resulted in 9cm gaps.
-- **The Failure**: We assumed "Fill Width" was always good. We forgot that for small-span diagrams, the multiplier becomes massive (`14 / 3.5 = 4x`).
-- **The Fix**: **Symmetrical Clamping**.
-  - We decoupled X and Y scaling.
-  - We implemented a "Glass Ceiling" clamp at **1.3cm** for both axes.
-- **The Lesson**: **Multipliers must be bounded.** Never implement a scaling formula `Target / Input` without a `Math.min(Limit, ...)` clamp. Without a ceiling, edge cases (small inputs) cause layout explosions.
-
-## 29. The Heuristic Overlap Trap (v1.6.23)
-- **Incident**: A complex diagram with explicit coordinates was misclassified as `COMPACT` because it had many nodes (>8). This triggered `scale=0.75` shrinking, crushing the layout.
-- **The Failure**: We had competing heuristics: `Absolute Coordinates` (Layout) vs `Node Count` (Complexity). The generic "Node Count" rule accidentally won because it was lower in the `else-if` chain.
-- **The Fix**: **Explicit Trumps Implicit.** Signals like "User provided coordinates" (`span > 0`) should always take priority over "Inferred Intent" (`node count`). We moved the check up the priority chain.
-- **The Lesson**: **Prioritize Explicit Intent.** When building classification trees, explicit signals (coordinates, keywords) must always override implicit heuristics (counts, density).
-
-### Lesson 30: The Verification First Protocol (or "The Premature Documentation Trap")
-- **Context**: During the TikZ Fix cycle (v1.6.25-28), the Agent prematurely updated `CHANGELOG.md` and `TIKZ_HANDLING.md` immediately after implementing code fixes, *before* the user verified them.
-- **The Failure**: Several of these "fixes" failed (v1.6.25 Partial, v1.6.27 Reverted), leading to documentation that described a "history of failures" rather than a definitive manual. It confused the reader and polluted the system artifacts.
--   **The Solution**: **Strict Governance Rule**. Do NOT touch documentation until the fix is **confirmed working** by the user (visually or functionally).
--   **The Protocol**: `Code -> Notify User -> Wait for Confirmation -> Update Docs`. No exceptions.
-
-### Lesson 31: The Bifurcated Logic Pattern (or "One Rule Breaks the Other")
--   **Context**: During TikZ scaling (v1.6.35-40), applying a single threshold for `node distance` overrides broke either Pipelines (explosion) or Cycles (squashing).
--   **The Failure**: Universal rules couldn't handle the diversity of diagram types.
--   **The Solution**: **Bifurcated Logic**. Split the rule into two branches based on a discriminating metric (`isTextHeavy`).
-    -   **Text-Heavy**: Aggressive overrides (needs space for paragraphs).
-    -   **Text-Light**: Permissive respect (tight packing is intentional).
--   **The Lesson**: When a single parameter must satisfy conflicting requirements, **bifurcate the logic** based on a second metric that distinguishes the cases.
-
-### Lesson 32: The Accidental Deletion Trap (or "Complex Function Edits")
--   **Context**: During v1.6.38, a large edit to `LatexPreview.tsx` accidentally deleted the critical `extraOpts += x=...cm, y=...cm` line.
--   **The Failure**: All LARGE intent diagrams rendered "tiny" until the user noticed.
--   **The Solution**: **Extreme Caution for Complex Edits.** When editing large functions:
-    1.  **Strict Diff Review**: Manually inspect the diff for lines that are *missing* from the proposed content but present in the original.
-    2.  **Verify the diff includes ONLY intended changes.**
-    3.  **Test immediately after commit.**
--   **The Lesson**: File editing is inherently destructive. Complex functions are fragile. Double-check diffs.
-
-### Lesson 33: The "Modal is Not Mobile-Friendly" Pattern (v1.7.0)
--   **Context**: The AI Configuration dialog was implemented as a modal popup. On mobile devices, this was a poor UX: cramped, hard to scroll, awkward touch targets.
--   **The User's Insight**: "Popups are not responsive. Very seldom do people use desktop now."
--   **The Solution**: Convert the modal to a dedicated `/config` page route.
-  -   **Mobile Layout**: Accordion-style expandable cards (stacked vertically).
-  -   **Desktop Layout**: Same accordion pattern in a centered container.
-  -   **Reuse Context**: The existing `useAIConfig()` hook works identically on both modal and page.
--   **The Lesson**: **Modals are for Confirmations, Not Forms.** Complex configuration UIs should be full pages. Modals are appropriate for simple yes/no dialogs, not multi-step forms with dropdowns and inputs.
-
-### Lesson 34: The "Viewport Centering" Pattern (v1.7.0)
--   **Context**: The landing page content was pushed to the top, leaving excess whitespace at the bottom (visible on 1920×1080 screens).
--   **The Anti-Pattern (Bandaid)**: Hide scrollbar with CSS (`overflow: hidden`) while not fixing the layout.
--   **The Correct Solution**: Flexbox-based vertical centering.
-  -   **Pattern**: 
-    ```css
-    main {
-      padding-top: 4rem;    /* fixed header offset */
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .content-wrapper {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
-    ```
-  -   **Key Insight**: Use `h-screen` on main container, `flex-1 justify-center` on inner wrapper.
--   **The Lesson**: **Don't hide layout problems; solve them structurally.** Vertical centering with Flexbox is a standard pattern. Use it instead of arbitrary padding/margin adjustments.
-
-### Lesson 35: The "Proper Spacing Reduction" Philosophy (v1.7.0)
--   **Context**: The scrollbar appeared because total content height exceeded viewport. The temptation was to simply hide it.
--   **The Anti-Pattern (Bandaid)**: `overflow: hidden`, `scrollbar-hide`, `scrollbarWidth: none`.
--   **The User's Stance**: "I hate bandaids and dirty patches."
--   **The Correct Solution**: Reduce actual content spacing to fit viewport:
-  -   Hero margin: `mb-12` → `mb-6`
-  -   Upload zone height: `min-h-[220px]` → `min-h-[180px]`
-  -   Container spacing: `space-y-8` → `space-y-4`
-  -   Feature cards gap: `gap-6` → `gap-4`
-  -   Remove decorative separators (border-t)
--   **The Lesson**: **Fix the content, not the symptom.** If there's a scrollbar, the content is too tall. Reduce the content height. Hiding the scrollbar is like putting tape over a "Check Engine" light.
-
-### Lesson 36: The "Zoom Hack" Trap (or "Global vs Component Scaling")
--   **Context**: The user complained the UI was "tiny". The quick fix was `html { font-size: 115% }`.
--   **The Failure**: The user rejected this as a "dirty patch". Scaling everything globally creates pixelation, breaks 3rd party components (portals), and feels "cheap".
--   **The Insight**: When a user wants "Big UI", they want "Professional Big" (Design System choices), not "Zoomed In" (Browser hack).
--   **The Solution**: **Aggressive Component Scaling**.
-    -   Shift the baseline: `text-sm` is banned. `text-lg` (18px) is the new normal.
-    -   Component Resizing: Buttons go from `h-10` to `h-12` or `h-14`.
--   **The Lesson**: **Do not mimic the browser zoom.** Re-design the system tokens. It takes more work (changing 50 classes), but the result has "Dignity" and sharpness that a zoom hack lacks.
-
-### Lesson 37: The "Visual Weight" Paradox (The Squash Technique)
--   **Context**: After making fonts huge (`text-2xl`), the container felt "too big" and empty.
--   **The Instinct**: Reducing the font size back down using `text-xl` or `text-base`.
--   **The Mistake**: The user *wanted* the big text, but hated the big *box*.
--   **The Solution**: **Squash the Container.**
-    -   Keep text large (`text-2xl`, `text-lg`).
-    -   Drastically reduce padding/height (`360px` -> `240px`).
--   **The Insight**: Large typography needs *less* surrounding whitespace to feel balanced than small typography. Small text needs whitespace to breathe; large text *is* the structure.
--   **The Lesson**: **If it feels "too big", shrink the box, not the text.** High-Visibility UI combines Massive Fonts with Compact Containers.
-
-### Lesson 38: The "Frontend-Backend State Wall" (or "The Stuck Progress Bar") (v1.7.2)
--   **Context**: Users reported the progress bar staying at "Phase 1" while the console logs showed the job was nearly finished.
--   **The Failure**: The Frontend was hardcoded to listen for a 5-Phase pipeline (`[Phase X/5]`), but the Backend had silently upgraded to a 6-Phase pipeline (`[Phase X/6]`).
--   **The Logic**: The Frontend regex `\[Phase \d+/5\]` returned `null` against the new logs, so the state never updated.
--   **The Lesson**: **Tightly Coupled Strings Break Distributed Systems.** When refining backend logic (adding a phase), you MUST grep the entire codebase for clients that depend on that specific string format.
--   **The Solution**: Updated frontend to be flexible/aware of the new 6-Phase reality and added specific keyword triggers ("Thinker", "Librarian") as fail-safes.
-
-### Lesson 39: The "Verbie" Philosophy (or "Sophisticated Terminology") (v1.7.3)
--   **Context**: The user rejected labels like "Drafting" and "Research" as "boring" and "not technical".
--   **The Mistake**: I assumed simple, consumer-friendly language was best.
--   **The Insight**: For complex tools, users want **Competence Signaling**. They want to feel like a "Pilot" controlling a powerful machine.
--   **The Solution**: **High-Tech Active Verbs**.
-    -   "Research" -> "Conducting Online Research"
-    -   "Drafting" -> "Synthesizing Core Arguments"
-    -   "Review" -> "Executing AI Peer Review"
-    -   "Formatting" -> "Verify and Injecting Citations"
-### Lesson 40: The "Ephemeral Options" Finding (Zero Schema Risk)
--   **Context**: We investigated persisting `generationMode` in the database.
--   **The Finding**: `advancedOptions` are currently passed in-memory and not stored. Adding a column requires a DB migration, which carries risk.
--   **The Decision**: **Accept the Limitation.** If a user manually retries a job via API, they lose the flag. This is a rare edge case.
--   **The Lesson**: **Don't touch the DB unless absolutely necessary.** "Zero DB Risk" is often worth the trade-off of minor feature limitations (like non-persisted settings on manual retry).
-
-### Lesson 41: The "Full Context Propagation" Discovery (vs Summarization)
--   **Context**: Planning the "Long Form" iterative generation.
--   **The Assumption**: We need to summarize previous sections to save tokens.
--   **The Reality**: Modern "weak" models (Haiku, Flash) have massive *input* windows (100k+).
--   **The Strategy**: **Don't Summarize. Propagate.** Pass the *entire* accumulated draft to the next step.
--   **The Lesson**: **Hardware capabilities change architecture.** Old constraints (4k input) forced complexity (summarization). New capabilities (100k input) allow simplicity (brute force context).
-
-### Lesson 42: The "Redundancy is Distraction" Principle (UI Cleanup)
--   **Context**: The Result Page had a "Document Editor" header *above* the pane headers "Source" and "Live Preview".
--   **The User's Feedback**: "Merge these. Too redundant."
--   **The Logic**: If you have a global header, you don't need local headers repeating the context.
--   **The Fix**: Consolidated all controls into one bar.
--   **The Lesson**: **Every vertical pixel costs cognitive load.** If a header doesn't offer a unique control, kill it. Use visual hierarchy (active state), not text labels, to distinguish panes.
-
-### Lesson 43: The "Nuclear Option" (Abandoning the Sinking Ship) (v1.8.1)
--   **Context**: `latex.js` was crashing on everything: unsupported macros, tabularx, math. We spent weeks building "Containment Protocols" to isolate it.
--   **The Failure**: We were fighting the library, not using it. The "Hybrid" approach was 90% custom code and 10% `latex.js`, but `latex.js` caused 100% of the crashes.
--   **The Decision**: **Abandon `latex.js` entirely.** We wrote a lightweight, fault-tolerant custom parser (`latex-to-html.ts`) that handles the 20% of LaTeX we actually need (sections, standard formatting) and integrates our existing custom engines (TikZ, Math, Tables).
--   **The Lesson**: **If you have to wrap a library in a 'Containment Field' to keep it from exploding, you shouldn't be using that library.** Don't fall for the "Sunk Cost Fallacy" of an existing dependency. If it's broken, build a dumber, safer replacement.
--   **The Result**: The new parser *never* crashes. If it sees something it doesn't know, it ignores it or shows raw text. It obeys the "Show Something" principle.
-
-### Lesson 44: The "Structural Underscore" Trap (Context-Aware Stability) (v1.8.1)
--   **Context**: To stop `latex.js` from crashing on `_`, we blindly replaced `_` with `\_` globally.
--   **The Failure**: This broke all Math. `$x_i$` became `$x\_i$`, which renders as literal backslash-underscore, not a subscript.
--   **The Insight**: **Safety < Structure.** You cannot "sanitize" a language like LaTeX with global string replacements because the same character (`_`) is a crash-hazard in Text Mode but a vital operator in Math Mode.
--   **The Fix**: Removed global replacement. Moved sanitation into the **Context-Aware Parser** (`parseLatexFormatting`). It only escapes underscores when it knows it is processing *text*, not math.
--   **The Lesson**: **Global Regex Replacements are evil for structured languages.** You effectively corrupt the code before the parser even sees it. Always parse first, then sanitize based on the context (Text vs Code).
-
-### Lesson 45: The "Template Literal Space Corruption" Trap (v1.8.2)
--   **Context**: During bulk code restoration/editing, template literals containing CSS class names were corrupted.
--   **The Failure**: The preview rendered as completely unstyled plain text. No title formatting, no sections, just raw paragraphs.
--   **The Root Cause**: Template literals had spaces injected around hyphens:
-    -   **Corrupted**: `.latex - preview { line - height: 1.8!important; }`
-    -   **Correct**: `.latex-preview { line-height: 1.8 !important; }`
-    -   **Corrupted JSX**: `className={`latex - preview ${className} `}`
-    -   **Correct JSX**: `className={`latex-preview ${className}`}`
--   **Why It Happened**: The editing tool or copy/paste process introduced spaces. TypeScript/JavaScript doesn't error on this because it's a valid string - just a wrong CSS selector that matches nothing.
--   **The Insight**: **CSS selectors are invisible failure points.** Unlike syntax errors, wrong selectors produce no console errors. The styles silently fail to apply.
--   **The Lesson**: When bulk-editing files containing CSS class names (especially in template literals), **verify class name integrity** by searching for patterns like `\w+ - \w+` (letter-space-hyphen-space-letter).
--   **Prevention**: After major edits, run `grep " - " filename.tsx` to detect corrupted hyphenated identifiers.
+### Lesson 45: The "Template Literal Space Corruption" Trap
+-   **Lesson**: **Verify class name integrity** after bulk editing. CSS selectors are invisible failure points.
 
 ## 46. The "Phantom Indentation" CSS Trap (v1.6.43)
-- **Incident**: All paragraphs were indented, even when `LatexPreview.tsx` wasn't adding any indentation classes.
-- **Root Cause**: `latex-base.css` defined a global variable `--parindent: 1.5em` and applied it to all `p` tags. This "Base Style" was silently overriding our "Article Style" expectations.
-- **Analysis**: We looked for the bug in the *Component* (`LatexPreview.tsx`) and the *Component Style* (`latex-article.css`), but the enemy was in the *Base Import* (`latex-base.css`).
-- **Lesson**: **Check the Supply Chain.** When a style won't die, check the imported base files. Global CSS variables (`:root`) cascade everywhere and are excellent hiders of bugs.
-- **Fix**: Changed `--parindent` to `0` in the base file.
+- **Lesson**: **Check the Supply Chain.** When a style won't die, check the imported base files.
 
 ## 47. The "Parbox" Regex Fallacy (The Nested Brace Theorem) API (v1.6.43)
-- **Incident**: `\parbox{5cm}{\textbf{Bold} Text}` crashed the renderer or output broken HTML.
-- **Root Cause**: We used regex `match(/\\parbox\{([^}]+)\}\{([^}]+)\}/)` to extract arguments. This fails immediately upon encountering the first closing brace `}` inside the bold command.
-- **Truth**: **Regex cannot parse nested structures.** There is no regex that can reliably match balanced braces in a non-recursive regex engine (like JS).
-- **The Only Way**: **A Manual State Machine.** You *must* iterate character-by-character, counting `depth++` on `{` and `depth--` on `}`.
-- **Lesson**: If the syntax allows nesting (like LaTeX), **Delete the Regex.** Write the `while` loop. It feels "raw", but it is the only way to be robust.
+- **Lesson**: If the syntax allows nesting (like LaTeX), **Delete the Regex.** Write the `while` loop state machine.
 
-### Lesson 49: The "Show Something" Principle Applied to Error Correction (v1.9.1)
-- **Context**: Users reported missing content (footnotes, inputs) that the AI claimed to have written.
-- **The Failure**: The custom parser (`latex-to-html.ts`) was strictly whitelisting commands. Anything unknown (or hard to parse like `\input`) was replaced with `''` (empty string).
-- **The Insight**: **Silence is indistinguishable from Failure.** If the AI hallucinates `\input{chapter1}`, deleting it hides the hallucination. If the AI writes a `\footnote`, deleting it destroys value.
-- **The Fix**: **Reveal, Don't Delete.**
-    - `\input{...}` -> `[Include: ...]` (Reveals hallucination/laziness).
-    - `\footnote{...}` -> `[Note: ...]` (Preserves content).
-- **The Lesson**: **A Red Box is better than Empty Space.** Always render *something* that represents the intent, even if the feature isn't fully supported. This allows the user to debug the AI (is it lazy?) vs the System (is it broken?).
-
-## 17. Layout Rendering Robustness (The "Introduction", "Diagram" & "Table" Case Study)
--   **Header Typography Mismatch**: The implementation had a fundamental "Semantic Mismatch" between the Parser (HTML output) and the Stylesheet.
-    -   **Problem**: `\section` parsed to `<h2>`, but CSS only styled `<h3>` as "Section Header". This left headers unstyled and tiny.
-    -   **Lesson**: Always align Semantic HTML (`h1`->`h2`->`h3`) with CSS typography. Don't assume arbitrary tags.
--   **Regex vs. Newlines (The "Sloppy Parsing" Necessity)**: Strict regexes like `/\\section\{([^}]+)\}/` fail when humans (or AI) add whitespace or newlines inside the command.
-    -   **Fix**: Switch to "Sloppy-Tolerant Parsing" using `[\s\S]*?` and whitespace tolerance `\s*`. It is better to over-match slightly than to fail silently.
--   **The "Comment Catastrophe" in Code Flattening**: When preparing code for browser execution (like TikZ), **never purely flatten lines** without stripping comments first.
-    -   **Fail**: `\draw (0,0); % Line` -> flattened -> `\draw (0,0); % Line \draw (1,1);`. The comment consumed the entire rest of the diagram code.
-    -   **Fix**: Strip comments (`%.*$`) *before* flattening.
--   **Browser Engine Fragility (TikZJax)**:
-    -   **Fonts**: `\sffamily` crashes the standard browser engine (missing font metrics). Strip it.
-    -   **Environments**: `itemize` or `enumitem` params (`[leftmargin=*]`) crash the engine. Sanitize them to manual `$\bullet$` bullets.
-    -   **Libraries**: Advanced features (arrows) require explicit `\usetikzlibrary` injection in the script block.
--   **The Unfixable "Table Ampersand" (CSV Ambiguity)**:
-    -   **Problem**: Determining if `Sales & Marketing` means "Text" or "Next Column" is mathematically impossible without context.
-    -   **Reality Check**: There is no universal code fix. We must rely on prompt engineering to force escaped `\&` output for text, or accept occasional heuristic patches for known failures.
-
-## 18. The "Encapsulation Strategy" (Formerly Trojan Horse)
-- **Concept**: Instead of "cleaning" a document to make it safe for a fragile tool (latex.js), we **extract** the dangerous parts (Math, TikZ, Tables) into neutral placeholders, process the text safely, then **re-inject** the high-fidelity rendered blocks.
-- **Why**: This avoids the "Arm's Race" of trying to support every LaTeX package. We only support what we extract.
-- **Structure**:
-    1.  **Normalization**: Fix AI errors (`$A$ = $B$`).
-    2.  **Extraction**: Move Math/TikZ to `blocks`.
-    3.  **Parsing**: Convert remaining text to HTML.
-    4.  **Restoration**: Swap placeholders for rendered HTML.
-
-## 19. The "String vs DOM" Restoration Fallacy
-- **The Problem**: We relied on a `TreeWalker` to replace placeholders (`LATEXPREVIEW...`) *after* the browser had parsed the HTML (`innerHTML`).
-- **The Failure**: The browser's HTML parser is quirky. When placeholders were nested deeply inside `<li>` or attribute strings, the `TreeWalker` often missed them, or the browser restructured the DOM such that the text nodes weren't where we expected.
-- **The Solution**: **String-Level Injection**.
-    - Replace the placeholders in the **Raw HTML String** (`html.replace(...)`) *before* assigning `innerHTML`.
-- **The Lesson**: **Don't trust the DOM to hold your hand.** If you have the source string and a simple token replacement, do it in the string. It works 100% of the time. Only use DOM walking for replacing *elements* (nodes), not *content* (text).
-
-## 20. The "Hard Reset" Trace (CSS Inheritance)
-- **The Problem**: Bullets disappeared from specific lists. We patched the container (`ul`), added `!important`, added padding. Nothing worked.
-- **The Root Cause**: We found a "Nuclear Option" in the base stylesheet: `li { list-style: none; }`.
-- **The Mechanism**: A direct rule on an element (`li`) **always overrides** an inherited rule from a parent (`ul`), even if the parent has `!important`. The bullet property belongs to the list item, not the list.
-- **The Lesson**: **Inspect the Leaf Node.** When inheritance fails, checking the parent is useless. You must check the computed style of the *element itself* to find direct overrides. And never write "hard resets" like `li { ... }` in a base theme unless you really, really mean it.
-
-## 21. The "Ghost Class" Fallacy (CSS Debugging)
-- **The Problem**: We added `overflow-y: hidden` to `.equation-container` to fix scrollbars. It did nothing. We added `!important`. Nothing.
-- **The Reality**: `.equation-container` did not exist. KaTeX generates `.katex-display`.
-- **The Formatting Trap**: We assumed our *wrapper* code determined the class, but the *library* (KaTeX) generated its own structure.
-- **The Lesson**: **Inspect BEFORE You Style.** Never assume a class name exists based on source code intent. Always verify the *rendered* DOM class list in the browser devtools before writing a single line of CSS.
-
-## 22. The "Double Escape" Paradox (HTML Injection)
-- **The Problem**: We implemented a cool algorithm parser that injected `<span class="keyword">if</span>`. The browser rendered it as `&lt;span class="keyword"&gt;if&lt;/span&gt;`.
-- **The Trap**: We ran our text formatter (`parseLatexFormatting`) *after* injecting our HTML tags. The formatter (rightly) saw the tags as "user input" and escaped them for safety.
-- **The Solution**: **Format First, Inject Second.**
-    1.  Clean/Format the user's content (LaTeX -> HTML text).
-    2.  *Then* wrap it in your structural HTML tags.
-- **The Lesson**: **Pipeline Order Matters.** If you are building a document from mix of User Content and System Structure, always process the User Content *before* combining it with System Structure to avoid "Friendly Fire" from your own sanitizers.
-
-## 23. The "Missing Environment" Blindspot
-- **The Problem**: Tables looked great, but `\begin{center}` tags were visible around them as ugly text.
-- **The Assumption**: We thought "The Table Engine handles tables."
-- **The Reality**: The Table Engine handled `tabular`. It ignored the *container* (`center`). Since no other parser claimed `center`, it fell through to the "Raw Text" bucket.
-- **The Lesson**: **Parsers must be Comprehensive.** If you support a feature (Tables), you must support its standard habitat (Center, Float, Caption). "Supporting the content" is not enough; you must support the *context*.
-
-## 21. The "Ghost Class" Fallacy (CSS Debugging)
-- **The Problem**: A scrollbar persisted on an equation despite applying `overflow: hidden` to `.equation-container`.
-- **The Failure**: The developer *assumed* the container class was `equation-container` based on a variable name or past memory, but the actual rendered DOM element was `.katex-display`.
-- **The Fix**: Check the **Rendered HTML** (via Inspect Element or reviewing the generator code).
-- **The Lesson**: **Don't Style Ghosts.** Never write a CSS rule without verifying the class name in the Inspector first. A rule that targets nothing fixes nothing.
+## 48. The "Safe Modular Extraction" Protocol (The "Glove Box" Method) (v1.9.30)
+- **Context**: We had to split a 3000-line monolithic file (`LatexPreview.tsx`) into a library (`latex-unifier`).
+- **The Risk**: "Refactoring" usually implies "Rewriting", which introduces subtle logic bugs.
+- **The Protocol**: **Copy -> Paste -> Shim -> Verify -> Delete**.
+    1.  **Copy** the logic verbatim into the new file.
+    2.  **Shim** any missing dependencies (create minimal interfaces).
+    3.  **Verify** the new function with unit tests *before* touching the original.
+    4.  **Delete** the original logic and replace with the import.
+- **The Lesson**: **Do not improve code while moving it.** Move it first, prove it works, *then* improve it. Mixing "Refactor" and "Optimize" is the path to regression hell.
 
 ## 50. The Bifurcation Diagnosis (Visual Debugging Protocol)
-- **Context**: Code changes (changing scale from 1.0 to 1.5) were having "Zero Effect" on the screen. We suspected caching, logic failure, silent errors, or incorrect file editing.
-- **The Technique**: **Aggressive Visual Bifurcation.**
-  - We injected a **"Blue Border"** (`draw=blue, line width=3pt`) AND a **"Massive Scale"** (`scale=1.25`) simultaneously.
-  - **Logic**: If the Border appears but the Scale doesn't -> The Code is running, but the Logic is broken.
-  - **Logic**: If Neither appears -> The Code is NOT running (Caching/Deployment issue).
-- **The Result**: The Blue Border appeared, proving the code was running. This immediately ruled out Caching and pinpointed the logic error (the "Double Bracket" syntax).
-- **The Lesson**: **When in doubt, paint it Blue.** Use indisputable visual signals (borders, backgrounds) to prove code execution before debugging logic math.
+- **Lesson**: **When in doubt, paint it Blue.** Use visual signals to prove code execution.
 
 ## 51. The Double Bracket Logic (TikZ Syntax Safety)
-- **Incident**: TikZ scaling fixes were being ignored. `x=1.5cm` was injected but had no effect.
-- **Root Cause**: The Extractor stripped the `[]` brackets from the source. The Merger added new options but *forgot to put the brackets back*.
-  - `Source`: `[a=1]` -> Extracted: `a=1`
-  - `Merger`: `b=2` + `a=1` -> Result: `b=2, a=1` (No brackets!)
-  - `Injection`: `\begin{tikzpicture} b=2, a=1 ...` (Invalid Syntax). TikZ ignored the loose text.
-- **The Fix**: The Merger *must* wrap the final string: `` `[${combined}]` ``.
-- **The Lesson**: **Transformation requires Re-Packaging.** If you unwrap a gift to add a localized item, you must re-wrap it. Passing around "raw contents" (unbracketed options) is dangerous because the consumer expects a package.
+- **Lesson**: **Transformation requires Re-Packaging.**
 
 ## 52. The Deployment Mirage (Caching)
-- **Incident**: A developer spent 20 minutes tweaking CSS/JS with "No Change" observed.
-- **The Reality**: The `npm run dev` server had stopped hot-reloading or the browser was caching the bundle excessively.
-- **The Fix**: `CTRL+C`, `npm run dev`, `CTRL+F5` (Hard Refresh).
-- **The Lesson**: **If the code makes no sense, restart the server.** Before questioning the laws of logic, question the medium of delivery. Stale code is the most expensive bug to debug.
+- **Lesson**: **If the code makes no sense, restart the server.**
 
-## 53. The "China-Friendly" CDN Discovery (Package Structure Matters)
-- **Incident**: TikZ diagrams were rendering with invisible text ("nullfont" errors) because `tikzjax.com` was blocked/slow in China.
-- **The Failure**: We tried switching to `cdn.jsdelivr.net/npm/tikzjax` but it 404'd.
-- **The Insight**: The `tikzjax` NPM package is broken or empty. The correct package is `node-tikzjax`, which contains the `dist` and `css/fonts.css` files with relative paths to `bakoma/ttf`.
-- **The Lesson**: **NPM Package Names are Arbitrary.** Just because the library is called "TikZJax" doesn't mean the NPM package is `tikzjax`. Always verify the package contents (via unpkg/jsDelivr browser) before hardcoding a CDN.
-- **The Outcome**: Switched to `node-tikzjax` via jsDelivr, fixing font loading globally.
+## 53. The "China-Friendly" CDN Discovery
+- **Lesson**: **NPM Package Names are Arbitrary.** Verify contents.
 
 ## 54. The "Silence Protocol" (Iframe Log Interception)
-- **Problem**: The TikZJax engine (jsTeX) spews thousands of "Missing character" logs into the console, drowning out actual debug info. The user hated this "latex.js spam".
-- **The Insight**: You cannot configure `console.log` behavior inside a closed WASM binary.
-- **The Solution**: **Intercept the Medium.** We injected a script into the iframe that wraps `console.log`, `warn`, and `error`. It regex-filters messages containing "jsTeX" or "Missing character" before passing them to the browser's native console.
-- **The Nuance**: We added a single startup log ("Antigravity: Silencing TikZJax logs...") to rely transparency.
-- **The Lesson**: **If you can't fix the source, filter the output.** When using black-box libraries (WASM) that are too noisy, build a dam (interceptor) downstream rather than trying to patch the dam upstream.
+- **Lesson**: **If you can't fix the source, filter the output.**
 
 ## 55. The Component Diet (60KB to 4KB)
-- **Context**: `LatexPreview.tsx` grew to 3000+ lines (66KB). It had own internal parsers, specialized `useEffect` hooks for every LaTeX feature (Math, TikZ, Lists), and complex state management.
-- **The Failure**: It became unmaintainable. Adding a feature required surgery in a React component, which is the wrong place for text processing logic.
-- **The Drastic Change**: We gutted it. We moved ALL logic to a pure TypeScript pipeline (`latex-unifier/`).
-- **The Result**: `LatexPreview.tsx` is now ~120 lines (4KB). It does one thing: **Receive HTML -> Inject HTML**.
-- **The Lesson**: **UI Components should be Dumb.** If your React component has 3000 lines of logic, you aren't writing a UI; you are writing a library inside a view. Extract the library. The View should only care about *displaying* the result of the logic, not *calculating* it.
+- **Lesson**: **UI Components should be Dumb.** Extract the library.
 
 ## 56. The Killer Percent (Regex Lookbehind Trap)
-- **Incident**: A simple regex to strip comments `/(?<!\\)%.*$/gm` caused "SyntaxError: Invalid regular expression" or silent failures in certain environments (Safari, older Node).
-- **The Failure**: Negative Lookbehinds `(?<!...)` are a relatively new JS feature (ES2018) and are performance-heavy/fragile.
-- **The Fix**: **Token Replacement Strategy**. `replace(/\\%/g, '__PCT__')` -> `replace(/%.*$/)` -> Restore.
-- **The Lesson**: **Don't be clever with Regex.** Structural tokenization (Swap -> Process -> Swap) is infinitely more robust, readable, and debuggable than lookbehinds/lookaheads.
+- **Lesson**: **Don't be clever with Regex.** Use Token Replacement Strategy.
 
 ## 57. The Double-Escape Chain (Table Row Glitch)
-- **Incident**: Tables corrupted when cells contained `&` (e.g., "S&P 500").
-- **The Chain**: User Input (`&`) -> AI (`\&`) -> JSON Stringify (`\\&`) -> FixJson (`\\\\&`) -> JSON Parse (`\\&`).
-- **The Bug**: The Table Parser saw `\\&` and split on `\\` (Row Break) then `&` (Col Sep), destroying the grid.
-- **The Fix**: `smartSplitRows` now looks ahead. If `\\` is followed by a character (like `&`), it's an escape, not a break.
-- **The Lesson**: **Escaping is a Hydra.** Data passes through multiple layers (AI, JSON, Transport, Parser). You cannot trust that `\` means `\` by the time it reaches you. Always inspect the *actual* runtime string before writing split logic.
+- **Lesson**: **Escaping is a Hydra.** Fix at consumption with stateful lookahead.
 
 ## 58. The Blind Parser (Text Formatting)
-- **Incident**: Standard paragraphs were rendering raw LaTeX commands (`\textbf{Hello}`) because we only applied formatting to *Manually Parsed Blocks* (Tables, Algorithms).
-- **The Bug**: The main body was just being wrapped in `<p>` tags without processing.
-- **The Fix**: Applied a **Universal Paragraph Map** that runs `parseLatexFormatting()` on *every* text block before injection.
-- **The Lesson**: **Don't Special Case the Norm.** We spent weeks perfecting complex table formatting but forgot to format the actual body text. The "Default Path" needs the same pipeline as the "Edge Case Path".
+- **Lesson**: **Don't Special Case the Norm.** Apply pipelines to the default path too.

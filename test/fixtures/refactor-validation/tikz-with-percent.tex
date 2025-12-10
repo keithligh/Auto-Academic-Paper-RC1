@@ -1,0 +1,9 @@
+\documentclass{article}
+\usepackage{tikz}
+\begin{document}
+\begin{tikzpicture}
+\node (progress) {100\% complete};
+\node (status) [below of=progress] {Success: 95\%};
+\draw[->] (progress) -- (status);
+\end{tikzpicture}
+\end{document}

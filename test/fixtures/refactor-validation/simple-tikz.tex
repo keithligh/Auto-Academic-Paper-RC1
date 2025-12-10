@@ -1,0 +1,10 @@
+\documentclass{article}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows}
+\begin{document}
+\begin{tikzpicture}
+\node (a) {A};
+\node (b) [below of=a] {B};
+\draw[->] (a) -- (b);
+\end{tikzpicture}
+\end{document}

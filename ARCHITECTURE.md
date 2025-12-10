@@ -126,12 +126,13 @@ The bibliography is constructed programmatically from the `Librarian`'s results.
 
 ### 3. Custom Preview Architecture ("The Independent Option")
 
-We have abandoned third-party rendering libraries (`latex.js`) in favor of a **Custom TypeScript Parser** (`latex-to-html.ts`).
+We have abandoned third-party rendering libraries (`latex.js`) in favor of a **Custom TypeScript Orchestrator** (`client/src/lib/latex-unifier/processor.ts`).
 -   **Chassis**: A recursive "SaaS" parser for general structure (Sections, Environments).
 -   **Engines**: Specialized renderers for complex content:
-    -   **TikZ**: Iframe Isolation + Intent Engine.
-    -   **Math**: KaTeX (for all equation types).
-    -   **Tables/Lists**: Manual Character-Walker Parsers.
+    -   **TikZ**: `tikz-engine.ts` (Iframe Isolation + Intent Engine).
+    -   **Math**: `math-engine.ts` (KaTeX for all equation types).
+    -   **Tables**: `table-engine.ts` (Manual Character-Walker Parsers).
+    -   **Citations**: `citation-engine.ts` (IEEE Standard).
 
 ### 4. Intent-Based Diagrams
 
