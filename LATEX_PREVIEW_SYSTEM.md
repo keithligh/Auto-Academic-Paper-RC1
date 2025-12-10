@@ -195,14 +195,24 @@ We manually extract the bibliography environment to ensure citations are rendere
 - **Rendering**: Generates a clean HTML `<div class="bibliography">` with an ordered list (`<ol>`).
 - **IEEE Formatting**: Citations are numbered `[1]`, `[2]`, matching the inline citation processor.
 
-### 6b. Verbatim & Code Blocks (The "Raw" Zone)
+### 6b. Code Blocks (The Universal "Enclosure")
+**Supported Environments**: `verbatim`, `lstlisting`
 
-**Extraction**: Regex finds `\begin{verbatim}` blocks.
+**The Universal Styling**:
+We map both "dumb" (`verbatim`) and "smart" (`lstlisting`) code blocks to a single, unified visual style that matches the Algorithm blocks.
 
-- **Transformation**:
-  - **HTML Escaping**: We strictly escape special characters (`<` -> `&lt;`) to prevent XSS and rendering glitches.
-  - **Styling**: We wrap the content in a `<pre class="latex-verbatim">` block.
-- **Output**: A monospaced code block that preserves whitespace exactly as typed.
+-   **Extraction**:
+    -   Regex: `\\begin\{(verbatim|lstlisting)\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{\1\}`.
+    -   **Universal Catch**: The `(?:\[[^\]]*\])?` pattern intentionally matches *but ignores* any options (e.g., `[language=Python, caption=My Code]`). This ensures the parser doesn't choke on valid LaTeX properties.
+-   **Transformation**:
+    -   **HTML Escaping**: strictly escaped (`<` -> `&lt;`) to prevent XSS.
+    -   **Container**: Wrapped in `<pre class="latex-verbatim">`.
+-   **CSS / Visuals**:
+    -   **Background**: `#f9f9f9` (Light Grey) for distinct enclosure.
+    -   **Border**: 1px solid `#ddd` (Subtle boundary).
+    -   **Font**: Courier New.
+    -   **Whitespace**: `white-space: pre` preserves all indentation exactly as typed.
+-   **Output**: A clean, enclosed box that looks identical regardless of the input method.
 
 ### 6c. Algorithm Environment (The "Parsed" Code Zone - v1.9.15)
 

@@ -122,8 +122,9 @@ export function processLatex(latex: string): SanitizeResult {
     content = tikzSanitized;
     Object.assign(blocks, tikzBlocks);
 
-    // --- VERBATIM / CODE BLOCK EXTRACTION ---
-    content = content.replace(/\\begin\{verbatim\}([\s\S]*?)\\end\{verbatim\}/g, (m, code) => {
+    // --- CODE BLOCKS (Verbatim & Listings) ---
+    // Extract early to prevent Math/Command parsing inside code
+    content = content.replace(/\\begin\{(verbatim|lstlisting)\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, envName, code) => {
         const escaped = code
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')

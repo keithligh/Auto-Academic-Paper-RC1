@@ -271,6 +271,24 @@
 }
 
 /* =============================================
+ * CODE BLOCKS (Verbatim / Listings)
+ * ============================================= */
+.latex-preview .latex-verbatim {
+    margin: 1.5em 0;
+    padding: 1em;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    overflow-x: auto;
+    white-space: pre;
+    /* Ensure whitespace is preserved */
+    color: #333;
+    line-height: 1.4;
+}
+
+/* =============================================
  * TABLES (Refined v1.6.43)
  * ============================================= */
 /* Wrapper for centering and scrolling */

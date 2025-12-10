@@ -101,6 +101,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     -   **Fix 2**: Switched auto-scale wrapper to `display: block`. This restores **CSS Margin Collapsing**, merging the paragraph's bottom margin with the equation's top margin (1em + 0.5em -> 1em) instead of stacking them (1.5em).
 -   **Clipping**:
     -   **Fix**: Switched from `overflow: hidden` to `visible` + `width: max-content` on the wrapper. This ensures the browser calculates the layout based on the full unscaled width, preventing cut-off columns.
+-   **Universal Code Styling (The "Enclosure" Fix)**:
+    -   **Problem**: Code blocks (`lstlisting`) looked raw and didn't match the Algorithm styling.
+    -   **Fix**: Implemented **Unified Code Blocks**.
+        -   Mapped `\begin{lstlisting}` (and `verbatim`) to the `.latex-verbatim` class.
+        -   Added CSS to `.latex-verbatim` to match Algorithm blocks (Gray background, border).
+        -   **Universal Parser**: `(?:\[[^\]]*\])?` regex handles arbitrary options (e.g., `[language=Python]`), ensuring robust extraction for any code block.
 ### Fixed
 - **Dev Server Instability ("Exit 1")**:
   - **Symptom**: The backend server would crash (`exit 1`) whenever a frontend syntax error (e.g., in CSS or TSX) occurred.

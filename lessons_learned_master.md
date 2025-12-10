@@ -309,3 +309,8 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 - **Incident**: Math blocks had huge gaps above them.
 - **Root Cause**: Wrapper was `inline-block`. This prevented CSS Margin Collapsing, so margins stacked (1em + 0.5em = 1.5em).
 - **Lesson**: **Respect the Flow.** Use `display: block` for block-level elements to allow the browser's native vertical rhythm (margin collapsing) to work. Don't fight the layout engine with inline-block unless necessary.
+
+## 61. The Enclosure Unification (Visual Consistency)
+- **Incident**: `lstlisting` blocks looked raw, while `algorithm` blocks looked professionally styled. The document felt fractured.
+- **Decision**: Mapped both environments to the same CSS class.
+- **Lesson**: **Visual Consistency Trumps Semantic Purity.** Users don't care that one is a "listing" and one is an "algorithm". They care that "code looks like code". Unify your visual language by mapping diverse inputs to shared, high-quality output classes.
