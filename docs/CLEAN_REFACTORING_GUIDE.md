@@ -23,6 +23,37 @@ client/src/lib/latex-unifier/
 
 ---
 
+## 🚨 IMPORTANT: Orphaned File Warning
+
+**⚠️ `client/src/lib/latex-to-html.ts` EXISTS BUT DO NOT USE IT!**
+
+You may discover a file called `latex-to-html.ts` (438 lines) in the codebase. **IGNORE IT.**
+
+**What it is:**
+- An abandoned attempt at a simpler LaTeX parser
+- Called "THE DIRECT OPTION"
+- Has basic TikZ rendering WITHOUT the Intent Engine
+- **Contains the newline flattening bug** (lines 172-173)
+- NOT currently imported anywhere (orphaned code)
+
+**Why it's dangerous:**
+```typescript
+// latex-to-html.ts lines 172-173 - ❌ DON'T COPY THIS!
+.replace(/\\n/g, ' ')
+.replace(/\n/g, ' ');
+```
+
+This file **flattens newlines** which breaks TikZ rendering. This same bug was accidentally copied into `tikz-engine.ts` during an earlier refactoring attempt.
+
+**What to do:**
+- ✅ **Extract from:** `LatexPreview.tsx` (or `LatexPreview - Copy (3).tsx` backup)
+- ❌ **Do NOT reference:** `latex-to-html.ts`
+- 📝 **Recommend:** Delete `latex-to-html.ts` after refactoring is complete (it's unused)
+
+**Source of Truth:** The working monolithic `LatexPreview.tsx` is the ONLY code you should reference during extraction.
+
+---
+
 ## ⚠️ Critical Rules - Read First
 
 ### Rule #1: Extract Don't Rewrite
@@ -65,9 +96,12 @@ client/src/lib/latex-unifier/
 
 **Problem:** TikZ code needs minimal processing. Over-sanitization breaks structure.
 
+**⚠️ Source of temptation:** You may see similar code in `latex-to-html.ts` and think "I should add this." **DON'T!** That file has bugs and is unused.
+
 **Example of what NOT to do:**
 ```typescript
 // ❌ BAD - Don't add this!
+// (This bug exists in latex-to-html.ts lines 172-173)
 function sanitizeStr(s: string) {
     return s
         .replace(/%.*$/gm, '')      // Strips comments
