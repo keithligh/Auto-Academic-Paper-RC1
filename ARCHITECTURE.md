@@ -128,6 +128,7 @@ The bibliography is constructed programmatically from the `Librarian`'s results.
 
 We have abandoned third-party rendering libraries (`latex.js`) in favor of a **Custom TypeScript Orchestrator** (`client/src/lib/latex-unifier/processor.ts`).
 -   **Chassis**: A recursive "SaaS" parser for general structure (Sections, Environments).
+-   **Sanitization Layer**: Aggressive Preamble Stripping (removing `\usepackage`) to prevent macro crashes.
 -   **Engines**: Specialized renderers for complex content:
     -   **TikZ**: `tikz-engine.ts` (Iframe Isolation + Intent Engine).
     -   **Math**: `math-engine.ts` (KaTeX for all equation types).
