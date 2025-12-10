@@ -65,7 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.9.26] - 2025-12-10 (Global Robustness)
 ### Fixed
 - **Global Table Fix ("Nuclear Option")**:
-  - **Issue**: Previous table fix was only in `latex-to-html.ts` (HTML parser), but the system often runs `jsTeX` (PDF engine).
+  - **Issue**: Previous table fix was only in the HTML parser, but the system often runs `jsTeX` (PDF engine).
   - **Fix**: Moved the `\\&` -> `\&` replacement to `sanitizeLatexForBrowser` in `LatexPreview.tsx`. It now runs **globally** before *any* parser (HTML or PDF) sees the code.
   - **Result**: Tables with escaped ampersands work everywhere.
 - **TikZ Leaks**:
@@ -221,7 +221,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Architecture Change
 - **Removed `latex.js` Dependency**: Completely removed the fragile `latex.js` library.
   - **Reasoning**: It was the single point of failure (crashes on unknown macros, no tabularx support, no TikZ support, difficult error handling). The "Containment" strategy was costing more effort than a replacement.
-- **Implemented Custom Parser (`latex-to-html.ts`)**: Built a robust, fault-tolerant TypeScript parser.
+- **Implemented Custom Parser (`processor.ts`)**: Built a robust, fault-tolerant TypeScript parser.
   - **Philosophy**: "Show Something." Never crash. If a command is unknown, strip it or show a placeholder, but render the rest of the document.
 - **Future Development Plan**: Archived the "Iterative Long-Form Generation" strategy (The Architect/Mason/Artist pipeline) to `docs/future_development_plan.md`.
   - **Reasoning**: Feature deferred, but the detailed architectural planning (including "Full Context Propagation" findings) is valuable and preserved.
