@@ -335,6 +335,8 @@ export function processLatex(latex: string): SanitizeResult {
     Object.assign(blocks, tableBlocks);
 
     // --- COMMAND STRIPPING ---
+    content = content.replace(/\\documentclass(\[[^\]]*\])?\{[^}]*\}/g, '');
+    content = content.replace(/\\usepackage(\[[^\]]*\])?\{[^}]*\}/g, '');
     content = content.replace(/\\tableofcontents/g, '');
     content = content.replace(/\\listoffigures/g, '');
     content = content.replace(/\\listoftables/g, '');

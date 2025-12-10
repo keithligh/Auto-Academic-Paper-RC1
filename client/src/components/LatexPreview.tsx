@@ -168,6 +168,11 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
       html = html.replace(/\\newline/g, '<br/>');
       html = html.replace(/\\today/g, new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
 
+      // Fix: Thousand Separators and Colons (v1.9.36)
+      // LaTeX uses { } to prevent spacing in math, but in text it renders literally if not stripped.
+      html = html.replace(/\{,\}/g, ',');
+      html = html.replace(/\{:\}/g, ':');
+
       // Paragraphs
       // Fix: Normalize AI usage of literal "\n" to real newlines
       html = html.replace(/\\n/g, '\n');

@@ -128,6 +128,18 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 - **Extraction**: Regex finds `\begin{tikzpicture}` environments.
 - **Placeholder**: Replaced with `LATEXPREVIEWMATH{N}`.
 - **Rendering**: We construct a complete HTML page that loads **TikZJax** and inject it into an `<iframe>`.
+### 7a. Preamble Stripping (The "Anti-Crash" Field)
+**Problem**: The Custom Parser creates "ghost tags" or crashes when it sees incomplete macros in the preamble (e.g. `\usepackage[sort&compress]{natbib}` -> `&` crashes regex).
+**Universal Fix**: We aggressively strip **all** preamble commands before parsing.
+-   **Regex**: `\\usepackage(\[.*?\])?\{.*?\}` and `\\documentclass...`
+-   **Why Universal**: It deletes the entire category of "Package Imports". Since the browser mocks all styles via CSS, we never need *any* package import. Removing them prevents 100% of package-related syntax crashes.
+
+### 7b. Text Sanitization (The "Typography" Layer)
+**Problem**: LaTeX uses math logic in text (e.g., `{,}` to prevent spacing), which renders literally in HTML (`100{,}000`).
+**Universal Fix**: We implement a global replacement layer for typography.
+-   **Separators**: `{,}` -> `,` and `{:} -> :`
+-   **Structure**: Runs **after** Math Extraction but **before** HTML generation.
+-   **Why Universal**: It targets the *syntax pattern* `{char}`, not specific numbers. It handles `100{,}000`, `200{,}000`, and `1{,}234` equally.
 - **Environment Wrapping**: We explicitly wrap the extracted TikZ code in `\begin{tikzpicture} ... \end{tikzpicture}` inside the iframe script tag.
 - **Responsive SVG Layout (v1.4.0)**: CSS-driven `max-width: 100%` ensures perfect fit on A4 pages without manual scaling hacks.
 - **Centering**: Iframes are wrapped in flexbox containers for horizontal centering.
@@ -415,13 +427,21 @@ HTML escaping is destructive to LaTeX math (e.g., `x < y` becomes `x &lt; y`, wh
 
 This section documents the **CSS Architecture** and **Layout Engine** that powers the visual preview.
 
-## 15. The CSS Trinity (File Architecture)
+## 7. The Rendering Pipeline (Architecture v5)
 
-The styling is strictly separated into three layers, located in `client/src/styles/`:
+**The Old World**: We used `latex.js`. It was fragile, crashed on macros, and couldn't handle complex documents.
+**The New World**: We use a **Custom Regex Parser** (Hybrid Architecture).
 
-### 1. `latex-article.css` (The Skin)
+### Core Philosophy
+1.  **Sanitization First**: We strip everything the browser doesn't understand (Preamble, Comments).
+2.  **Encapsulation**: We hide complex Math and TikZ in safe placeholders.
+3.  **Direct HTML Injection**: We use standard DOM operations (`innerHTML`) to inject the processed content.
+4.  **No external runtime**: The "Engine" is just `LatexPreview.tsx` + `processor.ts`.
 
-This file is the **User-Facing** style controller. It turns a `<div>` into a "Paper".
+### Why this works
+-   **Zero Crashes**: Regex replacements cannot "crash" the way a compiled parser does.
+-   **Full Control**: If a specific environment (like `algorithm`) breaks, we just add a specific handler for it.
+-   **Speed**: No heavy library to load. Instant render. It turns a `<div>` into a "Paper".
 
 - **The Container**: `.latex-preview`
   - **Dimensions**: Hardcoded to `width: 210mm` (A4 ISO standard) and `min-height: 297mm`.

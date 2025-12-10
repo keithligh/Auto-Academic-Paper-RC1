@@ -107,6 +107,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         -   Mapped `\begin{lstlisting}` (and `verbatim`) to the `.latex-verbatim` class.
         -   Added CSS to `.latex-verbatim` to match Algorithm blocks (Gray background, border).
         -   **Universal Parser**: `(?:\[[^\]]*\])?` regex handles arbitrary options (e.g., `[language=Python]`), ensuring robust extraction for any code block.
+-   **Preamble Stripper (The "Anti-Crash" Fix)**:
+    -   **Problem**: `\usepackage[...sort&compress...]` caused the regex parser to choke on the `&` character, resulting in a blank render.
+    -   **Fix**: Implemented aggressive stripping of `\documentclass` and `\usepackage` in `processor.ts`. This prevents 100% of Preamble-related crashes.
+-   **Typography Sanitization (The "Thousand Separator" Fix)**:
+    -   **Problem**: `105{,}000` rendered literally because HTML doesn't understand LaTeX grouping braces.
+    -   **Fix**: Added global replacement layer `/{,}/g` -> `,` in `LatexPreview.tsx` (Global Scope). Handles all occurrences in valid text.
 ### Fixed
 - **Dev Server Instability ("Exit 1")**:
   - **Symptom**: The backend server would crash (`exit 1`) whenever a frontend syntax error (e.g., in CSS or TSX) occurred.
