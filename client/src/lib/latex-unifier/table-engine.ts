@@ -105,7 +105,12 @@ export function processTables(text: string, formatText: (s: string) => string): 
             i++;
         }
 
-        const tableBody = text.substring(bodyStartIndex, tableContentEnd);
+        let tableBody = text.substring(bodyStartIndex, tableContentEnd);
+
+        // Fix: Double Escape Sanitization (v1.9.36)
+        // If the AI outputs "Fear \\& Greed", the engine sees "row break" + "&".
+        // We revert \\& -> \& before splitting.
+        tableBody = tableBody.replace(/\\\\&/g, '\\&');
 
         // ROW SPLITTING
         const rows: string[] = [];

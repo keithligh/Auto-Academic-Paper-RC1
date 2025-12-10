@@ -113,6 +113,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 -   **Typography Sanitization (The "Thousand Separator" Fix)**:
     -   **Problem**: `105{,}000` rendered literally because HTML doesn't understand LaTeX grouping braces.
     -   **Fix**: Added global replacement layer `/{,}/g` -> `,` in `LatexPreview.tsx` (Global Scope). Handles all occurrences in valid text.
+-   **Table Engine (Hallucination Sanitizer)**:
+    -   **Problem**: AI output `Sentiment (Fear \\& Greed)` (Double Escape) caused the table parser to see `\\` (Row Break) followed by `&`. This broke the table layout.
+    -   **Fix**: Added a pre-sanitizer in `table-engine.ts` that reverts `\\\\&` to `\\&` inside the table body before splitting rows. This preserves row integrity against bad escapes.
 ### Fixed
 - **Dev Server Instability ("Exit 1")**:
   - **Symptom**: The backend server would crash (`exit 1`) whenever a frontend syntax error (e.g., in CSS or TSX) occurred.
