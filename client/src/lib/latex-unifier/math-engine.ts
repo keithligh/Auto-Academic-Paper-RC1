@@ -13,7 +13,7 @@ export interface MathResult {
     blocks: Record<string, string>;
 }
 
-export function processMath(latex: string): MathResult {
+export function processMath(latex: string, macros: Record<string, string> = {}): MathResult {
     let content = latex;
     const blocks: Record<string, string> = {};
     let blockCount = 0;
@@ -26,7 +26,7 @@ export function processMath(latex: string): MathResult {
                 displayMode,
                 throwOnError: false,
                 strict: false,
-                macros: { "\\eqref": "\\href{#1}{#1}", "\\label": "" }
+                macros: { "\\eqref": "\\href{#1}{#1}", "\\label": "", ...macros }
             });
 
             // STRATEGY: Auto-scale long SINGLE-LINE equations to fit container

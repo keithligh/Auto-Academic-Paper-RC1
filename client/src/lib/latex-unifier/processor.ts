@@ -28,6 +28,37 @@ export function processLatex(latex: string): SanitizeResult {
     const blocks: Record<string, string> = {};
     let blockCount = 0;
 
+    // --- MACRO EXTRACTION (v1.9.41) ---
+    // Extract definitions from preamble BEFORE it gets stripped.
+    const extractMacros = (txt: string): Record<string, string> => {
+        const macros: Record<string, string> = {};
+
+        // Match \newcommand{\name}{value}
+        // Simplified regex: doesn't handle nested braces perfectly, but good enough for simple variable wrappers
+        const newCommandRegex = /\\newcommand\s*\{\\([a-zA-Z]+)\}\s*\{([^}]*)\}/g;
+        let match;
+        while ((match = newCommandRegex.exec(txt)) !== null) {
+            macros[`\\${match[1]}`] = match[2];
+        }
+
+        // Match \def\name{value}
+        const defRegex = /\\def\s*\\([a-zA-Z]+)\s*\{([^}]*)\}/g;
+        while ((match = defRegex.exec(txt)) !== null) {
+            macros[`\\${match[1]}`] = match[2];
+        }
+
+        return macros;
+    };
+
+    const globalMacros = extractMacros(latex);
+    // Add common defaults that missing packages might imply
+    // (None for now, relying on extraction)
+
+    // Debug
+    if (Object.keys(globalMacros).length > 0) {
+        console.log("[Processor] Extracted Macros:", globalMacros);
+    }
+
     const createPlaceholder = (html: string): string => {
         const id = `LATEXPREVIEWBLOCK${blockCount++}`;
         blocks[id] = html;
@@ -39,14 +70,25 @@ export function processLatex(latex: string): SanitizeResult {
         // 1. Protection Protocol: Extract inline math FIRST
         const mathPlaceholders: string[] = [];
         let protectedText = text.replace(/(?<!\\)\$([^$]+)(?<!\\)\$/g, (m, math) => {
-            mathPlaceholders.push(katex.renderToString(math, { throwOnError: false }));
+            // FIX (v1.9.41): Inject extracted macros into KaTeX
+            try {
+                mathPlaceholders.push(katex.renderToString(math, {
+                    throwOnError: false,
+                    macros: globalMacros
+                }));
+            } catch (e) {
+                mathPlaceholders.push(`<span class="latex-math-error" style="color:red">\${math}</span>`);
+            }
             return `__MATH_PROTECT_${mathPlaceholders.length - 1}__`;
         });
 
         // 2. Unescape LaTeX Special Chars
+        // REORDERED (v1.9.40): Double-escapes MUST be handled BEFORE single-escapes.
         protectedText = protectedText
-            .replace(/\\%/g, '%')
-            .replace(/\\\&/g, '&')
+            .replace(/\\\\%/g, '%') // Double-escape first
+            .replace(/\\%/g, '%')   // Then single
+            .replace(/\\\\&/g, '&') // Double-escape first
+            .replace(/\\\&/g, '&')  // Then single
             .replace(/\\#/g, '#')
             .replace(/\\_/g, '_')
             .replace(/\\\{/g, '{')
@@ -133,7 +175,8 @@ export function processLatex(latex: string): SanitizeResult {
     });
 
     // --- MATH ENGINE REFACTORING (Phase 3) ---
-    const { sanitized: mathSanitized, blocks: mathBlocks } = processMath(content);
+    // PASS MACROS (v1.9.42): Ensure inline math ($A$) gets the preamble definitions
+    const { sanitized: mathSanitized, blocks: mathBlocks } = processMath(content, globalMacros);
     content = mathSanitized;
     Object.assign(blocks, mathBlocks);
 
@@ -167,6 +210,16 @@ export function processLatex(latex: string): SanitizeResult {
                 output += createPlaceholder(`<ol class="latex-enumerate">\n${processLists(listContent, depth + 1)} \n</ol> `);
             } else if (txt.startsWith('\\begin{itemize}', i)) {
                 i += 15;
+                // Handle options [noitemsep]
+                if (txt[i] === '[') {
+                    let d = 0;
+                    while (i < txt.length) {
+                        if (txt[i] === '[') d++;
+                        if (txt[i] === ']') d--;
+                        i++;
+                        if (d === 0) break;
+                    }
+                }
                 let listContent = '';
                 let listDepth = 1;
                 while (i < txt.length && listDepth > 0) {
@@ -180,6 +233,16 @@ export function processLatex(latex: string): SanitizeResult {
                 output += createPlaceholder(`<ul class="latex-itemize">\n${processLists(listContent, depth + 1)} \n</ul> `);
             } else if (txt.startsWith('\\begin{description}', i)) {
                 i += 19;
+                // Handle options [style=...]
+                if (txt[i] === '[') {
+                    let d = 0;
+                    while (i < txt.length) {
+                        if (txt[i] === '[') d++;
+                        if (txt[i] === ']') d--;
+                        i++;
+                        if (d === 0) break;
+                    }
+                }
                 let listContent = '';
                 let listDepth = 1;
                 while (i < txt.length && listDepth > 0) {
@@ -446,6 +509,11 @@ export function processLatex(latex: string): SanitizeResult {
 
         return createPlaceholder(bibHtml);
     });
+
+    // --- FINAL TEXT PASS (v1.9.39) ---
+    // Apply formatting (unescaping, typography, markdown) to the remaining text content.
+    // This ensures standard paragraphs resolve \&, %, \textbf, etc.
+    content = parseLatexFormatting(content);
 
     return { sanitized: content, blocks, bibliographyHtml, hasBibliography };
 }

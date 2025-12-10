@@ -285,12 +285,16 @@ To ensure consistent rendering in **manually parsed blocks** (Tables, Algorithms
      - `\/` -> `/` (Converts escaped slash to forward slash)
      - `~` -> `&nbsp;` (Non-breaking space)
 
-### 8b. The Universal Text Formatter (v1.9.27)
+### 8b. The Universal Text Formatter (v1.9.37)
 Previously, only manually parsing blocks (Tables, Algorithms) received nice formatting (bold, italic, symbols). Standard text paragraphs were just getting wrapped in `<p>` tags, leaving `\textbf{}` raw.
 
 **The Fix:** We implemented a **Universal Paragraph Map** at the end of `processor.ts`.
-1.  Split content by double-newline (`\n\n`) into paragraphs.
-2.  Iterate through each paragraph:
+
+1.  **Paragraph Splitting (The `\par` Fix)**:
+    -   First, we convert all LaTeX `\par` commands to double-newlines (`\n\n`) via `html.replace(/\\par(?![a-zA-Z])/g, '\n\n')`.
+    -   This guarantees that `\par` creates a physical break that the splitter can detect.
+2.  **Universal Split**: Split content by double-newline (`\n\n`) into paragraphs.
+3.  **Iterate**:
     -   If it's a Header (`<h2>`) or Placeholder (`LATEXPREVIEW...`), leave it alone.
     -   Otherwise, run `parseLatexFormatting(text)` on it.
     -   Wrap in `<p>`.
@@ -843,3 +847,61 @@ To prevent "Blank Diagrams" (silent crashes), the TikZ engine now performs aggre
 ### 24.4 Table Robustness
 -   **Ampersand Glitch**: Specific regex patches exist for known AI typos like `Built-in & Comprehensive` (unescaped `&`).
 -   **Width**: Tables are forced to `width: 100%` via CSS to prevent aggressive text wrapping in narrow columns.
+
+## 30. Universal Prompt Hardening (v1.9.37)
+
+**The Philosophy**: You cannot fix every AI hallucination with regex. At some point, you must fix the *source*.
+
+### 1. The "No Labels" Contract
+- **Problem**: AI models, when asked for specific sections, often hallucinate labels like `SECTION NAME: Introduction` or `CONTENT: ...` inside the JSON content field.
+- **Old Fix**: Endlessly chasing these patterns with regex (`/^SECTION NAME:/`, `/^Title:/`).
+- **New Fix (The Contract)**: We updated the System Prompt (Phase 3 & 5) to explicitly forbid labels:
+  > `"content": "Raw LaTeX Only. Starts directly with text/commands. NO LABELS."`
+- **Universality**: This prevents the issue for *all* future document types, reducing the load on the sanitization layer.
+
+### 2. The "Table Stability" Protocol
+- **Problem**: The AI often writes `Policy analysis & public sentiment` inside a table cell.
+- **The Crash**: `&` is a special column separator in LaTeX. If unescaped, it creates an extra column, causing the table parser to overflow and break the layout (10 columns instead of 4).
+- **The Fix (Prompt Level)**: We added a critical validation rule to the Prompt:
+  > `ESCAPE SPECIAL CHARACTERS: You MUST escape & (as \&) and % (as \%) in text content.`
+- **Result**: The AI now generates `Policy analysis \& public sentiment`, which parses correctly as text within a single cell.
+
+### 3. The "Ghost Content" Safety Net
+- **Layer 1 (Prompt)**: The primary defense (as above).
+- **Layer 2 (Code)**: We retain the regex strippers in `latexGenerator.ts` as a fallback safety net.
+  - `content.replace(/^SECTION NAME:.*?\n/i, '')`
+  - `content.replace(/^CONTENT:\s*/i, '')`
+- **Layer 3 (Rendering)**: We updated `LatexPreview.tsx` to handle `\par` commands (often leaked by AI) by converting them to double-newlines (`\n\n`), ensuring they are processed as proper paragraphs rather than rendered as raw text.
+
+### 31. The Universal Text Pass (v1.9.39)
+**Problem**: After removing `latex.js`, "standard" LaTeX text (like `\&`, `\textbf`, `\par`) was falling through as raw string content because the new modular engines only targeted specific blocks (TikZ, Math, etc.).
+**Solution**: A global `parseLatexFormatting()` pass is now applied to the *entire* document content at the very end of the `processor.ts` pipeline.
+**Scope**:
+- **Unescaping**: Handles `\&` -> `&`, `\%` -> `%`, `\$` -> `$`, `\{` -> `{`.
+- **Typogaphy**: Converts `--` to en-dash, `---` to em-dash, ` `` ` to quotes.
+- **Double-Escape Handling**: critical for AI output, `\\&` is converted to `&` (prioritized over single escape).
+### 32. TikZ Arrow Sanitization (v1.9.44)
+**Problem**: The AI frequently writes Arrows like `\rightarrow` or `\Rightarrow` inside TikZ node labels *without* math mode (e.g., `Node A \rightarrow Node B`). This causes a `! Missing $ inserted` crash in TikZJax.
+**Solution**: We automatically wrap known arrow commands in `\ensuremath{...}` within `tikz-engine.ts`.
+-   `\rightarrow` -> `\ensuremath{\rightarrow}`
+-   `\leftarrow` -> `\ensuremath{\leftarrow}`
+-   `\Rightarrow` -> `\ensuremath{\Rightarrow}`
+-   `\Leftarrow` -> `\ensuremath{\Leftarrow}`
+-   `\leftrightarrow` -> `\ensuremath{\leftrightarrow}`
+-   `\Leftrightarrow` -> `\ensuremath{\Leftrightarrow}`
+**Mechanism**: `\ensuremath` checks `\ifmmode`. If true (already in math), it does nothing. If false (text mode), it wraps the content in `$ ... $`. This makes the fix robust regardless of context.
+
+### 33. The Grayscale Mandate (v1.9.48)
+**Problem**: AI generated diagrams often included colors (`red!60`, `blue`) which violated academic printing standards (Black & White).
+**Solution**: Updated System Prompts (Thinker & Rewriter) to explicitly ban color and mandate grayscale or patterns (`dotted`, `dashed`, `thick`).
+**Universality**: Applies to ALL future content generation requests.
+
+### 34. Universal List Argument Stripping (v1.9.48)
+**Problem**: `itemize` and `description` environments with optional arguments (e.g., `\begin{itemize}[noitemsep]`) leaked the argument as literal text because the parser only skipped the environment name.
+**Solution**: Implemented a recursive bracket-skipping loop in `processor.ts` (List Engine) for all list types.
+**Universality**: Handles ANY valid LaTeX optional argument structure, including nested brackets (e.g., `[label={[a]}]`), ensuring no configuration text ever leaks into the render.
+
+### 35. Forced Table Cell Alignment (v1.9.48)
+**Problem**: Lists inside tables inherited the global `text-align: justify`, causing awkward gaps in narrow table columns.
+**Solution**: Enforced `text-align: left !important` via CSS selector `.latex-preview td *`.
+**Universality**: Applies to ALL content (lists, paragraphs, divs) inside ANY table cell, overriding all conflicting global styles.

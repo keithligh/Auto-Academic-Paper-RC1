@@ -301,7 +301,16 @@ The TikZ engine was prone to "Blank" renders due to browser limitations. We impl
         2.  `safeTikz.replace(/%.*$/gm, '')` (Nuke comments)
         3.  `safeTikz.replace(/__PCT__/g, '\\%')` (Restore escaped percents)
     *   **Why**: It guarantees that `100\%` is never mistaken for a comment start, without needing advanced regex features.
-2.  **Library Injection**: We inject `\usetikzlibrary{arrows,shapes,calc,positioning,decorations.pathreplacing}`.
+    *   **Why**: It guarantees that `100\%` is never mistaken for a comment start, without needing advanced regex features.
+3.  **Deprecated Syntax Normalization (v1.9.37)**:
+    *   **Problem**: AI models often generate deprecated positioning syntax like `right of=node`. When combined with `node distance`, this is interpreted as center-to-center distance, strictly ignoring node width. This causes massive overlap.
+    *   **Fix**: We apply a pre-render regex replacement:
+        *   `right of=` -> `right=of `
+        *   `left of=` -> `left=of `
+        *   `above of=` -> `above=of `
+        *   `below of=` -> `below=of `
+    *   **Result**: This forces the `positioning` library (which we inject) to use edge-to-edge spacing, respecting node widths and distance settings.
+4.  **Library Injection**: We inject `\usetikzlibrary{arrows,shapes,calc,positioning,decorations.pathreplacing}`.
     *   **Why**: The browser doesn't autoload libraries. Missing `arrows` causes a silent crash.
 3.  **Unsupported Feature Strip**:
     *   **Fonts**: `\sffamily`, `\ttfamily`. (Reason: Missing WASM font metrics).
@@ -319,3 +328,28 @@ The TikZ engine was prone to "Blank" renders due to browser limitations. We impl
 > const finalOptions = `[${combined}]`; // MANDATORY
 > ```
 > **Rule**: **Any transformation that unwraps a container must re-wrap it before final injection.**
+
+### 17. The Vertical Layout Crisis (v1.9.45 - v1.9.48)
+
+A complex saga of scaling issues involving "Hyper Boost", "Modernization", and "Compression".
+
+#### Phase A: Hyper Boost Taming (v1.9.45)
+> **Problem**: The "Goldilocks Protocol" (Section 10) was aggressively boosting `y=` coordinates for Text-Heavy diagrams (`x=2.2cm`) to prevent horizontal explosion. However, it *also* boosted `y` to `1.5cm` by default, causing vertical flowcharts to look like skyscrapers.
+> **The Fix**:
+> 1.  **Exclusion**: If the user (or AI) provides an **Explicit** `node distance`, the Goldilocks Y-Boost is **SKIPPED**. We trust the explicit distance.
+> 2.  **Relaxation**: The `y` default fallback was reduced from `1.5cm` to `1.2cm`.
+
+#### Phase A.5: The Semantic Shift (The "Modernization" Trap)
+> **Problem**: To fix overlapping nodes, we "Modernized" syntax: `below of=node` (Center-to-Center) became `below=of node` (Edge-to-Edge).
+> **Side Effect**: A `node distance=3cm` implies 3cm between *centers* in the old syntax (tight). In the new syntax, it means 3cm between *edges* (huge gaps). This caused diagrams to expand vertically by 2-3x, creating the illusion of a scaling bug.
+
+#### Phase B: The Failed "Modernization Compensation" (v1.9.47)
+> **Attempt**: We tried to detect "Modernization" and surgically halve the `node distance` (e.g., 3cm -> 1.5cm) to restore original density.
+> **Failure**: The regex-based injection was flaky and caused regression risks. It was reverted.
+
+#### Phase C: Global Compression (v1.9.46 - The Final Solution)
+> **The Fix**: Instead of surgical micro-management, we re-introduced a simple **Global Compression** rule for Relative Layouts.
+> **Logic**:
+> - If `verticalSpan == 0` (Relative Positioning) AND `node distance` is Explicit:
+> - **Force `y=0.5cm`**.
+> **Why**: Relative positioning relies on `node distance` for the macro layout. The `y` unit only affects `+(0, y)` shifts (like separate title nodes). Compressing `y` ensures titles don't float away, while the `node distance` (kept at 2.8cm-3cm) handles the main flow.

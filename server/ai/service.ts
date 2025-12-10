@@ -425,7 +425,8 @@ CRITICAL INSTRUCTIONS:
 - NO NESTED SECTIONS: Do NOT use \\section commands inside the "content" field.
 - NO SECTION NUMBERING: Use "Introduction", NOT "1. Introduction".
 - NO COLORS: Do NOT use \\textcolor or \\color.
-- ESCAPE SPECIAL CHARACTERS: You MUST escape & (as \\&) and % (as \\%) in text content.
+- ESCAPE SPECIAL CHARACTERS: You MUST escape & (as \\&), % (as \\%), and $ (as \\$) in text content. For example, "$30" must be written as "\\$30".
+- NO CUSTOM MACROS IN MATH: Do NOT use \newcommand or \def to define custom macros. Write math variables directly (e.g., $V_{align}$ instead of $\V_{align}$).
 - Output valid JSON matching the schema.
 
 `;
@@ -445,6 +446,7 @@ ENHANCEMENT TYPES: ${enabledEnhancementTypes.join(", ")}
 
 SPECIAL INSTRUCTIONS FOR DIAGRAMS:
 - For "diagram" type: MUST USE 'tikzpicture' environment.
+- NO COLOR: Academic papers are printed in black & white. Use grayscale (black!10, gray!50), patterns (dotted, dashed), or thick lines for contrast. Do NOT use red, blue, green, etc.
 - Avoid 'pgfplots' / 'axis'.Use standard TikZ primitives(\\draw, \\node, etc.).
 - Use fixed dimensions(cm) and explicit calculations.
 
@@ -746,6 +748,7 @@ CRITICAL RULES:
 9. NEVER use \\ref{ref_X}. Wait for Phase 6 to insert citations.
 10. DO NOT include "SECTION NAME:" or "CONTENT:" labels. Just return the raw LaTeX content.
 11. ESCAPE SPECIAL CHARACTERS: You MUST escape & (as \\&) and % (as \\%) in text, especially in tables.
+12. NO COLOR: If rewriting TikZ or Tables, use grayscale/patterns only. No \textcolor or \color.
 
 EVIDENCE INTEGRATION TECHNIQUES:
 - "Research by [Author] demonstrates that..."

@@ -14,5 +14,10 @@ export function healLatex(content: string): string {
     // We preserve exact behavior.
     healed = healed.replace(/^```latex\s*/i, '').replace(/```$/, '');
 
+    // FIX (v1.9.43): Strip literal \n (backslash-n) sequences from AI output
+    // AI sometimes outputs `\\\n\hline` instead of `\\\hline` in tables
+    // This is invalid LaTeX and breaks rendering
+    healed = healed.replace(/\\n(?![a-zA-Z])/g, ''); // \n not followed by a letter (protects \newcommand, etc.)
+
     return healed;
 }

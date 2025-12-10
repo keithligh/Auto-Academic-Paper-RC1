@@ -6,6 +6,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.48] - 2025-12-10 (Grayscale Mandate)
+### Changed
+- **AI Prompts (Phase 3 & 5)**: Explicitly banned use of colors (`\color`, `\textcolor`, `fill=red!60`) in Diagrams and Text.
+    - **Instruction**: "Academic papers are printed in black & white. Use grayscale (black!10, gray!50), patterns (dotted, dashed), or thick lines for contrast."
+    - **Reasoning**: Ensures generated PDFs are print-ready and follow academic standards.
+
+### Fixed
+- **List Artifacts**: Fixed `itemize` and `description` environments leaking optional arguments (e.g., `[noitemsep]`) into the rendered text.
+- **Table Cell Alignment**: Enforced `text-align: left !important` for all table cell content (including lists), overriding global justification rules to prevent weird spacing in narrow columns.
+
+## [1.9.46] - 2025-12-10 (Vertical Compression for Modernized Layouts)
+### Fixed
+- **TikZ Y-Scaling (Compression)**:
+    - **Problem**: "Hyper Boost Taming" (v1.9.45) fixed the override but left vertical spacing too large (3cm edge-to-edge due to `below=of` modernizer vs `below of` center-to-center intent).
+    - **Fix**: Reintroduced `y=0.5` compression for relative layouts even if explicit `node distance` is present. This counteracts the expansion caused by "Edge-to-Edge" modernization.
+    - **Result**: Vertical flowcharts are now tightly packed (approx 1.5cm net gap for 3cm user input), matching the visual expectations of "Center-to-Center" layouts.
+
+## [1.9.45] - 2025-12-10 (Hyper Boost Taming)
+### Fixed
+- **TikZ Y-Scaling (Hyper Boost Taming)**:
+    - **Problem**: Vertical flowcharts with explicit `node distance` (e.g., 3cm) were being aggressively overridden to 8.4cm or squashed with `y=0.5`.
+    - **Fix**: Relaxed override threshold from 8.4cm to 2.8cm (respecting 3cm inputs) and fixed `yUnit` logic to preserve user's unit vector (1.0) instead of squashing (0.5) when explicit distance is present.
+    - **Result**: Diagrams respect user's vertical spacing while still optimizing density for unlabeled/messy inputs.
+
+## [1.9.44] - 2025-12-10 (Context-Aware Stabilization)
+### Fixed
+- **TikZ Arrow Sanitization**:
+    - **Problem**: AI generates arrows (`\rightarrow`) in text-mode TikZ nodes, causing `! Missing $ inserted` crashes.
+    - **Fix**: Implemented auto-wrapping of arrows in `\ensuremath{...}` within `tikz-engine.ts`.
+    - **Result**: Arrows render correctly in both text and math modes.
+- **Table \n Stripping**:
+    - **Problem**: AI leaks literal `\n` sequences into tables (e.g., `\\\n\hline`), breaking rendering.
+    - **Fix**: Added heuristic in `healer.ts` to strip these sequences.
+- **Prompt Hardening ($ Escape)**: Added `\\$` rule to AI prompts to prevent invalid pricing tables.
+- **Macro Preservation**: `processor.ts` now extracts preamble macros to support simple math variables.
+
+## [1.9.37] - 2025-12-10 (Stabilization & Prompt Hardening)
+### Fixed
+- **TikZ Syntax (Deprecated Syntax Normalization)**:
+    - **Problem**: AI models generate deprecated `right of=` syntax, which ignores node widths and causes overlaps.
+    - **Fix**: Implemented Regex Normalizer in `tikz-engine.ts` to convert `right of=` -> `right=of ` (modern syntax) before rendering.
+    - **Result**: Diagrams respect node widths and spacing correctly.
+- **Universal Prompt Hardening**:
+    - **Problem**: "Ghost Content" (labels like `SECTION NAME:`) and Table Crashes (unescaped `&`) were persisting despite regex fixes.
+    - **Fix**: Updated System Prompts (Phase 3 & 5) with strict contracts: "NO LABELS" and "ESCAPE SPECIAL CHARACTERS".
+    - **Impact**: Solves the root cause of hallucinated labels and table layout breaks.
+- **Paragraph Rendering**:
+    - **Problem**: `\par` commands rendered as raw text.
+    - **Fix**: Pre-converted `\par` to `\n\n` in `LatexPreview.tsx`, enabling correct paragraph splitting.
+
 ## [1.9.30] - 2025-12-10 (The "Safe Modular Extraction" Refactor)
 ### Refactored
 - **Monolith Decomposition**: Split `LatexPreview.tsx` (3000+ lines) into the `latex-unifier` library.

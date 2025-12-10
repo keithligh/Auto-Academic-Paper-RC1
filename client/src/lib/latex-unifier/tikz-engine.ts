@@ -63,6 +63,38 @@ export function processTikz(latex: string): TikzResult {
         safeTikz = safeTikz.replace(/\\\\&/g, '\\\\ \\&'); // \\& → \\ \& (linebreak + space + escaped ampersand)
         safeTikz = safeTikz.replace(/([^\\])&/g, '$1\\&'); // raw & → \& (but not already escaped)
 
+        // FIX (v1.9.37): Modernize Deprecated Positioning Syntax (The "Overlap" Fix)
+        // AI often writes `right of=node` (center-to-center) instead of `right=of node` (edge-to-edge).
+        // With large nodes and small distances, this causes severe overlap.
+        // We auto-correct this if the 'positioning' library is used (implied by our standard env).
+
+        // FIX (v1.9.47): Modernization Compensation Flag
+        // If we modernize, we change semantics from Center-to-Center to Edge-to-Edge.
+        // This effectively ADDS a node width/height to the gap.
+        // We must detect this to compensate the `node distance` later.
+        // NOTE: Use .search() or .match() without global flag to avoid statefulness issues.
+        const modernizedMatch = safeTikz.match(/right\s+of\s*=|left\s+of\s*=|above\s+of\s*=|below\s+of\s*=/);
+        const isModernized = !!modernizedMatch;
+
+        if (isModernized) console.warn('[IntentEngine Debug] Modernization Detected! Match:', modernizedMatch ? modernizedMatch[0] : 'null');
+
+        safeTikz = safeTikz
+            .replace(/right\s+of\s*=/g, 'right=of ')
+            .replace(/left\s+of\s*=/g, 'left=of ')
+            .replace(/above\s+of\s*=/g, 'above=of ')
+            .replace(/below\s+of\s*=/g, 'below=of ');
+
+        // FIX (v1.9.44): Auto-Math Mode for Arrows using \ensuremath
+        // AI often writes "\rightarrow" in text mode inside nodes, causing "! Missing $ inserted".
+        // \ensuremath{\rightarrow} renders correctly in both text mode ($...$) and math mode.
+        safeTikz = safeTikz
+            .replace(/\\rightarrow/g, '\\ensuremath{\\rightarrow}')
+            .replace(/\\leftarrow/g, '\\ensuremath{\\leftarrow}')
+            .replace(/\\Rightarrow/g, '\\ensuremath{\\Rightarrow}')
+            .replace(/\\Leftarrow/g, '\\ensuremath{\\Leftarrow}')
+            .replace(/\\leftrightarrow/g, '\\ensuremath{\\leftrightarrow}')
+            .replace(/\\Leftrightarrow/g, '\\ensuremath{\\Leftrightarrow}');
+
 
 
         // GEOMETRIC POLYFILL: Manual Bezier Braces for TikZJax
@@ -191,6 +223,15 @@ export function processTikz(latex: string): TikzResult {
         const distMatch = options.match(/node distance\s*=\s*([\d\.]+)/);
         if (distMatch) {
             nodeDist = parseFloat(distMatch[1]);
+
+            // FIX (v1.9.47): Modernization Compensation
+            // If we detected legacy syntax (`below of=`), we changed semantics to Edge-to-Edge (`below=of`).
+            // This makes gaps HUGE. We must reduce the user's distance to approximate the original Center-to-Center intent.
+            // Heuristic: reduce by 50% (assuming node size ~= distance).
+            if (isModernized) {
+                console.log(`[IntentEngine] Modernization Compensation Active: Reducing node distance ${nodeDist}cm -> ${nodeDist * 0.5}cm`);
+                nodeDist = nodeDist * 0.5;
+            }
         }
 
         // 2. CLASSIFY
@@ -245,11 +286,19 @@ export function processTikz(latex: string): TikzResult {
             // Solution: Calculate yUnit based on Vertical Span to target a specific physical height.
             // v1.6.38: If verticalSpan == 0 (Relative Layout), force y=0.5 for title compression.
             // v1.6.40: Reduced targetHeight from 12cm to 8cm to reduce excessive empty space.
-            const targetHeight = 8; // cm (v1.6.40: reduced from 12cm for tighter layouts)
-            const rawY = verticalSpan > 0 ? (targetHeight / verticalSpan) : 0.5;
+            // FIX (v1.9.45): If user provided explicit `node distance` (distMatch), use y=1.0 (standard units)
+            // instead of y=0.5 (squashing).
+            // UPDATE (v1.9.47): Reverted v1.9.46 (Blind Compression). 
+            // We now handle compression via "Modernization Compensation" (see below), so we can trust standard y=1.0.
+            const targetHeight = 8; // cm 
+            const hasExplicitDist = !!options.match(/node distance\s*=\s*[\d\.]+/);
+            const rawY = verticalSpan > 0
+                ? (targetHeight / verticalSpan)
+                : (hasExplicitDist ? 1.0 : 0.5);
 
             // Clamp Y: Min 1.0cm (v1.6.40: lowered from 1.3 for tighter packing), Max 1.8cm (lowered from 2.2)
-            let yUnit = rawY === 0.5 ? 0.5 : Math.min(1.8, Math.max(1.0, rawY));
+            // Note: If rawY is exactly 0.5 or 1.0 from our branching above, we preserve it.
+            let yUnit = (rawY <= 1.0 && verticalSpan === 0) ? rawY : Math.min(1.8, Math.max(1.0, rawY));
 
             const xUnit = Math.min(dynamicClamp, optimalUnit); // Keeps width constraint
 
@@ -276,7 +325,9 @@ export function processTikz(latex: string): TikzResult {
                     // STRATEGY: Aggressive Protection (Restore v1.6.5 behavior)
                     // Text-heavy nodes need massive space. 3cm is NOT enough.
                     // If the provided distance is less than our target (8.4cm), we FORCE the boost.
-                    if (nodeDist < targetDist) {
+                    // FIX (v1.9.45): Relaxed threshold to 2.8cm to respect user's explicit 3cm choice.
+                    // 3cm is a common choice for vertical flowcharts.
+                    if (nodeDist < 2.8) {
                         extraOpts += `, node distance=${targetDist}cm`;
                     }
                 } else {
@@ -384,8 +435,20 @@ export function processTikz(latex: string): TikzResult {
         // we must not distort the grid. Only boost "Relative/Index" layouts (span === 0).
         const isRelativeOrIndex = horizontalSpan === 0;
 
+        // FIX (v1.9.45): HYPER BOOST TAMING
+        // User reported "Hyper Boost" on Y-axis for vertical flowcharts.
+        // If user provides explicit `node distance`, we MUST NOT override `y=` scale,
+        // because `below of=` uses node distance, but `y=` changes the unit vector.
+        // We only boost X to ensure text width accommodation.
+        const hasNodeDistance = options.includes('node distance');
+
         if (isTextHeavy && !options.includes('x=') && isRelativeOrIndex && intent !== 'LARGE') {
-            extraOpts += ', x=2.2cm, y=1.5cm';
+            // If node distance is set, only boost X. Trust Y to the user.
+            if (hasNodeDistance) {
+                extraOpts += ', x=2.2cm';
+            } else {
+                extraOpts += ', x=2.2cm, y=1.2cm'; // Reduced from 1.5cm
+            }
         }
 
         // LARGE INTENT: Strip node distance if we're overriding it (v1.6.5, v1.6.12 adaptive)
@@ -395,8 +458,19 @@ export function processTikz(latex: string): TikzResult {
             const distMatch = options.match(/node distance\s*=\s*([\d\.]+)/);
             if (distMatch) {
                 const existingDist = parseFloat(distMatch[1]);
-                if (existingDist < targetDist) {
-                    // Remove old node distance value (it'll be replaced with targetDist)
+
+                // FIX (v1.9.38): Align Stripping with Bifurcated Safety Net (v1.6.37)
+                // Previously, we stripped simply if existing < target (e.g. 3.5 < 5.0).
+                // But we only INJECT if existing < 0.5 (for Light).
+                // This caused "Permissive Respect" ranges (0.5 - 5.0) to lose their distance entirely.
+                // FIX (v1.9.45): Aligned with new relaxed threshold (2.8cm).
+
+                const shouldOverride = isTextHeavy
+                    ? (existingDist < 2.8) // Relaxed Aggressive (Safe)
+                    : (existingDist < 0.5);       // Permissive (Tight)
+
+                if (shouldOverride) {
+                    // Remove old node distance value (it'll be replaced with targetDist via extraOpts)
                     processedOptions = processedOptions.replace(/,?\s*node distance\s*=\s*[\d.]+\s*(cm)?/gi, '');
                     // Clean up any double commas or leading/trailing commas
                     processedOptions = processedOptions.replace(/,\s*,/g, ',').replace(/\[\s*,/g, '[').replace(/,\s*\]/g, ']');

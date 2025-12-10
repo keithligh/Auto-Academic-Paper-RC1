@@ -323,6 +323,12 @@
     /* Midrule style (light) */
 }
 
+/* FIX (v1.9.48): Force left alignment for all elements inside tables (especially lists) */
+.latex-preview td *,
+.latex-preview th * {
+    text-align: left !important;
+}
+
 /* Remove border from last row */
 .latex-preview tr:last-child td {
     border-bottom: none;
