@@ -166,6 +166,7 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
       // Fix: Support manual line breaks
       html = html.replace(/\\\\/g, '<br/>');
       html = html.replace(/\\newline/g, '<br/>');
+      html = html.replace(/\\par(?![a-zA-Z])/g, '\n\n'); // Fix: \par -> New Paragraph
       html = html.replace(/\\today/g, new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
 
       // Fix: Thousand Separators and Colons (v1.9.36)

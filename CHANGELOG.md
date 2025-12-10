@@ -119,6 +119,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 -   **TikZ Engine (Percent Stripping Fix)**:
     -   **Problem**: `100\%` in TikZ nodes was being truncated by the comment stripper `/.replace(/%.*$/gm, '')/`, causing "Undefined control sequence" errors.
     -   **Fix**: Implemented the "Token Replacement Strategy" (documented in v1.9.25 but missing from code). Protected `\%` as tokens before stripping comments.
+-   **Ghost Content Exorcism**:
+    -   **Problem**: AI was leaking "SECTION NAME:" and "CONTENT:" labels into the final LaTeX, and `\par` commands were rendering as raw text.
+    -   **Fix 1 (Sanitization)**: Added regex strippers in `latexGenerator.ts` to remove prompt residue.
+    -   **Fix 2 (Rendering)**: Updated `LatexPreview.tsx` to convert `\par` to `\n\n` (double newline), allowing the paragraph splitter to correctly wrap text in `<p>` tags.
 ### Fixed
 - **Dev Server Instability ("Exit 1")**:
   - **Symptom**: The backend server would crash (`exit 1`) whenever a frontend syntax error (e.g., in CSS or TSX) occurred.

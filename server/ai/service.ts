@@ -742,6 +742,7 @@ CRITICAL RULES:
 7. Ensure each claim is strengthened by the most relevant reference.
 8. USE \\begin{description} ... \\end{description} for lists of definitions.
 9. NEVER use \\ref{ref_X}. Wait for Phase 6 to insert citations.
+10. DO NOT include "SECTION NAME:" or "CONTENT:" labels. Just return the raw LaTeX content.
 
 EVIDENCE INTEGRATION TECHNIQUES:
 - "Research by [Author] demonstrates that..."

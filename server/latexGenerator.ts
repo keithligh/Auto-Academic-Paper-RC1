@@ -216,6 +216,12 @@ ${abstract}
                 // SANITIZATION: Remove redundant \section{...} if the AI hallucinated it at the start
                 secContent = secContent.replace(/^\s*\\section\{[^}]+\}\s*/i, "");
 
+                // SANITIZATION: Remove "SECTION NAME:" / "CONTENT:" hallucinations (AI chat residue)
+                // Example: "SECTION NAME: Introduction\nCONTENT:\nThis paper..."
+                secContent = secContent.replace(/^SECTION NAME:.*?\nCONTENT:\s*/is, "");
+                secContent = secContent.replace(/^SECTION TITLE:.*?\nCONTENT:\s*/is, "");
+                secContent = secContent.replace(/^CONTENT:\s*/is, "");
+
                 // Add Section Header
                 latex += `\\section{${secName}}\n\n`;
 
