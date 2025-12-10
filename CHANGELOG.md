@@ -123,6 +123,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     -   **Problem**: AI was leaking "SECTION NAME:" and "CONTENT:" labels into the final LaTeX, and `\par` commands were rendering as raw text.
     -   **Fix 1 (Sanitization)**: Added regex strippers in `latexGenerator.ts` to remove prompt residue.
     -   **Fix 2 (Rendering)**: Updated `LatexPreview.tsx` to convert `\par` to `\n\n` (double newline), allowing the paragraph splitter to correctly wrap text in `<p>` tags.
+    -   **Fix 3 (Deep Logic - Universal)**: Hardened AI Prompts in `service.ts` (Phase 3 & 5) with "ESCAPE SPECIAL CHARACTERS" and "NO LABELS" rules, preventing the root cause of ghost content and table crashes (unescaped `&`).
 ### Fixed
 - **Dev Server Instability ("Exit 1")**:
   - **Symptom**: The backend server would crash (`exit 1`) whenever a frontend syntax error (e.g., in CSS or TSX) occurred.

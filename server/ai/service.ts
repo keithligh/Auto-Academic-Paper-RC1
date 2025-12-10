@@ -424,7 +424,8 @@ CRITICAL INSTRUCTIONS:
 - GENERATE ENHANCEMENTS: Add scholarly elements(diagrams, formulas, theorems, etc.).
 - NO NESTED SECTIONS: Do NOT use \\section commands inside the "content" field.
 - NO SECTION NUMBERING: Use "Introduction", NOT "1. Introduction".
-- NO COLORS: Do NOT use \\\\textcolor or \\\\color.
+- NO COLORS: Do NOT use \\textcolor or \\color.
+- ESCAPE SPECIAL CHARACTERS: You MUST escape & (as \\&) and % (as \\%) in text content.
 - Output valid JSON matching the schema.
 
 `;
@@ -435,7 +436,7 @@ OUTPUT SCHEMA:
 {
     "title": "String",
         "abstract": "String",
-            "sections": [{ "name": "String (NO NUMBERS)", "content": "LaTeX String (NO CITATIONS)" }],
+            "sections": [{ "name": "String (NO NUMBERS)", "content": "Raw LaTeX Only. Starts directly with text/commands. NO LABELS. (NO CITATIONS)" }],
                 "references": [],
                     "enhancements": [{ "type": "String", "title": "String", "description": "String", "content": "LaTeX", "location": "String", "reasoning": "String" }]
 }
@@ -742,7 +743,9 @@ CRITICAL RULES:
 7. Ensure each claim is strengthened by the most relevant reference.
 8. USE \\begin{description} ... \\end{description} for lists of definitions.
 9. NEVER use \\ref{ref_X}. Wait for Phase 6 to insert citations.
+9. NEVER use \\ref{ref_X}. Wait for Phase 6 to insert citations.
 10. DO NOT include "SECTION NAME:" or "CONTENT:" labels. Just return the raw LaTeX content.
+11. ESCAPE SPECIAL CHARACTERS: You MUST escape & (as \\&) and % (as \\%) in text, especially in tables.
 
 EVIDENCE INTEGRATION TECHNIQUES:
 - "Research by [Author] demonstrates that..."
@@ -772,7 +775,7 @@ OUTPUT SCHEMA:
         {
             "title": "String",
                 "abstract": "String",
-                    "sections": [{ "name": "String", "content": "LaTeX String (REWRITTEN)" }],
+                    "sections": [{ "name": "String", "content": "Raw LaTeX Only. Starts directly with text/commands. NO LABELS." }],
                         "references": [],
                             "enhancements": [preserve existing]
         }
