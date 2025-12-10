@@ -3,7 +3,7 @@ import katex from 'katex';
 /**
  * latex-to-html.ts
  * 
- * THE NUCLEAR OPTION
+ * THE DIRECT OPTION
  * A robust, fault-tolerant LaTeX parser.
  */
 
@@ -344,7 +344,13 @@ export function convertLatexToHtml(latex: string): string {
 
     // Tables
     const processTable = (fullMatch: string) => {
-        const bodyRaw = fullMatch.replace(/^\\begin\{(tabular|tabularx)\}.*?\{.*?\}/, '').replace(/\\end\{(tabular|tabularx)\}/, '');
+        let bodyRaw = fullMatch.replace(/^\\begin\{(tabular|tabularx)\}.*?\{.*?\}/, '').replace(/\\end\{(tabular|tabularx)\}/, '');
+
+        // FIX (v1.9.25): Handle "Escaped Escape" Ampersands (AI Hallucination)
+        // Convert `\\&` (which looks like Row Break + Ampersand) into `\&` (Escaped Ampersand).
+        // This prevents "Fear \\& Greed" from splitting rows.
+        bodyRaw = bodyRaw.replace(/\\\\&/g, '\\&');
+
         const rows = smartSplitRows(bodyRaw).filter(r => r.trim());
         let html = '<div class="table-wrapper"><table><tbody>';
         rows.forEach(row => {

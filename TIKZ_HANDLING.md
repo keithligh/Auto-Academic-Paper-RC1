@@ -2,7 +2,7 @@
 
 This document details the specific engineering strategies used to render compiled TikZ diagrams in the browser within the Auto Academic Paper application.
 
-Rendering TikZ in the browser is notoriously difficult because TikZ is a Turing-complete language that requires a full TeX engine. We use an **Iframe Isolation Strategy** (part of the **Nuclear Option Architecture** detailed in `LATEX_PREVIEW_SYSTEM.md`) to achieve this without crashing the main application.
+Rendering TikZ in the browser is notoriously difficult because TikZ is a Turing-complete language that requires a full TeX engine. We use an **Iframe Isolation Strategy** (part of the **Strict Isolation Architecture** detailed in `LATEX_PREVIEW_SYSTEM.md`) to achieve this without crashing the main application.
 
 ---
 
@@ -42,6 +42,14 @@ Raw LaTeX cannot be fed directly to TikZJax strings because of JavaScript encodi
 We inject TikZ code into a dedicated `<iframe>`.
 -   **CSS Isolation**: Prevents Tailwind conflicts.
 -   **Error Containment**: Crashes stay in the iframe.
+-   **Centering**: Iframes are wrapped in flexbox containers for horizontal centering.
+-   **Font Strategy (China-Friendly - v1.6.42)**:
+  -   **Problem**: `tikzjax.com` is often blocked or slow in China, leading to 404s on fonts and "nullfont" errors.
+  -   **Solution**: We load CSS from **jsDelivr** using the `node-tikzjax` package, which has the correct file structure.
+  -   **URL**: `https://cdn.jsdelivr.net/npm/node-tikzjax@latest/css/fonts.css`
+-   **Log Silencing (v1.6.42)**:
+  -   **Problem**: TikZJax emits thousands of distinct `jsTeX` logs ("Missing character", "This is jsTeX").
+  -   **Solution**: We inject a script into the iframe that intercepts `console.log/warn/error` and suppresses any message containing `jsTeX` keywords.
 
 ### Phase 4: The Context Injection (The Wrapping Fix)
 We explicitly re-wrap extracted content in `\begin{tikzpicture}` inside the iframe.
@@ -128,10 +136,15 @@ Unlike WIDE (which shrinks), FLAT **expands** the coordinate system:
 ```
 targetRatio = 2.0  // Balanced appearance
 yMultiplier = min(3.0, max(1.5, aspectRatio / targetRatio))
-xMultiplier = 1.5  // 50% horizontal expansion for labels
-
+xMultiplier = 1.6  // 1.6x base (v1.9.18)
 newY = existingY × yMultiplier  // e.g., 1cm × 2.5 = 2.5cm
-newX = existingX × xMultiplier  // e.g., 1cm × 1.5 = 1.5cm
+newX = existingX × xMultiplier  // e.g., 1cm × 1.6 = 1.6cm
+
+**Crowded Timeline Exception (v1.9.18)**:
+If `nodes > 7`, we apply an **Aggressive Expansion**:
+- `xMultiplier = 2.3` (Boosts 3.5cm → 8.05cm)
+- **Goal**: Accommodate long text labels in dense diagrams without node collisions.
+- **Philosophy**: "Best Estimate" based on node count proxy.
 ```
 
 **Why Stripping Old Values is Required:**
@@ -235,8 +248,10 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 > **Reasoning**: A diagram with 5.6 vertical span was getting `y = 12/5.6 = 2.14cm`. Now it gets `y = 8/5.6 = 1.43cm`.
 > **Result**: ~30% reduction in vertical empty space while maintaining readability.
 
-#### 14. FLAT Intent Font Reduction (v1.6.41)
-> **Problem**: FLAT diagrams (timeline-style, aspect ratio > 3:1) with many nodes had overlapping text labels even after x/y multiplier expansion.
+#### 6.2 FLAT (Timeline) Layout
+- **Detection**: `aspectRatio >= 3.0` (Inclusive threshold v1.9.19).
+- **Logic**:
+  - **Standard**: `xMultiplier = 1.6`, `yMultiplier` adaptive (1.5x - 3.0x). with many nodes had overlapping text labels even after x/y multiplier expansion.
 > **Root Cause**: Nodes with `minimum width=2.5cm` don't resize when coordinates scale. The text "AI research, personas, journeys" (~6cm) overflows the 2.5cm box.
 > **Key Insight**: x/y multipliers expand spacing between node *centers*, but they don't shrink text that overflows fixed-width boxes.
 > **The Fix**: For FLAT intent diagrams with ≥5 nodes, inject `font=\small`.
@@ -279,8 +294,13 @@ While the TikZ engine handles the rendering inside the iframe, the **Integration
 #### 15. The Browser Engine Protection Suite (v1.9.5)
 The TikZ engine was prone to "Blank" renders due to browser limitations. We implemented a protection suite:
 
-1.  **Comment Stripping (Critical)**: `safeTikz.replace(/%.*$/gm, '')`
-    *   **Why**: We flatten code to single lines for processing. If a comment `%` exists, it consumes the entire rest of the flattened line. This caused valid code to be commented out.
+1.  **Comment Stripping V2 (Token Replacement Strategy - v1.9.25)**:
+    *   **Old Way**: Regex `/(?<!\\)%.*$/gm` (Negative Lookbehind). **Failed** because lookbehinds are flaky in some environments and risk false negatives.
+    *   **New Way**:
+        1.  `safeTikz.replace(/\\%/g, '__PCT__')` (Save escaped percents)
+        2.  `safeTikz.replace(/%.*$/gm, '')` (Nuke comments)
+        3.  `safeTikz.replace(/__PCT__/g, '\\%')` (Restore escaped percents)
+    *   **Why**: It guarantees that `100\%` is never mistaken for a comment start, without needing advanced regex features.
 2.  **Library Injection**: We inject `\usetikzlibrary{arrows,shapes,calc,positioning,decorations.pathreplacing}`.
     *   **Why**: The browser doesn't autoload libraries. Missing `arrows` causes a silent crash.
 3.  **Unsupported Feature Strip**:

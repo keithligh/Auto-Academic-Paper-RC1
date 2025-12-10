@@ -6,11 +6,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.28] - 2025-12-10 (Documentation: The 60KB -> 4KB Refactor)
+### Added
+- **Architecture Documentation**: Added "The Great Refactor" section to `LATEX_PREVIEW_SYSTEM.md`, visualizing the massive simplification of `LatexPreview.tsx`.
+- **Lessons Learned**: Added Lesson 55 ("The Component Diet") detailing why moving logic out of UI components is critical for maintainability.
+
+## [1.9.18] - 2025-12-10 (Intent Engine Refinement)
+### Improved
+- **TikZ "Crowded Flat" Handling**:
+  - **Symptom**: Timeline diagrams with many nodes (>7) had text overlaps due to insufficient horizontal spacing (default 1.5x).
+  - **Fix**: Implemented "Crowded Heuristic" in Intent Engine. If `nodes > 7`, layout switches to "Aggressive Expansion" mode (`xMultiplier = 2.3`), boosting spacing from ~5.25cm to ~8.05cm.
+  - **Philosophy**: "Best Estimate" layout based on node count proxy.
+
+## [1.9.19] - 2025-12-10 (Intent Engine Threshold Patch)
+### Fixed
+- **TikZ FLAT Detection Edge Case (Ratio 3.0)**:
+  - **Symptom**: Diagrams with exactly 3:1 aspect ratio (e.g., 15x5) were falling through `isFlat > 3.0` check and being classified as `LARGE`, which uses tighter spacing.
+  - **Fix**: Relaxed threshold to `isFlat >= 3.0`. This correctly captures standard timeline layouts into the FLAT engine, leveraging the new "Crowded" expansion logic.
+
+## [1.9.20] - 2025-12-10 (Legibility Tuning)
+## [1.9.23] - 2025-12-10 (Missing Intent Implementation)
+### Added
+- **WIDE Intent Logic**:
+  - **Symptom**: Diagrams with `horizontalSpan > 14` were defaulting to `LARGE` because `WIDE` logic was documented but code was missing/merged.
+  - **Fix**: Implemented distinct `WIDE` intent for non-FLAT wide diagrams.
+  - **Logic**: `scale = (14 / span) * 0.9` (clamped 0.5 - 1.0). Includes `transform shape`.
+  - **Goal**: Ensure massive 2D diagrams shrink to fit A4 page width.
+
+## [1.9.24] - 2025-12-10 (Crucial Crash Fix)
+### Fixed
+- **"The Killer Percent" Bug**:
+  - **Symptom**: Diagrams containing percentages (e.g., `100\%`) crashed the Preview with "Undefined control sequence".
+  - **Root Cause**: The comment stripping regex `/%.*$/gm` blindly deleted everything after the `%`, including the backslash and the closing braces of the node.
+  - **Fix**: Updated regex to `/(?<!\\)%.*$/gm` (Negative Lookbehind) to only remove *unescaped* comments.
+
+## [1.9.25] - 2025-12-10 (Robustness Patch)
+### Fixed
+- **TikZ Comment Stripping V2**:
+  - **Regression**: The negative lookbehind regex fix (v1.9.24) failed in some environments or contexts vs `100\%`.
+  - **Fix**: Switched to **Token Replacement Strategy**. Replace `\%` -> `__PCT__`, Strip Comments, Restore `__PCT__` -> `\%`. 100% reliable.
+- **Table Row Break Glitch**:
+  - **Symptom**: Tables containing `\\&` (e.g., `Fear \\& Greed`) were breaking rows prematurely.
+  - **Fix**: Added pre-processing step in Table Parser to normalize `\\&` -> `\&` before splitting rows.
+
+## [1.9.26] - 2025-12-10 (Global Robustness)
+### Fixed
+- **Global Table Fix ("Nuclear Option")**:
+  - **Issue**: Previous table fix was only in `latex-to-html.ts` (HTML parser), but the system often runs `jsTeX` (PDF engine).
+  - **Fix**: Moved the `\\&` -> `\&` replacement to `sanitizeLatexForBrowser` in `LatexPreview.tsx`. It now runs **globally** before *any* parser (HTML or PDF) sees the code.
+  - **Result**: Tables with escaped ampersands work everywhere.
+- **TikZ Leaks**:
+  - **Refinement**: Reinforced the TikZ extraction regex to ensuring diagrams are pulled out before `jsTeX` runs, preventing `jsTeX` crashes on `100\%`.
+
+## [1.9.27] - 2025-12-10 (Universal Text Formatting - ROOT FIX)
+### Fixed
+- **Text Formatting Pipeline**:
+  - **Root Cause**: Paragraph text was bypassing `parseLatexFormatting()` entirely, being rendered as raw text nodes in the DOM walker (line 1661).
+  - **Result**: LaTeX notation like `{,}`, `\textbf{}`, `\&`, etc. appeared literally in paragraphs, even though fixes existed in the formatting function.
+  - **Fix**: Modified the DOM walker to call `parseLatexFormatting()` on ALL text before creating nodes.
+  - **Impact**: UNIVERSAL. All text now receives consistent formatting - thousand separators, bold/italic, special characters, etc.
+
+## [1.9.22] - 2025-12-10 (The Override Patch)
+### Fixed
+- **Crowded Timeline Font Override**:
+  - **Symptom**: The v1.9.21 `font=\large` injection had no effect because it was prepended to the user's `font=\small` option, which took precedence in TikZ (last wins).
+  - **Fix**: Explicitly **stripped** the `font=...` option from the user's input string before injecting `font=\Large`.
+  - **Update**: Upgraded to `\Large` (Capital L) to better survive the 0.45x browser scaling.
+
 ## [1.9.17] - 2025-12-10 (The Server Stability Patch)
 ### Fixed
 - **Dev Server Instability ("Exit 1")**:
   - **Symptom**: The backend server would crash (`exit 1`) whenever a frontend syntax error (e.g., in CSS or TSX) occurred.
-  - **Root Cause**: `server/vite.ts` contained a "Nuclear Option" in its custom logger: `process.exit(1)` on *any* error intercepted from Vite. This meant a single typo in the client code killed the entire dev environment.
+  - **Root Cause**: `server/vite.ts` contained a "Hard Exit" in its custom logger: `process.exit(1)` on *any* error intercepted from Vite. This meant a single typo in the client code killed the entire dev environment.
   - **Fix**: Removed `process.exit(1)`. The server now logs the error but stays alive, allowing hot-reloading to fix the typo.
   - **Impact**: Massive improvement in Developer Experience (DX) and system uptime.
 
@@ -59,7 +126,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - **Fix**: Implemented **String-Level Replacement** (`html.replace`) *before* DOM injection. This guarantees placeholders are restored regardless of nesting depth.
 - **Missing List Bullets (The "Specificity" Fix)**:
     - **Symptom**: `itemize` and `enumerate` lists had no bullets/numbers.
-    - **Root Cause**: `latex-base.css` contained a nuclear reset `li { list-style: none }` which beat inherited styles from `ul`.
+    - **Root Cause**: `latex-base.css` contained a hard reset `li { list-style: none }` which beat inherited styles from `ul`.
     - **Fix**: Updated `latex-article.css` to target `.latex-itemize li` directly with `!important`, overriding the base reset.
 - **"The Theta Problem" (Math Normalization)**:
     - **Symptom**: AI output `$\theta$_t` (subscript outside formatting) causing rendering errors.
@@ -97,6 +164,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **The Lesson**: **Don't Style Ghosts.** Never write a CSS rule without verifying the class name in the Inspector first. A rule that targets nothing fixes nothing.
 
 
+## [1.6.42] - 2025-12-10 (China-Friendly Settings Upgrade)
+### Fixed
+- **TikZ Font 404s**: TikZ diagrams had invisible text ("nullfont" error) because `tikzjax.com` was blocked/slow in China.
+  - **Correction**: Switched font CDN to **jsDelivr** using the `node-tikzjax` package (which has correct file structure).
+  - **URL**: `https://cdn.jsdelivr.net/npm/node-tikzjax@latest/css/fonts.css`.
+- **TikZ Log Spam (The "Silence Protocol")**:
+  - **Symptom**: Console was flooded with thousands of `jsTeX` logs ("Missing character", "This is jsTeX").
+  - **Correction**: Injected a console interceptor script into the iframe that filters out all `jsTeX`-related noise.
+  - **Result**: Clean console, with a single transparency notice on startup.
+
 ## [1.6.43] - 2025-12-09 (SSOT Alignment & Indentation Fix)
 ### Fixed
 - **Phantom Indentation**: All paragraphs were forcibly indented by 1.5em due to a global CSS variable.
@@ -127,7 +204,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Problem**: FLAT diagrams with `minimum width` nodes had text overflow because x/y multipliers don't shrink text.
   - **Solution**: Inject `font=\small` when `nodeMatches.length >= 5` to fit labels within fixed-width boxes.
 
-## [1.8.1] - 2025-12-08 (The Nuclear Option)
+## [1.8.1] - 2025-12-08 (The Custom Parser)
 ### Architecture Change
 - **Removed `latex.js` Dependency**: Completely removed the fragile `latex.js` library.
   - **Reasoning**: It was the single point of failure (crashes on unknown macros, no tabularx support, no TikZ support, difficult error handling). The "Containment" strategy was costing more effort than a replacement.

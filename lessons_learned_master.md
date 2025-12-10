@@ -148,6 +148,7 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Rule**: **If a library fails at a task twice, remove the task from the library.** Don't patch the library; patch the pipeline to bypass the library.
 
 ## 19. The "Scorched Earth" Parser (100% No Fallback)
+## 19. The "Strict Parser" (100% No Fallback)
 -   **The Failure**: A "Universal" regex-based list parser failed when it encountered optional arguments (`\begin{enumerate}[label=\textbf{1.}]`). The regex was too strict, causing the complex list to fall back to the buggy `latex.js` renderer.
 -   **The Insight**: Regex is a "happy path" optimization. It cannot handle arbitrarily nested structures (braces inside brackets inside braces) reliably.
 -   **The Fix**: Abandoned regex. Implemented a **Manual Character-Walker** that counts brace balance `depth++ / depth--`.
@@ -360,7 +361,7 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 -   **The Fix**: Consolidated all controls into one bar.
 -   **The Lesson**: **Every vertical pixel costs cognitive load.** If a header doesn't offer a unique control, kill it. Use visual hierarchy (active state), not text labels, to distinguish panes.
 
-### Lesson 43: The "Nuclear Option" (Abandoning the Sinking Ship) (v1.8.1)
+### Lesson 43: The "Clean Slate" Strategy (Abandoning the Sinking Ship) (v1.8.1)
 -   **Context**: `latex.js` was crashing on everything: unsupported macros, tabularx, math. We spent weeks building "Containment Protocols" to isolate it.
 -   **The Failure**: We were fighting the library, not using it. The "Hybrid" approach was 90% custom code and 10% `latex.js`, but `latex.js` caused 100% of the crashes.
 -   **The Decision**: **Abandon `latex.js` entirely.** We wrote a lightweight, fault-tolerant custom parser (`latex-to-html.ts`) that handles the 20% of LaTeX we actually need (sections, standard formatting) and integrates our existing custom engines (TikZ, Math, Tables).
@@ -637,11 +638,11 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
     - Replace the placeholders in the **Raw HTML String** (`html.replace(...)`) *before* assigning `innerHTML`.
 - **The Lesson**: **Don't trust the DOM to hold your hand.** If you have the source string and a simple token replacement, do it in the string. It works 100% of the time. Only use DOM walking for replacing *elements* (nodes), not *content* (text).
 
-## 20. The "Nuclear Reset" Trace (CSS Inheritance)
+## 20. The "Hard Reset" Trace (CSS Inheritance)
 - **The Problem**: Bullets disappeared from specific lists. We patched the container (`ul`), added `!important`, added padding. Nothing worked.
 - **The Root Cause**: We found a "Nuclear Option" in the base stylesheet: `li { list-style: none; }`.
 - **The Mechanism**: A direct rule on an element (`li`) **always overrides** an inherited rule from a parent (`ul`), even if the parent has `!important`. The bullet property belongs to the list item, not the list.
-- **The Lesson**: **Inspect the Leaf Node.** When inheritance fails, checking the parent is useless. You must check the computed style of the *element itself* to find direct overrides. And never write "nuclear resets" like `li { ... }` in a base theme unless you really, really mean it.
+- **The Lesson**: **Inspect the Leaf Node.** When inheritance fails, checking the parent is useless. You must check the computed style of the *element itself* to find direct overrides. And never write "hard resets" like `li { ... }` in a base theme unless you really, really mean it.
 
 ## 21. The "Ghost Class" Fallacy (CSS Debugging)
 - **The Problem**: We added `overflow-y: hidden` to `.equation-container` to fix scrollbars. It did nothing. We added `!important`. Nothing.
@@ -692,3 +693,43 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 - **The Reality**: The `npm run dev` server had stopped hot-reloading or the browser was caching the bundle excessively.
 - **The Fix**: `CTRL+C`, `npm run dev`, `CTRL+F5` (Hard Refresh).
 - **The Lesson**: **If the code makes no sense, restart the server.** Before questioning the laws of logic, question the medium of delivery. Stale code is the most expensive bug to debug.
+
+## 53. The "China-Friendly" CDN Discovery (Package Structure Matters)
+- **Incident**: TikZ diagrams were rendering with invisible text ("nullfont" errors) because `tikzjax.com` was blocked/slow in China.
+- **The Failure**: We tried switching to `cdn.jsdelivr.net/npm/tikzjax` but it 404'd.
+- **The Insight**: The `tikzjax` NPM package is broken or empty. The correct package is `node-tikzjax`, which contains the `dist` and `css/fonts.css` files with relative paths to `bakoma/ttf`.
+- **The Lesson**: **NPM Package Names are Arbitrary.** Just because the library is called "TikZJax" doesn't mean the NPM package is `tikzjax`. Always verify the package contents (via unpkg/jsDelivr browser) before hardcoding a CDN.
+- **The Outcome**: Switched to `node-tikzjax` via jsDelivr, fixing font loading globally.
+
+## 54. The "Silence Protocol" (Iframe Log Interception)
+- **Problem**: The TikZJax engine (jsTeX) spews thousands of "Missing character" logs into the console, drowning out actual debug info. The user hated this "latex.js spam".
+- **The Insight**: You cannot configure `console.log` behavior inside a closed WASM binary.
+- **The Solution**: **Intercept the Medium.** We injected a script into the iframe that wraps `console.log`, `warn`, and `error`. It regex-filters messages containing "jsTeX" or "Missing character" before passing them to the browser's native console.
+- **The Nuance**: We added a single startup log ("Antigravity: Silencing TikZJax logs...") to rely transparency.
+- **The Lesson**: **If you can't fix the source, filter the output.** When using black-box libraries (WASM) that are too noisy, build a dam (interceptor) downstream rather than trying to patch the dam upstream.
+
+## 55. The Component Diet (60KB to 4KB)
+- **Context**: `LatexPreview.tsx` grew to 3000+ lines (66KB). It had own internal parsers, specialized `useEffect` hooks for every LaTeX feature (Math, TikZ, Lists), and complex state management.
+- **The Failure**: It became unmaintainable. Adding a feature required surgery in a React component, which is the wrong place for text processing logic.
+- **The Drastic Change**: We gutted it. We moved ALL logic to a pure TypeScript pipeline (`latex-unifier/`).
+- **The Result**: `LatexPreview.tsx` is now ~120 lines (4KB). It does one thing: **Receive HTML -> Inject HTML**.
+- **The Lesson**: **UI Components should be Dumb.** If your React component has 3000 lines of logic, you aren't writing a UI; you are writing a library inside a view. Extract the library. The View should only care about *displaying* the result of the logic, not *calculating* it.
+
+## 56. The Killer Percent (Regex Lookbehind Trap)
+- **Incident**: A simple regex to strip comments `/(?<!\\)%.*$/gm` caused "SyntaxError: Invalid regular expression" or silent failures in certain environments (Safari, older Node).
+- **The Failure**: Negative Lookbehinds `(?<!...)` are a relatively new JS feature (ES2018) and are performance-heavy/fragile.
+- **The Fix**: **Token Replacement Strategy**. `replace(/\\%/g, '__PCT__')` -> `replace(/%.*$/)` -> Restore.
+- **The Lesson**: **Don't be clever with Regex.** Structural tokenization (Swap -> Process -> Swap) is infinitely more robust, readable, and debuggable than lookbehinds/lookaheads.
+
+## 57. The Double-Escape Chain (Table Row Glitch)
+- **Incident**: Tables corrupted when cells contained `&` (e.g., "S&P 500").
+- **The Chain**: User Input (`&`) -> AI (`\&`) -> JSON Stringify (`\\&`) -> FixJson (`\\\\&`) -> JSON Parse (`\\&`).
+- **The Bug**: The Table Parser saw `\\&` and split on `\\` (Row Break) then `&` (Col Sep), destroying the grid.
+- **The Fix**: `smartSplitRows` now looks ahead. If `\\` is followed by a character (like `&`), it's an escape, not a break.
+- **The Lesson**: **Escaping is a Hydra.** Data passes through multiple layers (AI, JSON, Transport, Parser). You cannot trust that `\` means `\` by the time it reaches you. Always inspect the *actual* runtime string before writing split logic.
+
+## 58. The Blind Parser (Text Formatting)
+- **Incident**: Standard paragraphs were rendering raw LaTeX commands (`\textbf{Hello}`) because we only applied formatting to *Manually Parsed Blocks* (Tables, Algorithms).
+- **The Bug**: The main body was just being wrapped in `<p>` tags without processing.
+- **The Fix**: Applied a **Universal Paragraph Map** that runs `parseLatexFormatting()` on *every* text block before injection.
+- **The Lesson**: **Don't Special Case the Norm.** We spent weeks perfecting complex table formatting but forgot to format the actual body text. The "Default Path" needs the same pipeline as the "Edge Case Path".

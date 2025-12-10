@@ -1,8 +1,8 @@
-# Custom LaTeX Preview Architecture ("The Nuclear Option")
+# Custom LaTeX Preview Architecture ("The Independent Option")
 
 The browser-based preview system uses a **Fully Custom TypeScript Parser** (`latex-to-html.ts`) to render academic documents. We have **abandoned `latex.js` entirely** in favor of a robust, fault-tolerant "SaaS" (Software as a Service) parser chassis that integrates our battle-tested custom rendering engines.
 
-## The Pivot: Why We Nuked `latex.js`
+## The Pivot: Why We Removed `latex.js`
 
 We previously used a "Hybrid" architecture where we tried to sanitize input for `latex.js`. It failed because:
 

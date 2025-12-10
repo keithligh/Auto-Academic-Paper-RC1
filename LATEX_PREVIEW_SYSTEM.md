@@ -1,8 +1,8 @@
-# Custom LaTeX Preview Architecture ("The Nuclear Option")
+# Custom LaTeX Preview Architecture ("The Independent Option")
 
 The browser-based preview system uses a **Fully Custom TypeScript Parser** (`latex-to-html.ts`) to render academic documents. We have **abandoned `latex.js` entirely** in favor of a robust, fault-tolerant "SaaS" (Software as a Service) parser chassis that integrates our battle-tested custom rendering engines.
 
-## The Pivot: Why We Nuked `latex.js`
+## The Pivot: Why We Removed `latex.js`
 
 We previously used a "Hybrid" architecture where we tried to sanitize input for `latex.js`. It failed because:
 
@@ -12,71 +12,48 @@ We previously used a "Hybrid" architecture where we tried to sanitize input for 
 
 **The Solution:** We built our own "Dumb but Robust" parser.
 
-- **Philosophy**: "Show Something." If a command is unknown, ignored it or show raw text. Never crash.
-- **Control**: We own every pixel of the output.
+### The Great Refactor (Visualized)
 
----
+The transformation of `LatexPreview.tsx` represents the shift from "Monolithic Smart Component" to "Dumb View Layer".
 
-## 1. The Architecture: Chassis + Engines
+| Metric | Old Architecture (v1.5) | New Architecture (v1.9) |
+| :--- | :--- | :--- |
+| **Logic Location** | Internal (React Hooks) | External (Pure TypeScript Pipeline) |
+| **File Size** | ~66 KB (3000+ lines) | ~4 KB (120 lines) |
+| **Philosophy** | "Sanitize for Library" | "Generate HTML Directly" |
+| **Dependencies** | `latex.js`, `dompurify` | `katex` (CSS only), `iframe` |
+| **Stability** | Fragile (Exceptions Crash UI) | Robust (Try/Catch in Pipeline) |
 
-The transformation pipeline (`convertLatexToHtml`) operates in a single synchronous pass:
+**The New Role of `LatexPreview.tsx`**:
+1.  **Receive String**: Accepts `latexContent`.
+2.  **Call Pipeline**: Invokes `processLatex(content)` (Synchronous).
+3.  **Inject HTML**: Sets `dangerouslySetInnerHTML`.
+4.  **Rehydrate**: Walks DOM to inject interactive placeholders (if any).
+5.  **Inject Styles**: Appends scoped CSS.
+*That is it. It contains NO rendering logic.*
 
-```mermaid
-graph TD
-    Input[Raw LaTeX] --> Extraction[Extraction Phase]
-    Extraction -->|TikZ Blocks| TikZ[TikZ Engine]
-    Extraction -->|Math Blocks| Math[KaTeX Engine]
-    Extraction -->|Code Blocks| Code[Verbatim Engine]
+### 3. Rendering Engine (The "Zero-Library" Core)
+**Status: PURE HTML + ISOLATED TIKZ**
 
-    Extraction -->|Text with Placeholders| Parser[SaaS Parser Chassis]
+The system has been purged of the monolithic `latex.js` library for document rendering.
+- **Document Body**: Parsed entirely by our custom regex/heuristic pipeline (`processor.ts`) into pure HTML/CSS.
+- **Math**: Rendered by **KaTeX** (fast, semantic).
+- **TikZ Diagrams**: Rendered by **TikZJax** (WebAssembly `jsTeX`) running in **Isolated Iframes**.
+    - *Note*: TikZJax is the ONLY remaining "LaTeX" engine, used exclusively for diagrams.
+    - *Constraint*: It requires external font assets (`fonts.css`).
 
-    Parser -->|Lists| ListEngine[Recursive List Parser]
-    Parser -->|Tables| TableEngine[Manual Table Walker]
-    Parser -->|Sections| Structure[Section/Header Parser]
-    Parser -->|Text| Formatting[Text Formatter]
+### 4. The "China-Friendly" Font Strategy (v1.6.42)
+To ensure accessibility in regions with restricted internet (e.g., China) and to fix "Missing character" / "nullfont" errors:
+- **CDN**: We bypassed `tikzjax.com` (often blocked/slow).
+- **Source**: We use **jsDelivr** (`cdn.jsdelivr.net`), which has robust global routing.
+- **Package**: We use `node-tikzjax` (instead of `tikzjax`), as it correctly exposes the `bakoma/ttf` font structure required by the CSS.
+    - URL: `https://cdn.jsdelivr.net/npm/node-tikzjax@latest/css/fonts.css`
 
-    Formatting -->|HTML Fragments| Injection[Injection Phase]
-    Injection -->|Final HTML| Output[DOM Injection]
-```
-
-### 1.1 The "SaaS" Chassis
-
-The core parser operates on a simple principle: **Recursive Environment Parsing**.
-
-- It scans for `\begin{env} ... \end{env}`.
-- It identifies well-known environments (`itemize`, `tabular`, `abstract`) and dispatches them to specialized engines.
-- It handles standard commands (`\section`, `\textbf`) via regex replacement.
-- **Fault Tolerance**: Unknown commands `\foo{bar}` are either stripped to `bar` or ignored, preventing crashes.
-
-## Encapsulation Strategy ("Hybrid Encapsulation")
-
-We use a multi-stage pipeline designed to be **Robust to AI Hallucinations**:
-
-1. **Normalization & Healing (The Doctor)**: Before we even parse, we repair common AI syntax errors:
-   - **Math Healer**: Merges fragmented equations (e.g., `$A$ = $B$`).
-   - **Notation Normalizer**: Fixes orphaned subscripts (e.g., `$\theta$_t` → `$\theta_t$`).
-   - **Sanitizer**: Strips redundant `$` inside `\begin{equation}`.
-2. **Extraction (The Protocol)**: We identify complex elements (Math, TikZ, Tables) and **extract them** from the document.
-3. **Placeholder Injection (The Hybrid Container)**: We replace these elements with unique **Placeholder IDs** (e.g., `LATEXPREVIEWTIKZBLOCK1`).
-4. **String-Level Restoration (The Reveal - v1.9.12)**:
-   - **Old Way**: Walking the DOM after render. (failed on nested lists).
-   - **New Way**: We globally replace `LATEXPREVIEW...` placeholders in the final HTML **string** before injecting it into the DOM. This ensures content appears everywhere, even inside deep structures.
-
----
-
-### Critical: Extraction Order
-
-> **⚠️ IMPORTANT (v1.2.0)**: The order of extraction matters!
-
-TikZ must be extracted **BEFORE** math because TikZJax handles math natively. If we extract math first, TikZ node labels will contain placeholder text like `LATEXPREVIEWMATH10` instead of actual formulas.
-
-**Top-level extraction order:**
-
-1. TikZ & Images
-2. Math (KaTeX) - see sub-order below
-3. Tables
-4. Bibliography
-5. Everything else
+### 5. The "Silence Protocol" (v1.6.42)
+Since TikZJax is a full TeX engine, it emits verbose logs (`This is jsTeX...`, `Missing character...`).
+- We inject a **Console Interceptor** into the TikZ iframe.
+- It filters out all `jsTeX`-related noise to keep the developer console clean.
+- A single "Silencing Active" notice is logged on startup for transparency.
 
 **Math extraction sub-order (CRITICAL):**
 
@@ -267,6 +244,18 @@ To ensure consistent rendering in **manually parsed blocks** (Tables, Algorithms
      - `\,` -> `&thinsp;` (Thin Space)
      - `{:}` -> `:` (Strips brace protection)
      - `\/` -> `/` (Converts escaped slash to forward slash)
+     - `~` -> `&nbsp;` (Non-breaking space)
+
+### 8b. The Universal Text Formatter (v1.9.27)
+Previously, only manually parsing blocks (Tables, Algorithms) received nice formatting (bold, italic, symbols). Standard text paragraphs were just getting wrapped in `<p>` tags, leaving `\textbf{}` raw.
+
+**The Fix:** We implemented a **Universal Paragraph Map** at the end of `processor.ts`.
+1.  Split content by double-newline (`\n\n`) into paragraphs.
+2.  Iterate through each paragraph:
+    -   If it's a Header (`<h2>`) or Placeholder (`LATEXPREVIEW...`), leave it alone.
+    -   Otherwise, run `parseLatexFormatting(text)` on it.
+    -   Wrap in `<p>`.
+**Result:** Uniform text rendering across the entire document.
 
 ### 9. Environment Normalization
 

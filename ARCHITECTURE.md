@@ -124,7 +124,7 @@ We do not ask the AI to "write and cite" simultaneously. We find the evidence *f
 
 The bibliography is constructed programmatically from the `Librarian`'s results. The LLM never writes the `\bibliography` section, ensuring perfect formatting.
 
-### 3. Custom Preview Architecture ("The Nuclear Option")
+### 3. Custom Preview Architecture ("The Independent Option")
 
 We have abandoned third-party rendering libraries (`latex.js`) in favor of a **Custom TypeScript Parser** (`latex-to-html.ts`).
 -   **Chassis**: A recursive "SaaS" parser for general structure (Sections, Environments).
@@ -157,7 +157,7 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
 ### 8. The "Code is Law" Rule (Parser Independence)
 
 - **NEVER** rely on external libraries for critical path rendering if they are unstable.
-- **Strict Containment** (Legacy Concept) has been replaced by **Full Ownership** (Nuclear Option). We own the parser, so we control the errors.
+- **Strict Containment** (Legacy Concept) has been replaced by **Full Ownership** (Independent Model). We own the parser, so we control the errors.
   1. **Math**: Must use KaTeX.
   2. **TikZ**: Must use Iframe Isolation.
   3. **Tables**: Must use Custom HTML Parser.
