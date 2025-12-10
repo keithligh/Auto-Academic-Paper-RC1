@@ -36,15 +36,27 @@ function createTikzBlock(tikzCode: string, options: string = '', blocks: Record<
     let safeOptions = options.replace(/[^\x00-\x7F]/g, '');
 
     // Robust Fix for Fonts inside Nodes
-    const sanitizeStr = (s: string) => s
-        .replace(/%.*$/gm, '') // CRITICAL: Strip comments before flattening
-        .replace(/\\textbf\s*\{/g, '{\\bfseries ')
-        .replace(/\\textit\s*\{/g, '{\\itshape ')
-        .replace(/\\sffamily/g, '') // Crash prevention
-        .replace(/\\rmfamily/g, '')
-        .replace(/\\ttfamily/g, '')
-        .replace(/\\n(?![a-zA-Z])/g, ' ') // Fix \n literal
-        .replace(/\n/g, ' ');
+    const sanitizeStr = (s: string) => {
+        // CRITICAL: Token Replacement Strategy for Comment Stripping (v1.9.25)
+        // Three-step process to preserve escaped percents (\%)
+        let result = s;
+        // Step 1: Save escaped percents
+        result = result.replace(/\\%/g, '__PCT__');
+        // Step 2: Nuke comments
+        result = result.replace(/%.*$/gm, '');
+        // Step 3: Restore escaped percents
+        result = result.replace(/__PCT__/g, '\\%');
+
+        // Continue with other sanitizations
+        return result
+            .replace(/\\textbf\s*\{/g, '{\\bfseries ')
+            .replace(/\\textit\s*\{/g, '{\\itshape ')
+            .replace(/\\sffamily/g, '') // Crash prevention
+            .replace(/\\rmfamily/g, '')
+            .replace(/\\ttfamily/g, '')
+            .replace(/\\n(?![a-zA-Z])/g, ' ') // Fix \n literal
+            .replace(/\n/g, ' ');
+    };
 
     safeTikz = sanitizeStr(safeTikz);
     safeOptions = sanitizeStr(safeOptions);
