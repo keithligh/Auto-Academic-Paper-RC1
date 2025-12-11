@@ -22,13 +22,24 @@ export function fixAIJsonEscaping(jsonString: string): string {
         if (inString) {
             if (char === '\\' && !escape) {
                 const nextChar = i < jsonString.length - 1 ? jsonString[i + 1] : '';
-                if (['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u'].includes(nextChar)) {
+                // AUTO-ACADEMIC-PAPER-RC1 FIX: 
+                // We removed 'b' from valid escapes. Why?
+                // Because '\begin' in a JSON string (e.g. "content": "\begin{...}")
+                // is often output by AI as literally `\begin`.
+                // Standard JSON parsers see `\b` as backspace (ASCII 8).
+                // We want `\b` to be preserved as `\b` characters.
+                // So we treat `\b` as INVALID, which triggers the logic to double it to `\\b`.
+                // This means `\begin` -> `\\begin` -> parsed as `\begin` string. Success.
+                // We also removed '/' because '\/' is valid but unnecessary, and sometimes matches dates.
+                // We kept check for common ones: " \ / n r t u
+                if (['"', '\\', '/', 'f', 'n', 'r', 't', 'u'].includes(nextChar)) {
                     // Valid JSON escape sequence - mark as escaped
                     escape = true;
                     result += char;
                 } else {
-                    // Invalid JSON escape (like \& \% \#) - double the backslash to fix
+                    // Invalid JSON escape (like \& \% \# AND \b for begin) - double the backslash to fix
                     // This turns \& into \\& which is valid JSON, parsing to \&
+                    // This turns \begin into \\begin which is valid JSON, parsing to \begin
                     result += '\\\\';
                     escape = false;
                 }
@@ -46,8 +57,38 @@ export function fixAIJsonEscaping(jsonString: string): string {
  * Sanitize AI-generated LaTeX for the server-side compiler.
  * This acts as a safety net for things the prompt failed to prevent.
  */
+/**
+ * Sanitize AI-generated LaTeX for the server-side compiler.
+ * This acts as a safety net for things the prompt failed to prevent.
+ */
 export function sanitizeLatexOutput(text: string): string {
-    return text
+    let clean = text;
+
+    // 1. STRIP REASONING ARTIFACTS
+    // Models often output "Thinking Algorithm: ... " or "Reasoning: ..." blockquote style.
+    // We strip lines starting with "> " if they look like reasoning.
+    clean = clean.replace(/^> .*$/gm, ""); // Remove blockquote lines
+    clean = clean.replace(/^Thinking Process:[\s\S]*?(\n\n|$)/gim, ""); // Remove "Thinking Process:" blocks
+    clean = clean.replace(/^Here is the content:[\s\S]*?(\n\n|$)/gim, ""); // Remove meta-commentary
+    clean = clean.replace(/<think>[\s\S]*?<\/think>/gi, ""); // Remove XML-style thought tags (common in some fine-tunes)
+
+    // 2. CONVERT MARKDOWN TO LATEX
+    // The user wants "Latex version should show latex, not markdown".
+    // Bold: **text** -> \textbf{text}
+    clean = clean.replace(/\*\*([^*]+)\*\*/g, "\\textbf{$1}");
+    // Italic: *text* -> \textit{text} (Careful not to break math $...$)
+    // We only replace * if it's not inside $...$ (Basic heuristic: Assume math uses $, non-math uses *)
+    // Better heuristic: match *text* only if text doesn't contain space? No, text usually contains spaces.
+    // Let's stick to **bold** as it's the most common hallucination. *Italic* overlaps with multiplication 2*3 too easily.
+
+    // Headers: # Header -> \section{Header}, ## -> \subsection, etc.
+    // IMPROVED: Handle leading whitespace and order from deepest (####) to shallowest (#) to avoid false matches.
+    clean = clean.replace(/^\s*####\s+(.+)$/gm, "\\paragraph{$1}");
+    clean = clean.replace(/^\s*###\s+(.+)$/gm, "\\subsubsection{$1}");
+    clean = clean.replace(/^\s*##\s+(.+)$/gm, "\\subsection{$1}");
+    clean = clean.replace(/^\s*#\s+(.+)$/gm, "\\section{$1}");
+
+    return clean
         // Universal Math Repair (v1.6.16):
         // Fixes orphaned subscripts/superscripts like `$\theta$_t` or `^2` by merging them back into math mode.
         // Matches: Closing $ (not escaped), followed by _ or ^, followed by a char or {...} block.
@@ -61,6 +102,31 @@ export function sanitizeLatexOutput(text: string): string {
         .replace(/\\color\{[^}]+\}/g, '')
         // Ensure \theta is in math mode if not already
         .replace(/(?<!\$)\\theta/g, '$\\theta$');
+}
+
+/**
+ * Sanitize LaTeX specifically for EXPORT to standalone .tex file.
+ * This runs "Just-In-Time" before download to fix common compilation errors
+ * that might be tolerated by the web preview but crash pdflatex.
+ */
+export function sanitizeLatexForExport(latex: string): string {
+    if (!latex) return "";
+    let clean = latex;
+
+    // 1. SAFETY NET: Escape orphaned "ref_X" that completely missed the compiler
+    // e.g. "term (ref_12) implies" -> "term (ref\_12) implies"
+    // This prevents "Missing $ inserted" errors without breaking math (x_1).
+    clean = clean.replace(/\(ref_(\d+)\)/g, "(ref\\_$1)");
+
+    // 2. Ensure inputenc is present for UTF8 compatibility
+    if (!clean.includes("\\usepackage[utf8]{inputenc}")) {
+        clean = clean.replace(
+            /\\documentclass(\[[^\]]*\])?\{[^}]+\}/,
+            (match) => `${match}\n\\usepackage[utf8]{inputenc}`
+        );
+    }
+
+    return clean;
 }
 
 /**
@@ -192,7 +258,10 @@ export function applyPatches(content: string, patches: { original: string; new: 
     for (const patch of patches) {
         // 1. Try Exact Match First
         if (currentContent.includes(patch.original)) {
-            currentContent = currentContent.replace(patch.original, patch.new);
+            // AUTO-ACADEMIC-PAPER-RC1: Sanitize patch content at applying time
+            // This ensures "thinking..." traces are stripped even from Rewriter patches
+            const cleanNew = sanitizeLatexOutput(patch.new);
+            currentContent = currentContent.replace(patch.original, cleanNew);
             console.log(`[Patch] Exact match applied for: "${patch.original.substring(0, 30)}..."`);
             continue;
         }

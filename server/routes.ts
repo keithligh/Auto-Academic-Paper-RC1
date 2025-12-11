@@ -12,6 +12,7 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { extractTextFromFile, validateFileSize, validateFileType } from "./documentParser";
 import { generateLatex } from "./latexGenerator";
 import { AIService } from "./ai/service";
+import { sanitizeLatexForExport } from "./ai/utils"; // Auto-Academic-Paper-RC1: Export Sanitizer
 import { AIConfig } from "./ai/provider";
 import { maxFileSize, documentAnalysisSchema, type DocumentAnalysis, type Enhancement, type AiResponse, type JobProgress } from "@shared/schema";
 
@@ -312,6 +313,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching job:", error);
       res.status(500).json({ error: "Failed to fetch job" });
+    }
+  });
+
+  // NEW: Download Optimized for Export (Sanitized)
+  // This separates the "Preview Version" (Database) from the "Compile-Ready Version" (Download)
+  app.get("/api/conversions/:id/export", async (req, res) => {
+    try {
+      const job = await storage.getConversionJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      if (!job.latexContent) return res.status(400).json({ error: "No LaTeX content available" });
+
+      // "Just-In-Time" Sanitization for Export
+      const exportSafeLatex = sanitizeLatexForExport(job.latexContent);
+
+      const filename = job.originalFileName
+        ? job.originalFileName.replace(/\.[^/.]+$/, "") + "_export.tex"
+        : `paper_${job.id}.tex`;
+
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'application/x-tex');
+      res.send(exportSafeLatex);
+
+    } catch (error) {
+      console.error("Error exporting job:", error);
+      res.status(500).json({ error: "Failed to export job" });
     }
   });
 

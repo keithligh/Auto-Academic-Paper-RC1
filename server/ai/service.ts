@@ -33,6 +33,7 @@ import { GrokProvider } from "./adapters/grok";
 import { OpenRouterProvider } from "./adapters/openrouter";
 import { AnthropicProvider } from "./adapters/anthropic";
 import { GeminiProvider } from "./adapters/gemini";
+import crypto from 'crypto';
 import { OllamaProvider } from "./adapters/ollama";
 import { extractJson, sanitizeLatexOutput, applyPatches } from "./utils";
 import pRetry, { AbortError } from "p-retry";
@@ -46,6 +47,7 @@ interface Reference {
     title: string;
     venue: string;
     year: number;
+    url?: string;
 }
 
 // Review Report Item (Supported Claim)
@@ -149,7 +151,10 @@ export class AIService {
 
         for (const { name, provider } of providersToVerify) {
             try {
-                await provider.completion("Test connection. Reply with 'OK'.", "You are a connection tester.");
+                // Retry verification once to identify transient network errors early
+                await pRetry(async () => {
+                    await provider.completion("Test connection. Reply with 'OK'.", "You are a connection tester.");
+                }, { retries: 1 });
             } catch (error: any) {
                 console.error(`[Verification] ${name} failed:`, error);
                 return {
@@ -234,6 +239,13 @@ export class AIService {
     private async phase1_Strategist(ctx: PipelineContext): Promise<void> {
         await this.log(`[Phase 1/6] The Strategist: Designing execution plan...`, { phase: "Phase 1: Strategy", step: "Designing Structure", progress: 8 });
 
+        // Limit Logic (Optimization Sprint)
+        const isAdvanced = ctx.enhancementLevel === 'advanced';
+        const queryLimit = isAdvanced ? 50 : 15;
+        const queryInstruction = isAdvanced
+            ? "Generate as many search queries as needed to exhaustively cover the topic."
+            : `limit to a MAXIMUM of ${queryLimit} high-impact search queries.`;
+
         const systemPrompt = `You are a World-Class Academic Strategist.
 YOUR GOAL: Design a comprehensive execution plan for a top-tier ${ctx.paperType}.
 
@@ -250,6 +262,7 @@ For each section, define:
 
 ENHANCEMENT LEVEL: ${ctx.enhancementLevel.toUpperCase()}
 PAPER TYPE: ${ctx.paperType}
+QUERY LIMIT: ${queryInstruction}
 `;
 
         const userPrompt = `INPUT TEXT:
@@ -259,7 +272,7 @@ TASK:
 Create a detailed Execution Plan.
 1. Analyze the input to extract core findings/arguments.
 2. Structure a novel ${ctx.paperType} based on this.
-3. Generate specific search queries to support your plan.
+3. Generate specific search queries (${queryInstruction}) to support your plan.
 
 OUTPUT FORMAT (JSON):
 {
@@ -303,12 +316,13 @@ Make the plan ROBUST. The "Thinker" (Writer) will follow this blindly.`;
 
             ctx.plan = result;
 
-            // Forward compatibility for Phase 2 (Librarian)
-            // The Librarian currently expects ctx.researchQueries (legacy) or we update Phase 2 to read from Plan.
-            // For now, let's update Phase 2 to read from PLAN, but we don't have that code yet.
-            // So we will implicitely use the plan's queries.
+            // Enforce limit strictly if AI hallucinates more
+            if (!isAdvanced && ctx.plan && ctx.plan.search_queries.length > queryLimit) {
+                ctx.plan.search_queries = ctx.plan.search_queries.slice(0, queryLimit);
+                await this.log(`[Strategist] Note: Truncated search queries to ${queryLimit} (Standard Limit).`);
+            }
 
-            await this.log(`[Strategist] Plan designed: ${ctx.plan?.sections.length} sections.`, { phase: "Phase 1: Strategy", step: "Plan Complete", progress: 12 });
+            await this.log(`[Strategist] Plan designed: ${ctx.plan?.sections.length} sections, ${ctx.plan?.search_queries.length} queries.`, { phase: "Phase 1: Strategy", step: "Plan Complete", progress: 12 });
         }, { retries: 2 });
     }
 
@@ -333,52 +347,59 @@ Make the plan ROBUST. The "Thinker" (Writer) will follow this blindly.`;
             await this.log(`[Librarian] Searching query ${i + 1} /${ctx.plan.search_queries.length}...`, { phase: "Phase 2: Research", step: `Query ${i + 1}/${ctx.plan.search_queries.length} `, progress: progressPercent, details: query.substring(0, 50) + "..." });
 
             try {
-                const prompt = `Find ONE peer - reviewed academic paper for this query:
+                // Retry specific query search 3 times
+                await pRetry(async () => {
+                    const prompt = `Find ONE peer-reviewed academic paper for this query:
 
     QUERY: ${query}
 
 TASK:
-1. Search for a real, verifiable academic paper.
+1. Search for a real, verifiable academic paper from a CREDITABLE SOURCE (e.g. Journal, Conference, Preprint).
 2. Verify the paper exists.
-3. Return the reference.
+3. Extract the Source URL if available.
+4. Return the reference.
 
 OUTPUT FORMAT(JSON):
 {
     "found": true,
-        "reference": {
+    "reference": {
         "author": "Author names",
-            "title": "Paper title",
-                "venue": "Journal/Conference",
-                    "year": YYYY
+        "title": "Paper title",
+        "venue": "Journal/Conference",
+        "year": YYYY,
+        "url": "https://doi.org/..." OR "https://arxiv.org/..."
     }
 }
 
 If NO suitable paper found, return: { "found": false } `;
 
-                // TIMEOUT WRAPPER
-                const timeoutMs = 45000;
-                const searchPromise = this.librarian.completion(prompt, "You are a Research Librarian.", undefined, true);
+                    // TIMEOUT WRAPPER (Increased to 3m per user request, effectively 2m here for per-query safety)
+                    const timeoutMs = 120000;
+                    const searchPromise = this.librarian.completion(prompt, "You are a Research Librarian.", undefined, true);
 
-                const timeoutPromise = new Promise<string>((_, reject) =>
-                    setTimeout(() => reject(new Error("Search timed out")), timeoutMs)
-                );
+                    const timeoutPromise = new Promise<string>((_, reject) =>
+                        setTimeout(() => reject(new Error("Search timed out")), timeoutMs)
+                    );
 
-                const resultStr = await Promise.race([searchPromise, timeoutPromise]);
-                const research = extractJson(resultStr);
+                    const resultStr = await Promise.race([searchPromise, timeoutPromise]);
+                    const research = extractJson(resultStr);
 
-                if (research.found && research.reference) {
-                    ctx.references.push({
-                        key: `ref_${refNumber} `,
-                        author: research.reference.author,
-                        title: research.reference.title,
-                        venue: research.reference.venue,
-                        year: research.reference.year
-                    });
-                    await this.log(`[Librarian] ✓ Found: ${research.reference.author} `, { phase: "Phase 2: Research", step: `Found Source`, progress: progressPercent, details: research.reference.title });
-                    refNumber++;
-                } else {
-                    await this.log(`[Librarian] ✗ No paper found for query.`, { phase: "Phase 2: Research", step: `No Source`, progress: progressPercent });
-                }
+                    if (research.found && research.reference) {
+                        ctx.references.push({
+                            key: `ref_${refNumber} `,
+                            author: research.reference.author,
+                            title: research.reference.title,
+                            venue: research.reference.venue,
+                            year: research.reference.year,
+                            url: research.reference.url
+                        });
+                        await this.log(`[Librarian] ✓ Found: ${research.reference.author} `, { phase: "Phase 2: Research", step: `Found Source`, progress: progressPercent, details: research.reference.title });
+                        refNumber++;
+                    } else {
+                        await this.log(`[Librarian] ✗ No paper found for query.`, { phase: "Phase 2: Research", step: `No Source`, progress: progressPercent });
+                    }
+                }, { retries: 2 }); // Total 3 attempts per query
+
             } catch (e: any) {
                 await this.log(`[Librarian] Error on query ${i + 1}: ${e.message} `, { phase: "Phase 2: Research", step: `Error`, progress: progressPercent, details: e.message });
             }
@@ -406,6 +427,11 @@ If NO suitable paper found, return: { "found": false } `;
             enhancements: []
         };
 
+        // Enhancement Limits (User Request)
+        const isAdvanced = ctx.enhancementLevel === 'advanced';
+        const totalEnhancementLimit = isAdvanced ? 999 : 20;
+        let currentEnhancementCount = 0;
+
         // 1. Generate Abstract (Fast)
         await this.log(`[Thinker] Drafting Abstract...`, { phase: "Phase 3: Drafting", step: "Abstract", progress: 33 });
         const abstractPrompt = `Write the ABSTRACT for this paper.
@@ -428,6 +454,14 @@ NO CITATIONS.`;
             const evidenceContext = ctx.references.length > 0
                 ? `AVAILABLE EVIDENCE:\n${ctx.references.map(r => `- ${r.author} (${r.year}): ${r.title}`).join("\n")}`
                 : "No external evidence found. Rely on logical argumentation.";
+
+            // Calculate remaining budget
+            const remainingEnhancements = totalEnhancementLimit - currentEnhancementCount;
+            const enhancementInstruction = isAdvanced
+                ? "AGGRESSIVELY ENHANCE. Create as many academic tools (Formula, TikZ, etc.) as the content justifies."
+                : (remainingEnhancements > 0
+                    ? `You have a budget of ${remainingEnhancements} more enhancements for the whole paper. Use 1-2 here if critical.`
+                    : "Enhancement Budget Exceeded. DO NOT generate new enhancements (Formulas, Figures, Tables). Stick to text only.");
 
             const systemPrompt = `You are an expert academic writer.
 You are writing ONE SECTION of a larger paper.
@@ -460,43 +494,103 @@ MANDATORY TOOLKIT (Use at least 1-2 per section if possible):
 - **Code Listing**: \begin{algorithm} ... \end{algorithm}
 - **Algorithm**: Pseudocode logic.
 
+CONSTRAINT: ${enhancementInstruction}
+
 CRITICAL RULES:
 1. WRITE ONLY THE SECTION CONTENT.
 2. BE COMPREHENSIVE.
 3. USE THE EVIDENCE.
 4. AGGRESSIVELY ENHANCE. If the source text is simple, ELEVATE IT using these tools.
-5. NO CITATION MARKERS like (ref_X).`;
+5. NO CITATION MARKERS like (ref_X).
+
+OUTPUT FORMAT (JSON):
+{
+  "narrative": "The main text of the section (Markdown/LaTeX mixed, but mostly text).",
+  "enhancements": [
+    {
+      "type": "formula|diagram|algorithm|table|theorem...",
+      "title": "Short title",
+      "description": "Caption or brief explanation",
+      "content": "The actual LaTeX code (e.g. \\begin{equation}...\\end{equation})",
+      "reasoning": "Why this enhancement adds value"
+    }
+  ]
+}`;
 
             const userPrompt = `Write section "${sectionPlan.name}". 
 GOAL: ${sectionPlan.goal}
-TRANSFORM the content using the Mandatory Toolkit. Make it look like a top-tier journal paper.`;
+TRANSFORM the content using the Mandatory Toolkit. Make it look like a top-tier journal paper.
+Return JSON Object.`;
 
             let sectionContent = "";
+            let generatedEnhancements: any[] = [];
             let lastLogTime = 0;
 
             try {
-                sectionContent = await pRetry(async () => {
-                    return await this.writer.completion(
+                const result = await pRetry(async () => {
+                    return await this.writer.jsonCompletion(
                         userPrompt,
                         systemPrompt,
+                        undefined,
                         async (text) => {
                             const now = Date.now();
                             if (now - lastLogTime > 3000) { // Log every 3s
-                                await this.log(`[Thinker] Writing "${sectionPlan.name}"... (${text.length} chars)`, {
+                                // Estimate word count (naive split by spaces)
+                                const wordCount = text.split(/\s+/).length;
+                                await this.log(`[Thinker] Writing "${sectionPlan.name}"...`, {
                                     phase: "Phase 3: Drafting",
                                     step: `Drafting: ${sectionPlan.name}`,
                                     progress: progress,
-                                    details: `${text.length} chars generated`
+                                    details: `Writing... (~${wordCount} words)`
                                 });
                                 lastLogTime = now;
                             }
                         }
                     );
                 }, { retries: 2 });
+
+                // Process the JSON result
+                if (result && result.narrative) {
+                    // SANITIZE AT SOURCE: Strip reasoning and convert markdown
+                    sectionContent = sanitizeLatexOutput(result.narrative);
+
+                    // Harvest validations
+                    if (result.enhancements && Array.isArray(result.enhancements)) {
+                        for (const enh of result.enhancements) {
+                            // Budget check for non-advanced mode
+                            if (!isAdvanced && currentEnhancementCount >= totalEnhancementLimit) {
+                                continue; // Skip if over budget
+                            }
+
+                            generatedEnhancements.push({
+                                id: crypto.randomUUID(),
+                                type: enh.type || "figure",
+                                title: enh.title || "Untitled",
+                                description: enh.description || "",
+                                content: enh.content || "",
+                                location: sectionPlan.name, // AUTOMATICALLY PLACED IN THIS SECTION
+                                enabled: true,
+                                reasoning: enh.reasoning || "AI Generated"
+                            });
+                            currentEnhancementCount++;
+                        }
+                    }
+                } else {
+                    // Fallback if JSON fails but returns string? Unlikely with jsonCompletion wrapper but safe to check
+                    // If purely string, treat as narrative
+                    if (typeof result === 'string') sectionContent = sanitizeLatexOutput(result);
+                }
+
             } catch (err: any) {
-                await this.log(`[Thinker] Error drafting section "${sectionPlan.name}": ${err.message}. Using placeholder.`, { phase: "Phase 3: Drafting", step: "Error", progress: progress });
-                sectionContent = `[Error generating section: ${err.message}]`;
+                await this.log(`[Thinker] Error drafting section "${sectionPlan.name}": ${err.message}`);
+                sectionContent = `(Error generating section: ${err.message})`;
             }
+
+            // Fallback content
+            if (!sectionContent) sectionContent = "(No content generated)";
+
+            // Hoist local enhancements to global context
+            ctx.draft!.enhancements.push(...generatedEnhancements); // We initialized this array earlier
 
             draftedSections.push({
                 name: sectionPlan.name,
@@ -530,6 +624,9 @@ TRANSFORM the content using the Mandatory Toolkit. Make it look like a top-tier 
         }
 
         const draftText = ctx.draft.sections.map(s => `### ${s.name} \n${s.content} `).join("\n\n");
+        const enhancementsText = ctx.draft.enhancements && ctx.draft.enhancements.length > 0
+            ? "\n\n### ACCOMPANYING FIGURES & TABLES (Check these before critiquing missing visuals):\n" + ctx.draft.enhancements.map(e => `- [${e.type}] ${e.title} (Location: ${e.location}): ${e.description}`).join("\n")
+            : "";
         const referencesText = JSON.stringify(ctx.references, null, 2);
 
         const systemPrompt = `You are a Senior Principal Investigator conducting a rigorous Peer Review of a draft paper.
@@ -540,7 +637,7 @@ YOUR TASK:
 Perform a "Nature/Science" caliber review focusing on:
 1. ** Verification **: Do the references actually support the claims ? (The Evidence Map).
 2. ** Novelty **: Does this paper offer new insights or just repeat known facts ?
-    3. ** Rigor **: Is the logical flow sound ? Are the conclusions earned ?
+3. ** Rigor **: Is the logical flow sound ? Are the conclusions earned ?
 
         OUTPUT STRUCTURE:
 - ** supported_claims **: Claims where you can point to a specific 'ref_X' and say "This proves it."
@@ -553,6 +650,7 @@ Do NOT hallucinate connections.If the reference doesn't mention it, it's UNVERIF
 
         const userPrompt = `DRAFT PAPER:
 ${draftText}
+${enhancementsText}
 
 AVAILABLE REFERENCES(Card Catalog):
 ${referencesText}
@@ -723,6 +821,9 @@ Return ONLY the JSON.`;
         }
 
         const sectionsText = ctx.draft.sections.map(s => `=== SECTION: ${s.name} ===\n${s.content}\n=== END SECTION ===`).join("\n\n");
+        const enhancementsText = ctx.draft.enhancements && ctx.draft.enhancements.length > 0
+            ? "\n\n=== GENERATED VISUAL ENHANCEMENTS (Do not delete references to these):\n" + ctx.draft.enhancements.map(e => `- [${e.type}] ${e.title} (Location: ${e.location}): ${e.description}`).join("\n")
+            : "";
         const referencesText = JSON.stringify(ctx.references, null, 2);
 
         // Build enhancement-level specific instructions
@@ -777,6 +878,7 @@ OUTPUT FORMAT (JSON):
 
         const userPrompt = `DRAFT PAPER SECTIONS:
 ${sectionsText}
+${enhancementsText}
 
 PEER REVIEW REPORT:
 ${JSON.stringify(ctx.reviewReport, null, 2)}

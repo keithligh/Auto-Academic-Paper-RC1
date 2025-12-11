@@ -13,14 +13,14 @@
 
 **Agent:** Librarian Agent
 **Purpose:** Gather verified empirical evidence.
-**Behavior:** Searches online databases to find real, peer-reviewed papers for each query. Verifies existence to prevent hallucinations.
+**Behavior:** Searches online databases to find real, peer-reviewed papers for each query. Verifies existence and **extracts source URLs** for the bibliography.
 **Output:** A catalog of `References` (Author, Title, Year, URL).
 
 ### Phase 3: THE THINKER (Drafting)
 
 **Agent:** Writer Agent
 **Purpose:** Draft the paper with full awareness of available evidence.
-**Behavior:** Writes the content, structuring arguments around the known evidence from Phase 2. Generates `enhancements` (diagrams, tables).
+**Behavior:** Writes the content, structuring arguments around the known evidence from Phase 2. Generates `enhancements` (diagrams, tables) within strict limits (20 for Standard, Unlimited for Advanced). **Streams progress** via real-time word count updates.
 **Output:** Draft JSON (No in-text citations yet).
 
 ### Phase 4: THE PEER REVIEWER (Critique)
@@ -190,6 +190,11 @@ TikZ diagrams are scaled dynamically based on the AI's *intent* (deduced from `n
 -   **External Calls**: Only LLM API calls leave the machine (to OpenAI, Anthropic, Poe, etc.).
 -   **Fully Offline Option**: Users can configure Ollama (local LLM) for complete offline operation.
 -   **Data Privacy**: API keys are stored in browser localStorage, never transmitted to any server except the configured AI providers.
+
+### 13. Plain Text URL Protocol (v1.9.50)
+- **Mechanism**: URLs in bibliographies are rendered as `\url{...}` -> `<code>` (Plain Text), strictly on a new line.
+- **Reasoning**: Academic papers are static documents. Clickable links are visual pollution and imply web-navigation, which contradicts the "printable paper" ethos.
+- **Implementation**: Regex replacement in `processor.ts` converts `\url` to non-clickable HTML.
 
 ---
 

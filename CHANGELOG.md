@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.50] - 2025-12-11 (Optimization & Hardening Sprint)
+### Added
+- **System Hardening (Robustness)**:
+    - **Timeouts**: Increased global AI timeout to **3 minutes** (180s) to prevent premature termination of deep research tasks.
+    - **Retries**: Implemented **3x Retry Logic** (`p-retry`) for all critical AI calls (Search, Content Generation), protecting against transient API failures.
+    - **Progress**: Added **Granular Streaming Feedback** (Word Counts) to give users real-time visibility into the drafting process.
+
+### Changed
+- **URL Handling (The "Plain Text" Protocol)**:
+    - **Extraction**: The Librarian (Phase 2) now explicitly extracts Source URLs.
+    - **Rendering**: URLs appear **ONLY** in the Bibliography (`\begin{thebibliography}`).
+    - **Format**: URLs are rendered as **Plain Text** (Monospace `<code>`), strictly on a **New Line** (`\\ \url{...}`). Clickable links are intentionally disabled to preserve academic neutrality and prevented visual pollution.
+- **Resource Limits (Standard vs Advanced)**:
+    - **Search Queries**: Limited to 15 (Standard) or 50 (Advanced).
+    - **Enhancements**: Limited to 20 (Standard) or Unlimited (Advanced).
+    - **Reasoning**: Prevents token explosions on lower tiers while allowing deep research for power users.
+
 ## [1.9.49] - 2025-12-11 (Surgical Editing Prompts)
 ### Changed
 - **Phase 5 (The Rewriter) - Surgical Protocol**:

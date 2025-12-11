@@ -6,9 +6,23 @@ The browser-based preview system uses a **Fully Custom TypeScript Orchestrator**
 
 We previously used a "Hybrid" architecture where we tried to sanitize input for `latex.js`. It failed because:
 
-1. **Fragility**: A single unknown macro caused a whitespace-of-death crash.
-2. **Black Box**: We couldn't control how it handled lists or tables (hence the "1Text" bugs).
-3. **Containment Costs**: We spent 90% of our time writing code to *prevent* `latex.js` from seeing code.
+1.  **Fragility**: A single unknown macro caused a whitespace-of-death crash.
+2.  **Black Box**: We couldn't control how it handled lists or tables (hence the "1Text" bugs).
+3.  **Containment Costs**: We spent 90% of our time writing code to *prevent* `latex.js` from seeing code.
+
+## 36. The "Plain Text" URL Protocol (v1.9.50)
+
+**The Decision**: We intentionally disabled clickable links in the bibliography to preserve the "printed paper" aesthetic and prevent "link rot" anxiety during the draft phase.
+
+-   **Mechanism**:
+    -   The `latexGenerator.ts` injects a specific sequence: `\\ \url{http://...}`.
+    -   The `processor.ts` `parseLatexFormatting` function contains a specific regex: `/\url\{([^{}]*)\}/g`.
+    -   **Replacement**: It does NOT create an `<a href="...">`. It creates a `<code>$1</code>`.
+-   **Visual Result**: URLs appear on a **new line** (forced by `\\`) in **monospace font**, strictly as reference data, not navigation tools.
+-   **Why**:
+    -   **Aesthetic**: Keeps the bibliography uniform.
+    -   **Safety**: Prevents users from clicking away from the app.
+    -   **Philosophy**: An academic paper is a static document, not a webpage.
 
 **The Solution:** We built our own "Dumb but Robust" parser.
 

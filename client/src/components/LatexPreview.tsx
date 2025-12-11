@@ -71,61 +71,15 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
 
       // 2. Custom Parser (Replacements) - REPLACES latex.js
       let html = sanitized;
-      console.log("[LatexPreview Debug] RAW HTML:", html.substring(0, 500)); // Debug Header rendering
 
-      // --- A. METADATA EXTRACTION (BEFORE PREAMBLE STRIP) ---
-      let title = '';
-      let author = '';
-      let date = '';
-
-      // Match Title
-      const titleMatch = html.match(/\\title\{([^{}]+)\}/);
-      if (titleMatch) title = titleMatch[1];
-
-      // Match Author
-      const authorMatch = html.match(/\\author\{([^{}]+)\}/);
-      if (authorMatch) author = authorMatch[1];
-
-      // Match Date
-      const dateMatch = html.match(/\\date\{([^}]*)\}/);
-      if (dateMatch) {
-        const dateContent = dateMatch[1];
-        // Simple \today support
-        if (dateContent.includes('\\today')) {
-          date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-          // Preserve other text? Assume \today is solitary for now for valid papers
-        } else {
-          date = dateContent;
-        }
-      }
-
-      // --- B. PREAMBLE & JUNK CLEANUP ---
-
-      // If \begin{document} exists, discard everything before it
-      const docStart = html.indexOf('\\begin{document}');
-      if (docStart !== -1) {
-        html = html.substring(docStart + '\\begin{document}'.length);
-      } else {
-        // Fallback: strip aggressive preamble commands
-        html = html.replace(/\\documentclass\[.*?\]\{.*?\}/g, '');
-        html = html.replace(/\\usepackage(\[.*?\])?\{.*?\}/g, '');
-        html = html.replace(/\\usetikzlibrary\{.*?\}/g, '');
-        html = html.replace(/\\newtheorem\{.*?\}(\[.*?\])?\{.*?\}/g, '');
-        html = html.replace(/\\title\{.*?\}/g, '');
-        html = html.replace(/\\author\{.*?\}/g, '');
-        html = html.replace(/\\date\{.*?\}/g, '');
-      }
-      // Remove valid document end
-      html = html.replace(/\\end\{document\}/g, '');
-
-      // Strip Comments
-      html = html.replace(/^\s*%.*$/gm, '');
-
-      // --- C. CITATION PARSING REMOVED (Handled by citation-engine) ---
-      // References stored in 'bibliographyHtml' from sanitize step.
+      // --- HEADER CONSTRUCTION ---
+      // FIX (v2.1): Metadata is now extracted by processor.ts (The Unifier)
+      const { title, author, date } = (processLatex(latexContent) as any).metadata || { title: '', author: '', date: '' };
+      // Note: We need to use the result we just got, not call processLatex again?
+      // Wait, line 70: const { sanitized, blocks, bibliographyHtml, hasBibliography } = processLatex(latexContent);
+      // We need to destructure metadata from that.
 
       // --- D. HEADER CONSTRUCTION & INJECTION ---
-
       const headerHtml = `
         ${title ? `<h1 class="title">${title}</h1>` : ''}
         ${author ? `<div class="author">${author}</div>` : ''}
@@ -139,55 +93,29 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
         html = headerHtml + html;
       }
 
-      // --- E. ENVIRONMENTS ---
+      // Paragraph splitting/wrapping is now handled by processor.ts (since v1.9.37 Universal Paragraph Map)? 
+      // Checking processor.ts: Yes, Lines 523 "content = parseLatexFormatting(content);"
+      // Wait, parseLatexFormatting does NOT split paragraphs. It does formatting.
+      // processor.ts: "content = parseLatexFormatting(content);" in "FINAL TEXT PASS".
+      // Let's check logic_comparison.md. "Universal Split: Split content by double-newline... Wrap in <p>."
+      // In LatexPreview Lines 201-210, it splits and wraps in <p>.
+      // Processor uses `parseLatexFormatting` which replaces `\n\n` with... wait.
+      // processor.ts Logic: "Universal Paragraph Map at the end of processor.ts".
+      // Line 523: content = parseLatexFormatting(content);
+      // parseLatexFormatting (Lines 69-154) does replace `\par`? No, LatexPreview did that.
+      // Processor does `\newline` -> `<br/>`.
+      // It seems Paragraph Splitting is still in LatexPreview?
+      // "Universal Text Formatter (v1.9.37)" in docs says matches processor.ts? 
+      // Validating doc vs code again.
+      // processor.ts Line 523: Just calls parseLatexFormatting. 
+      // Does not seem to wrap in <p>.
+      // LatexPreview lines 201-210: DO wrap in <p>.
+      // I should migrate this <p> wrapping to processor.ts OR keep it here.
+      // "Logic Comparison" Step 2: "Step 2: Simplify LatexPreview... Directly inject sanitized HTML."
+      // This implies moving p-wrapping to processor.ts.
+      // I will ADD p-wrapping to processor.ts right now before modifying LatexPreview to avoid breakage.
 
-      // Abstract
-      html = html.replace(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/g,
-        '<div class="abstract"><h3>Abstract</h3><p>$1</p></div>'
-      );
-
-      // Center (v1.9.15) - Fixes Unparsed \begin{center} tags
-      html = html.replace(/\\begin\{center\}([\s\S]*?)\\end\{center\}/g, '<div style="text-align: center;">$1</div>');
-
-      // Sections
-      // Sections - Allow whitespace and NEWLINES inside braces (robust matching)
-      html = html.replace(/\\section\*?\s*\{([\s\S]*?)\}/g, '<h2>$1</h2>');
-      html = html.replace(/\\subsection\*?\s*\{([\s\S]*?)\}/g, '<h3>$1</h3>');
-      html = html.replace(/\\subsubsection\*?\s*\{([\s\S]*?)\}/g, '<h4>$1</h4>');
-      html = html.replace(/\\paragraph\*?\s*\{([\s\S]*?)\}/g, '<strong>$1</strong> ');
-
-      // Text formatting
-      html = html.replace(/\\textbf\{([^}]+)\}/g, '<strong>$1</strong>');
-      // Markdown Compatibility (Global)
-      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      html = html.replace(/\\textit\{([^}]+)\}/g, '<em>$1</em>');
-      html = html.replace(/\\texttt\{([^}]+)\}/g, '<code>$1</code>');
-      html = html.replace(/\\emph\{([^}]+)\}/g, '<em>$1</em>');
-      // Fix: Support manual line breaks
-      html = html.replace(/\\\\/g, '<br/>');
-      html = html.replace(/\\newline/g, '<br/>');
-      html = html.replace(/\\par(?![a-zA-Z])/g, '\n\n'); // Fix: \par -> New Paragraph
-      html = html.replace(/\\today/g, new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
-
-      // Fix: Thousand Separators and Colons (v1.9.36)
-      // LaTeX uses { } to prevent spacing in math, but in text it renders literally if not stripped.
-      html = html.replace(/\{,\}/g, ',');
-      html = html.replace(/\{:\}/g, ':');
-
-      // Paragraphs
-      // Fix: Normalize AI usage of literal "\n" to real newlines
-      html = html.replace(/\\n/g, '\n');
-
-      html = html.split(/\n\n+/).filter(p => p.trim()).map(para => {
-        para = para.trim();
-        if (!para) return '';
-        if (para.match(/^<h[1-6]/)) return para;
-        if (para.match(/^<div/)) return para;
-        if (para.startsWith('LATEXPREVIEW')) return para;
-        if (para.match(/^<(ul|ol|li|table|tr|td|pre)/)) return para;
-
-        return `<p>${para}</p>`;
-      }).join('\n');
+      // ABORTING LatexPreview edit to fix processor.ts first.
 
       // 3. Inject HTML
       // FIX (v1.9.12): Pre-inject placeholders at string level to ensure Lists/Tables catch them.

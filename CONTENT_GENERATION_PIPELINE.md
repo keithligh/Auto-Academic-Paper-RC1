@@ -79,11 +79,12 @@ Your task is to analyze input text and generate specific, targeted research quer
 ### Phase 2: The Librarian (Research)
 **Agent:** Librarian
 **Input:** Research Queries.
-**Output:** List of `References` (Author, Title, Year, Venue).
+**Output:** List of `References` (Author, Title, Year, Venue, **URL**).
 **Logic:**
 1.  **Iterative Search:** Executes each query individually.
 2.  **Verification:** Verifies the paper exists and is peer-reviewed.
-3.  **Cataloging:** Adds valid papers to the `PipelineContext.references` array.
+3.  **Extraction:** Extracts the Source URL (`http://...`) if available, for the Bibliography only.
+4.  **Cataloging:** Adds valid papers to the `PipelineContext.references` array.
 
 #### Key Decision: Research-First
 By researching *before* drafting, we avoid the "hallucinated citation" problem. The Writer Agent (Phase 3) is given the list of real papers and told "Here is the evidence that exists. Write your paper based on this."
@@ -96,6 +97,8 @@ By researching *before* drafting, we avoid the "hallucinated citation" problem. 
 1.  **Contextual Drafting:** The agent is shown the list of found papers (`AVAILABLE EVIDENCE`) and instructed to structure arguments knowing this evidence exists.
 2.  **Constraint:** It must **NOT** insert citations yet. This separates the "creative flow" from the "technical referencing".
 3.  **Enhancements:** Generates diagrams/tables in a separate array.
+    *   **Limits**: 20 Enhancements (Standard) vs Unlimited (Advanced).
+4.  **Streaming Feedback:** Pushes real-time *approximate word counts* to the UI so the user knows work is happening.
 
 #### System Prompt
 ```text
@@ -173,6 +176,7 @@ Do NOT add citation markers ((ref_X)) yet. Just integrate the ideas.
 **Agent:** System (No AI)
 **Logic:**
 1.  **Bibliography:** Deterministically generated from the `references` list.
+    *   **URLs:** Injected as `\\ \url{http://...}`. Rendered as **Plain Text** (Monospace) to prevent link rot and maintain aesthetic.
 2.  **Sanitization:** The `LatexPreview.tsx` component uses the **Strict Containment Protocol**:
     *   **The Shield:** Strips dangerous macros.
     *   **The Heist:** Extracts TikZ and Math.

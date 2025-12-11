@@ -22,6 +22,11 @@ export interface SanitizeResult {
     blocks: Record<string, string>;
     bibliographyHtml: string | null;
     hasBibliography: boolean;
+    metadata: {
+        title: string;
+        author: string;
+        date: string;
+    };
 }
 
 export function processLatex(latex: string): SanitizeResult {
@@ -143,7 +148,9 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(/\\:/g, ':')
             .replace(/\\\//g, '/')
             .replace(/\\\\/g, '<br/>')
-            .replace(/\\newline/g, '<br/>');
+            .replace(/\\newline/g, '<br/>')
+            // Cleanup Residue: Handle raw (ref_X) that missed the compiler
+            .replace(/\(ref_(\d+)\)/g, '<span class="citation-placeholder">[ref_$1]</span>');
 
         // 6. Restore Math (Immediate Protection Restoration)
         protectedText = protectedText.replace(/__MATH_PROTECT_(\d+)__/g, (m, idx) => mathPlaceholders[parseInt(idx)]);
@@ -293,6 +300,31 @@ export function processLatex(latex: string): SanitizeResult {
     };
     content = processLists(content);
 
+    // --- METADATA EXTRACTION (Moved from LatexPreview) ---
+    let title = '';
+    let author = '';
+    let date = '';
+
+    // Match Title (Support Nested Braces)
+    const nestedContent = '([^{}]*(?:\\{[^{}]*\\}[^{}]*)*)'; // Level 1 nesting support
+    const titleMatch = content.match(new RegExp(`\\\\title\\{${nestedContent}\\}`));
+    if (titleMatch) title = titleMatch[1];
+
+    // Match Author
+    const authorMatch = content.match(new RegExp(`\\\\author\\{${nestedContent}\\}`));
+    if (authorMatch) author = authorMatch[1];
+
+    // Match Date
+    const dateMatch = content.match(/\\date\{([^}]*)\}/);
+    if (dateMatch) {
+        const dateContent = dateMatch[1];
+        if (dateContent.includes('\\today')) {
+            date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        } else {
+            date = dateContent;
+        }
+    }
+
     // --- ALGORITHMS ---
     const processAlgorithms = (content: string): string => {
         return content.replace(/\\begin\{algorithmic\}(\[[^\]]*\])?([\s\S]*?)\\end\{algorithmic\}/g, (m, opt, body) => {
@@ -361,43 +393,58 @@ export function processLatex(latex: string): SanitizeResult {
     };
     content = processAlgorithms(content);
 
-    // --- ENVIRONMENT NORMALIZATION ---
-    content = content.replace(/\\begin\{theorem\}([\s\S]*?)\\end\{theorem\}/g, (m, body) => {
-        return createPlaceholder(`<div class="theorem"> <strong>Theorem.</strong> ${parseLatexFormatting(body.trim())}</div> `);
-    });
-    content = content.replace(/\\begin\{lemma\}([\s\S]*?)\\end\{lemma\}/g, (m, body) => {
-        return createPlaceholder(`<div class="lemma"> <strong>Lemma.</strong> ${parseLatexFormatting(body.trim())}</div> `);
-    });
-    content = content.replace(/\\begin\{proof\}([\s\S]*?)\\end\{proof\}/g, (m, body) => {
-        return createPlaceholder(`<div class="proof"> <em>Proof.</em> ${parseLatexFormatting(body.trim())} <span style="float:right;">∎</span></div> `);
-    });
-    content = content.replace(/\\begin\{definition\}([\s\S]*?)\\end\{definition\}/g, (m, body) => {
-        return createPlaceholder(`<div class="definition"> <strong>Definition.</strong> ${parseLatexFormatting(body.trim())}</div> `);
-    });
-    content = content.replace(/\\begin\{corollary\}([\s\S]*?)\\end\{corollary\}/g, (m, body) => {
-        return createPlaceholder(`<div class="corollary"> <strong>Corollary.</strong> ${parseLatexFormatting(body.trim())}</div> `);
-    });
-    content = content.replace(/\\begin\{remark\}([\s\S]*?)\\end\{remark\}/g, (m, body) => {
-        return createPlaceholder(`<div class="remark"> <em>Remark.</em> ${parseLatexFormatting(body.trim())}</div> `);
+    // --- ENVIRONMENT NORMALIZATION (Robust Loop from LatexPreview) ---
+    const envs = ["algorithm", "hypothesis", "remark", "definition", "theorem", "lemma", "proposition", "corollary"];
+    envs.forEach(env => {
+        const robustRegex = new RegExp(`\\\\begin\\{${env}\\}(?:\\[(.*?)\\])?([\\s\\S]*?)\\\\end\\{${env}\\}`, 'g');
+        content = content.replace(robustRegex, (match, title, body) => {
+            const titleHtml = title ? `<strong>(${title})</strong> ` : '';
+            // We use a safe placeholder to prevent text processing from mangling the env logic
+            return createPlaceholder(`<div class="${env}"> <strong>${env.charAt(0).toUpperCase() + env.slice(1)}.</strong> ${titleHtml}${parseLatexFormatting(body)}</div> `);
+        });
     });
 
-    // --- FIGURE/TABLE FLATTENING ---
+    // --- ABSTRACT & CENTER (Moved from LatexPreview) ---
+    content = content.replace(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/g, (m, body) =>
+        createPlaceholder(`<div class="abstract"><h3>Abstract</h3><p>${parseLatexFormatting(body)}</p></div>`)
+    );
+    content = content.replace(/\\begin\{center\}([\s\S]*?)\\end\{center\}/g, (m, body) =>
+        `<div style="text-align: center;">${parseLatexFormatting(body)}</div>`
+    );
+
+    // --- FIGURE/TABLE/ALGORITHM FLATTENING ---
     content = content.replace(/Built-in\s+&\s+Comprehensive/g, 'Built-in \\& Comprehensive');
-    content = content.replace(/\\begin\{(figure|table)\}(\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, env, opt, body) => {
+    content = content.replace(/\\begin\{(figure|table|algorithm)\}(\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, env, opt, body) => {
         let cleaned = body
             .replace(/\\centering/g, '')
             .replace(/\\caption\{[^}]*\}/g, '')
             .replace(/\\label\{[^}]*\}/g, '')
+            // Cleanup Residue
             .trim();
         return cleaned;
     });
+
 
     // --- TABLE ENGINE REFACTORING (Phase 5) ---
     const { sanitized: tableSanitized, blocks: tableBlocks } = processTables(content, parseLatexFormatting);
     content = tableSanitized;
     Object.assign(blocks, tableBlocks);
 
-    // --- COMMAND STRIPPING ---
+    // --- PREAMBLE & JUNK CLEANUP (Migrated from LatexPreview) ---
+    // If \begin{document} exists, discard everything before it (AFTER extracting metadata/macros)
+    const docStart = content.indexOf('\\begin{document}');
+    if (docStart !== -1) {
+        content = content.substring(docStart + '\\begin{document}'.length);
+    }
+
+    // Remove valid document end
+    content = content.replace(/\\end\{document\}/g, '');
+
+    // Strip Comments
+    content = content.replace(/^\s*%.*$/gm, '');
+
+    // --- COMMAND STRIPPING (Fallback & Cleanup) ---
+    // Even if we sliced, these might appear in the body via inclusion or error
     content = content.replace(/\\documentclass(\[[^\]]*\])?\{[^}]*\}/g, '');
     content = content.replace(/\\usepackage(\[[^\]]*\])?\{[^}]*\}/g, '');
     content = content.replace(/\\tableofcontents/g, '');
@@ -510,10 +557,38 @@ export function processLatex(latex: string): SanitizeResult {
         return createPlaceholder(bibHtml);
     });
 
-    // --- FINAL TEXT PASS (v1.9.39) ---
-    // Apply formatting (unescaping, typography, markdown) to the remaining text content.
-    // This ensures standard paragraphs resolve \&, %, \textbf, etc.
+    // --- SECTION HEADERS (Moved from LatexPreview) ---
+    content = content.replace(/\\section\*?\s*\{([\s\S]*?)\}/g, '<h2>$1</h2>');
+    content = content.replace(/\\subsection\*?\s*\{([\s\S]*?)\}/g, '<h3>$1</h3>');
+    content = content.replace(/\\subsubsection\*?\s*\{([\s\S]*?)\}/g, '<h4>$1</h4>');
+    content = content.replace(/\\paragraph\*?\s*\{([\s\S]*?)\}/g, '<strong>$1</strong> ');
+
+    // --- PARAGRAPH & TEXT FORMATTING ---
+    // 1. Handle explicit paragraph breaks
+    content = content.replace(/\\par(?![a-zA-Z])/g, '\n\n');
+
+    // 2. Normalize Newlines (AI artifact fix)
+    content = content.replace(/\\n/g, '\n');
+
+    // 3. Apply Text Formatting (Bold, Italic, Unescape)
     content = parseLatexFormatting(content);
 
-    return { sanitized: content, blocks, bibliographyHtml, hasBibliography };
+    // 4. Paragraph Wrapping (The "Universal Paragraph Map")
+    // Split by double newlines and wrap non-block content in <p>
+    // Fix (Peer Review): Use \n\s*\n+ to catch blank lines with spaces
+    content = content.split(/\n\s*\n+/).filter(p => p.trim()).map(para => {
+        para = para.trim();
+        if (!para) return '';
+        // Skip block elements that shouldn't be in <p>
+        if (para.match(/^<h[1-6]/)) return para;
+        if (para.match(/^<div/)) return para;
+        if (para.match(/^<ol/)) return para; // Lists
+        if (para.match(/^<ul/)) return para;
+        if (para.startsWith('LATEXPREVIEW')) return para; // Placeholders
+        if (para.match(/^<(table|pre)/)) return para;
+
+        return `<p>${para}</p>`;
+    }).join('\n');
+
+    return { sanitized: content, blocks, bibliographyHtml, hasBibliography, metadata: { title, author, date } };
 }

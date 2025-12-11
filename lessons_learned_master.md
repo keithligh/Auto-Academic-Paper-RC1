@@ -234,6 +234,20 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 ### Lesson 37: The "Visual Weight" Paradox
 -   **Lesson**: **If it feels "too big", shrink the box, not the text.**
 
+## 76. The "Plain Text" Protocol (Academic URLs)
+- **Incident**: The developer assumed URLs in bibliographies should be clickable links (`<a>`). The user demanded plain text (`<code>`).
+- **Lesson**: **Academic Rigor != Web Usability.** In formal papers, a URL is "Reference Data" (like a DOI or ISBN), not a "Navigation Tool". Making it clickable implies it's part of the digital experience. Keeping it plain text reinforces it as a static citation.
+- **The Fix**: `\url{...}` is strictly rendered as monospace text.
+
+## 77. The "Retry" Necessity (Network Resilience)
+- **Incident**: Deep research tasks (Phase 2) failed intermittently due to API rate limits or network blips, killing the entire job.
+- **Lesson**: **Assume Failure.** A single API call has a 99% success rate. A chain of 50 calls (Research -> Draft -> Review) has a ~60% success rate.
+- **The Protocol**: **3x Retry on EVERYTHING.** We implemented `p-retry` (Attempts: 3) for every external interaction. This turned a "Fragile" pipeline into a "Robust" one.
+
+## 78. The "Streaming Feedback" Loop (Word Counts)
+- **Incident**: Users saw "Drafting Content..." for 2 minutes and assumed the app hung.
+- **Lesson**: **Status is not Progress.** Telling the user "I am working" is useless. Telling them "I have written 400 words... 800 words..." proves life.
+- **The Fix**: We implemented a granular callback that pushes the *approximate word count* of the generated stream to the UI in real-time.
 ### Lesson 38: The "Frontend-Backend State Wall"
 -   **Lesson**: **Tightly Coupled Strings Break Distributed Systems.**
 

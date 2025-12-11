@@ -22,7 +22,7 @@ export class GeminiProvider implements AIProvider {
         });
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Gemini request timed out")), 60000)
+            setTimeout(() => reject(new Error("Gemini request timed out")), 180000)
         );
 
         const result = await Promise.race([

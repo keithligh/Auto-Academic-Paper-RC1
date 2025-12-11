@@ -37,16 +37,10 @@ export default function ResultPage() {
     }
 
     const handleExportLatex = () => {
-        if (!job?.latexContent) return;
-        const blob = new Blob([job.latexContent], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${job.originalFileName.replace(/\.[^/.]+$/, "")}.tex`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        if (!jobId) return;
+        // Use the new backend endpoint that sanitizes LaTeX for export (fixing "Missing $", inputenc, etc.)
+        // This separates the "Preview Version" (which needs latex.js hacks) from the "Export Version" (which needs strict latex).
+        window.location.href = `/api/conversions/${jobId}/export`;
     };
 
     return (
