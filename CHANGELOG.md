@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.49] - 2025-12-11 (Surgical Editing Prompts)
+### Changed
+- **Phase 5 (The Rewriter) - Surgical Protocol**:
+    - **Problem**: The Rewriter was acting as a "Global Optimizer", condensing and rewriting unflagged sentences in the name of "academic rigor", leading to data loss and aggressive shortening.
+    - **Fix**: Implemented "Surgical Editing Protocol" in System and User prompts.
+    - **Logic**: Explicitly defines `WHAT TO MODIFY` (Supported Claims, Unverified Claims, Critique) vs `WHAT TO PRESERVE` (Everything else).
+    - **Impact**: The AI now acts as a precise copyeditor, touching only the specific sentences identified by the Peer Reviewer.
+
 ## [1.9.48] - 2025-12-10 (Grayscale Mandate)
 ### Changed
 - **AI Prompts (Phase 3 & 5)**: Explicitly banned use of colors (`\color`, `\textcolor`, `fill=red!60`) in Diagrams and Text.

@@ -210,7 +210,6 @@ export default function LandingPage() {
         onDrop,
         accept: {
             "application/pdf": [".pdf"],
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
             "text/plain": [".txt"],
             "text/markdown": [".md"],
         },
@@ -361,7 +360,7 @@ export default function LandingPage() {
                                                 Drop Manuscript Here
                                             </h3>
                                             <p className="text-lg font-medium text-gray-500">
-                                                PDF, DOCX, TXT, or MD
+                                                PDF, TXT, or MD
                                             </p>
                                         </div>
                                         <Button variant="outline" size="lg" className="rounded-full text-lg h-12 px-8">

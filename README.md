@@ -16,7 +16,7 @@ A robust, AI-powered tool for formatting academic papers and generating LaTeX pr
     -   *Transparency:* Unsupported features (e.g., `tabularx`) are shown as raw code blocks, not hidden.
 -   **Server-Side Safety:** Automatic sanitization of AI output to prevent invalid LaTeX from crashing the server.
 -   **Professional Pride:** Built with "Professional Pride" principles—no bandaids, no arbitrary limits, atomic integrity.
--   **Markdown Support:** Full support for uploading and processing `.md` files alongside DOCX and TXT.
+-   **Markdown Support:** Full support for uploading and processing `.md` files alongside TXT.
 
 ## 🛠️ Installation
 

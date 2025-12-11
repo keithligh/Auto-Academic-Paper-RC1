@@ -1,5 +1,4 @@
 import fs from "fs";
-import mammoth from "mammoth";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
@@ -8,8 +7,6 @@ export async function extractTextFromFile(filePath: string, mimeType: string): P
   try {
     if (mimeType === "application/pdf") {
       return await extractTextFromPDF(filePath);
-    } else if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-      return await extractTextFromDOCX(filePath);
     } else if (mimeType === "text/plain" || mimeType === "text/markdown") {
       let result = await extractTextFromTXT(filePath);
 
@@ -55,10 +52,7 @@ async function extractTextFromPDF(filePath: string): Promise<string> {
   return result.text;
 }
 
-async function extractTextFromDOCX(filePath: string): Promise<string> {
-  const result = await mammoth.extractRawText({ path: filePath });
-  return result.value;
-}
+
 
 async function extractTextFromTXT(filePath: string): Promise<string> {
   return fs.readFileSync(filePath, "utf-8");

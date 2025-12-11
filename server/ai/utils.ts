@@ -181,3 +181,41 @@ function findBalancedJsonEnd(text: string, startIndex: number, openChar: string,
     }
     return -1;
 }
+
+/**
+ * Applies a list of patch replacements to a text string.
+ * Uses robust whitespace normalization to find matches even if newlines/spaces differ slightly.
+ */
+export function applyPatches(content: string, patches: { original: string; new: string }[]): string {
+    let currentContent = content;
+
+    for (const patch of patches) {
+        // 1. Try Exact Match First
+        if (currentContent.includes(patch.original)) {
+            currentContent = currentContent.replace(patch.original, patch.new);
+            console.log(`[Patch] Exact match applied for: "${patch.original.substring(0, 30)}..."`);
+            continue;
+        }
+
+        // 2. Fuzzy Match (Normalize whitespace)
+        // We accept that the AI might have turned newlines into spaces or vice versa
+        // Strategy: Create a regex from the 'original' text where every whitespace sequence is \s+
+
+        // Escape regex special characters in the search string
+        const escapedSearch = patch.original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        // Replace whitespace sequences with generic whitespace regex
+        const fuzzyPatternStr = escapedSearch.replace(/\s+/g, '\\s+');
+        const fuzzyRegex = new RegExp(fuzzyPatternStr);
+
+        if (fuzzyRegex.test(currentContent)) {
+            currentContent = currentContent.replace(fuzzyRegex, patch.new);
+            console.log(`[Patch] Fuzzy match applied for: "${patch.original.substring(0, 30)}..."`);
+        } else {
+            console.warn(`[Patch] WARNING: Could not find match for patch: "${patch.original.substring(0, 50)}..."`);
+            // We do NOT stop. We skip this patch and continue, preserving the rest of the file.
+        }
+    }
+
+    return currentContent;
+}

@@ -14,12 +14,13 @@
  */
 import {
     AIConfig,
+    Enhancement,
     AiResponse,
     aiResponseSchema,
     defaultAIConfig,
     documentAnalysisSchema,
-    DraftDocument,
-    draftDocumentSchema,
+    ExecutionPlan,
+    executionPlanSchema,
     ResearchedClaim,
     claimSchema,
     researchedClaimSchema,
@@ -33,9 +34,10 @@ import { OpenRouterProvider } from "./adapters/openrouter";
 import { AnthropicProvider } from "./adapters/anthropic";
 import { GeminiProvider } from "./adapters/gemini";
 import { OllamaProvider } from "./adapters/ollama";
-import { extractJson, sanitizeLatexOutput } from "./utils";
+import { extractJson, sanitizeLatexOutput, applyPatches } from "./utils";
 import pRetry, { AbortError } from "p-retry";
 import { validateLatexSyntax } from "../latexValidator";
+
 
 // ====== PIPELINE CONTEXT (Shared State) ======
 interface Reference {
@@ -78,13 +80,13 @@ interface PipelineContext {
     enhancementLevel: string;
     advancedOptions: any;
 
-    // Phase 1: Strategist
-    researchQueries: string[];
+    // Phase 1: Strategist (The General)
+    plan: ExecutionPlan | null;
 
-    // Phase 2: Librarian (Card Catalog)
+    // Phase 2: Librarian (The Scout) - Research Queries derived from Plan
     references: Reference[];
 
-    // Phase 3: Thinker
+    // Phase 3: Thinker (The Writer)
     draft: AiResponse | null;
 
     // Phase 4: Peer Reviewer
@@ -186,7 +188,7 @@ export class AIService {
             paperType,
             enhancementLevel,
             advancedOptions,
-            researchQueries: [],
+            plan: null,
             references: [],
             draft: null,
             reviewReport: null,
@@ -228,96 +230,92 @@ export class AIService {
         }
     }
 
-    // ====== PHASE 1: THE STRATEGIST ======
+    // ====== PHASE 1: THE STRATEGIST (THE GENERAL) ======
     private async phase1_Strategist(ctx: PipelineContext): Promise<void> {
-        await this.log(`[Phase 1/6] The Strategist: Analyzing input and generating research queries...`, { phase: "Phase 1: Strategy", step: "Analyzing Input", progress: 8 });
+        await this.log(`[Phase 1/6] The Strategist: Designing execution plan...`, { phase: "Phase 1: Strategy", step: "Designing Structure", progress: 8 });
 
-        // Determine query count based on enhancement level
-        const queryConfig = {
-            minimal: { count: "3-4", focus: "Only the most critical claims that absolutely require evidence" },
-            standard: { count: "5-7", focus: "Key claims and arguments that would benefit from scholarly support" },
-            advanced: { count: "8-10", focus: "Comprehensive coverage of all claims, theories, and methodological statements" }
-        };
-        const config = queryConfig[ctx.enhancementLevel as keyof typeof queryConfig] || queryConfig.standard;
+        const systemPrompt = `You are a World-Class Academic Strategist.
+YOUR GOAL: Design a comprehensive execution plan for a top-tier ${ctx.paperType}.
 
-        // Paper type specific guidance (keys must match schema: research_paper, essay, thesis)
-        const paperTypeGuidance = {
-            research_paper: "Focus on empirical studies, methodological approaches, and quantitative findings.",
-            essay: "Focus on arguments, philosophical foundations, and critical perspectives.",
-            thesis: "Focus on foundational theories, seminal works, and comprehensive evidence."
-        };
-        const paperGuidance = paperTypeGuidance[ctx.paperType as keyof typeof paperTypeGuidance] || "";
+STRATEGY:
+1. **Analyze the Input**: Identify the core thesis, key findings, and available data.
+2. **Leverage Latent Knowledge**: Structure this paper emulating the patterns found in high-impact publications (e.g., Nature, Science, or leading field-specific journals).
+3. **Form Follows Function**: Let the argument dictate the structure. Use standard sections ONLY if that is the most rigorous way to present this specific data.
+4. **Scale the Depth**: Adapt the complexity to the "${ctx.enhancementLevel}" level.
 
-        const systemPrompt = `You are an academic research strategist specializing in ${ctx.paperType} documents.
-
-Your task is to analyze input text and generate specific, targeted research queries that will find the most relevant academic papers to support the document's arguments.
-
+For each section, define:
+1. The ARGUMENT GOAL (what must be proven/discussed).
+2. The EVIDENCE required (what kind of papers we need to find).
+3. The SCALE (approximate word count).
 
 ENHANCEMENT LEVEL: ${ctx.enhancementLevel.toUpperCase()}
-${config.focus}
-
-${paperGuidance ? `PAPER TYPE GUIDANCE:\n${paperGuidance}` : ""}`;
+PAPER TYPE: ${ctx.paperType}
+`;
 
         const userPrompt = `INPUT TEXT:
-                ${ctx.originalContent.substring(0, 10000)
-            }
+${ctx.originalContent.substring(0, 15000)}
 
-    TASK:
-        Analyze the text inside<source_document> and generate ${config.count} specific research queries.
+TASK:
+Create a detailed Execution Plan.
+1. Analyze the input to extract core findings/arguments.
+2. Structure a novel ${ctx.paperType} based on this.
+3. Generate specific search queries to support your plan.
 
-QUERY GENERATION STRATEGY:
-1. Identify the core thesis and main arguments
-2. Find claims that make factual or empirical assertions
-3. Note any theories, frameworks, or methodologies mentioned
-4. Look for comparative or evaluative statements
-
-OUTPUT FORMAT(JSON):
+OUTPUT FORMAT (JSON):
 {
-    "queries": [
-        "exact search query suitable for Google Scholar or academic databases",
-        "another specific query..."
+    "title_idea": "Proposed Title",
+    "abstract_goal": "What the abstract should convey...",
+    "sections": [
+        {
+            "name": "Introduction",
+            "goal": "Hook the reader, define the problem gap...",
+            "required_evidence": ["Stat on prevalence of X"],
+            "approximate_words": 500
+        },
+        ...
+    ],
+    "search_queries": [
+        "query 1", "query 2"
     ]
 }
 
-QUERY QUALITY GUIDELINES:
-- Be specific(include key terms, concepts, author names if mentioned)
-    - Use academic vocabulary
-        - Focus on findable, citable claims
-            - Avoid overly broad queries
-
-Return ONLY the JSON.`;
+Make the plan ROBUST. The "Thinker" (Writer) will follow this blindly.`;
 
         return await pRetry(async () => {
-            const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Strategist timed out after 5 minutes")), 300000)
-            );
-
-            const completionPromise = this.strategist.jsonCompletion(
+            let lastLogTime = 0;
+            const result: any = await this.strategist.jsonCompletion(
                 userPrompt,
                 systemPrompt,
-                null,
-                async () => { }
+                executionPlanSchema,
+                async (text) => {
+                    const now = Date.now();
+                    if (now - lastLogTime > 3000) {
+                        await this.log(`[Strategist] Designing Plan... (${text.length} chars)`, {
+                            phase: "Phase 1: Strategy",
+                            step: "Designing Structure",
+                            progress: 10,
+                            details: `Generating plan: ${text.length} chars`
+                        });
+                        lastLogTime = now;
+                    }
+                }
             );
 
-            const result: any = await Promise.race([completionPromise, timeoutPromise]);
-            ctx.researchQueries = result.queries || [];
+            ctx.plan = result;
 
-            await this.log(`[Strategist] Generated ${ctx.researchQueries.length} research queries.`, { phase: "Phase 1: Strategy", step: "Complete", progress: 12, details: `${ctx.researchQueries.length} queries` });
-        }, {
-            retries: 2,
-            onFailedAttempt: async (error: any) => {
-                if (error.message.includes("AI_OUTPUT_TRUNCATED")) {
-                    await this.log(`[Strategist] Aborting: Output truncated(Limit Reached).`, { phase: "Phase 1: Strategy", step: "Error", progress: 0 });
-                    throw new AbortError(error.message);
-                }
-                await this.log(`[Strategist] Attempt ${error.attemptNumber} failed: ${error.message}. Retrying...`, { phase: "Phase 1: Strategy", step: "Error - Retrying", progress: 8 });
-            }
-        });
+            // Forward compatibility for Phase 2 (Librarian)
+            // The Librarian currently expects ctx.researchQueries (legacy) or we update Phase 2 to read from Plan.
+            // For now, let's update Phase 2 to read from PLAN, but we don't have that code yet.
+            // So we will implicitely use the plan's queries.
+
+            await this.log(`[Strategist] Plan designed: ${ctx.plan?.sections.length} sections.`, { phase: "Phase 1: Strategy", step: "Plan Complete", progress: 12 });
+        }, { retries: 2 });
     }
 
-    // ====== PHASE 2: THE LIBRARIAN ======
+    // ====== PHASE 2: THE LIBRARIAN (THE SCOUT) ======
     private async phase2_Librarian(ctx: PipelineContext): Promise<void> {
-        await this.log(`[Phase 2 / 6] The Librarian: Searching for ${ctx.researchQueries.length} papers...`, { phase: "Phase 2: Research", step: "Starting Research", progress: 15 });
+        const queryCount = ctx.plan?.search_queries?.length || 0;
+        await this.log(`[Phase 2 / 6] The Librarian: Searching for ${queryCount} papers...`, { phase: "Phase 2: Research", step: "Starting Research", progress: 15 });
 
         if (!this.librarian.supportsResearch) {
             await this.log(`[Librarian] Warning: Provider does not support research.Skipping.`);
@@ -326,11 +324,13 @@ Return ONLY the JSON.`;
 
         let refNumber = 1;
 
-        for (let i = 0; i < ctx.researchQueries.length; i++) {
-            const query = ctx.researchQueries[i];
-            const progressPercent = 15 + Math.floor((i / ctx.researchQueries.length) * 15); // 15% to 30%
+        if (!ctx.plan?.search_queries) return;
 
-            await this.log(`[Librarian] Searching query ${i + 1} /${ctx.researchQueries.length}...`, { phase: "Phase 2: Research", step: `Query ${i + 1}/${ctx.researchQueries.length} `, progress: progressPercent, details: query.substring(0, 50) + "..." });
+        for (let i = 0; i < ctx.plan.search_queries.length; i++) {
+            const query = ctx.plan.search_queries[i];
+            const progressPercent = 15 + Math.floor((i / ctx.plan.search_queries.length) * 15); // 15% to 30%
+
+            await this.log(`[Librarian] Searching query ${i + 1} /${ctx.plan.search_queries.length}...`, { phase: "Phase 2: Research", step: `Query ${i + 1}/${ctx.plan.search_queries.length} `, progress: progressPercent, details: query.substring(0, 50) + "..." });
 
             try {
                 const prompt = `Find ONE peer - reviewed academic paper for this query:
@@ -355,7 +355,15 @@ OUTPUT FORMAT(JSON):
 
 If NO suitable paper found, return: { "found": false } `;
 
-                const resultStr = await this.librarian.completion(prompt, "You are a Research Librarian.", undefined, true);
+                // TIMEOUT WRAPPER
+                const timeoutMs = 45000;
+                const searchPromise = this.librarian.completion(prompt, "You are a Research Librarian.", undefined, true);
+
+                const timeoutPromise = new Promise<string>((_, reject) =>
+                    setTimeout(() => reject(new Error("Search timed out")), timeoutMs)
+                );
+
+                const resultStr = await Promise.race([searchPromise, timeoutPromise]);
                 const research = extractJson(resultStr);
 
                 if (research.found && research.reference) {
@@ -379,119 +387,125 @@ If NO suitable paper found, return: { "found": false } `;
         await this.log(`[Librarian] Research complete: ${ctx.references.length} papers found.`, { phase: "Phase 2: Research", step: "Complete", progress: 30, details: `${ctx.references.length} references` });
     }
 
-    // ====== PHASE 3: THE THINKER ======
+    // ====== PHASE 3: THE THINKER (THE WRITER) ======
+    // Deep Work Architecture: Section-by-Section Execution
     private async phase3_Thinker(ctx: PipelineContext): Promise<void> {
-        await this.log(`[Phase 3 / 6] The Thinker: Drafting paper(with ${ctx.references.length} references available)...`, { phase: "Phase 3: Drafting", step: "Starting Draft", progress: 32 });
+        if (!ctx.plan) throw new Error("Phase 3 started without Execution Plan");
 
-        const enabledEnhancementTypes: string[] = [];
-        if (ctx.advancedOptions.formula) enabledEnhancementTypes.push("formula", "equation");
-        if (ctx.advancedOptions.hypothesis) enabledEnhancementTypes.push("hypothesis");
-        if (ctx.advancedOptions.diagram) enabledEnhancementTypes.push("diagram");
-        if (ctx.advancedOptions.logical_structure) enabledEnhancementTypes.push("logical_structure", "theorem", "proof");
-        if (ctx.advancedOptions.symbol) enabledEnhancementTypes.push("symbol");
-        enabledEnhancementTypes.push("table", "figure", "code_listing", "algorithm");
+        await this.log(`[Phase 3 / 6] The Thinker: Drafting ${ctx.plan.sections.length} sections in deep mode...`, { phase: "Phase 3: Drafting", step: "Deep Work Start", progress: 32 });
 
-        // Show the Thinker what evidence is available
-        const referenceSummary = ctx.references.length > 0
-            ? `\n\nAVAILABLE EVIDENCE(from preliminary research): \n${ctx.references.map(r => `- ${r.author} (${r.year}): "${r.title}"`).join("\n")} \n\nYou may structure your arguments knowing this evidence exists, but do NOT insert citations yet.`
-            : `\n\nNo evidence found in preliminary research.Write based on general knowledge.`;
+        const draftedSections: { name: string, content: string }[] = [];
+        const totalSections = ctx.plan.sections.length;
 
-        const systemPrompt = `You are a distinguished academic researcher and editor.
-    
-YOUR MISSION:
-Take the raw INPUT TEXT and elevate it into a rigorous, well - structured academic paper.${referenceSummary}
+        // Initialize draft object
+        ctx.draft = {
+            title: ctx.plan.title_idea,
+            abstract: "Pending generation...",
+            sections: [],
+            references: [], // No references yet (Phase 6)
+            enhancements: []
+        };
 
-CORE RESPONSIBILITIES:
-1. ** IDENTIFY SUBJECT & STRUCTURE **: Analyze the document structure, identify the main subject and key sections.
-2. ** ANALYZE THE SOURCE **: Read the SOURCE MATERIAL deeply.Understand its core arguments.
-3. ** STRUCTURE LOGICALLY **: Organize into standard academic format(Introduction, Background, Analysis, Discussion, Conclusion).
-4. ** ELEVATE THE TONE **: Rewrite informal language into precise, objective academic prose.
-5. ** ENHANCE **: Propose diagrams, tables, or formalisms that clarify complex ideas.
+        // 1. Generate Abstract (Fast)
+        await this.log(`[Thinker] Drafting Abstract...`, { phase: "Phase 3: Drafting", step: "Abstract", progress: 33 });
+        const abstractPrompt = `Write the ABSTRACT for this paper.
+GOAL: ${ctx.plan.abstract_goal}
+TITLE: ${ctx.plan.title_idea}
+PAPER TYPE: ${ctx.paperType}
+NO CITATIONS.`;
+        const abstractResult = await this.writer.completion(abstractPrompt, "You are an academic abstract writer.");
+        ctx.draft.abstract = abstractResult;
 
-=== SOURCE MATERIAL START ===
-    ${ctx.originalContent}
-=== SOURCE MATERIAL END ===
 
-    TECHNICAL CONSTRAINTS(WEB PREVIEW COMPATIBILITY):
-- The output will be rendered in a lightweight web - based LaTeX previewer(tikzjax in iframe).
-- ** PGFPLOTS IS TOO HEAVY:** The 'pgfplots' and 'axis' libraries are too complex.Use standard TikZ primitives.
-- ** AVOID:** Do not use \\textwidth, \\columnwidth, or \\maxwidth.Use fixed dimensions(e.g., 10cm).
+        // 2. Deep Sectional Loop
+        for (let i = 0; i < totalSections; i++) {
+            const sectionPlan = ctx.plan.sections[i];
+            const progress = 35 + Math.floor((i / totalSections) * 15); // 35-50%
 
-CRITICAL INSTRUCTIONS:
-- NO CITATIONS: Do NOT cite any sources.Do NOT use(ref_1), [1], \\cite{ }, etc.
-- NO BIBLIOGRAPHY: The "references" array should be empty.
-- NO EQREF: Do NOT use \\eqref{ }.Use(\\ref{}) manually.
-- GENERATE ENHANCEMENTS: Add scholarly elements(diagrams, formulas, theorems, etc.).
-- NO NESTED SECTIONS: Do NOT use \\section commands inside the "content" field.
-- NO SECTION NUMBERING: Use "Introduction", NOT "1. Introduction".
-- NO COLORS: Do NOT use \\textcolor or \\color.
-- ESCAPE SPECIAL CHARACTERS: You MUST escape & (as \\&), % (as \\%), and $ (as \\$) in text content. For example, "$30" must be written as "\\$30".
-- NO CUSTOM MACROS IN MATH: Do NOT use \newcommand or \def to define custom macros. Write math variables directly (e.g., $V_{align}$ instead of $\V_{align}$).
-- Output valid JSON matching the schema.
+            await this.log(`[Thinker] Drafting Section ${i + 1}/${totalSections}: "${sectionPlan.name}"...`, { phase: "Phase 3: Drafting", step: `Section: ${sectionPlan.name}`, progress: progress, details: `Target: ${sectionPlan.approximate_words} words` });
 
-`;
+            // Context Construction
+            const evidenceContext = ctx.references.length > 0
+                ? `AVAILABLE EVIDENCE:\n${ctx.references.map(r => `- ${r.author} (${r.year}): ${r.title}`).join("\n")}`
+                : "No external evidence found. Rely on logical argumentation.";
 
-        const userPrompt = `Transform the SOURCE MATERIAL into a ${ctx.paperType} (${ctx.enhancementLevel} enhancements).
+            const systemPrompt = `You are an expert academic writer.
+You are writing ONE SECTION of a larger paper.
 
-OUTPUT SCHEMA:
-{
-    "title": "String",
-        "abstract": "String",
-            "sections": [{ "name": "String (NO NUMBERS)", "content": "Raw LaTeX Only. Starts directly with text/commands. NO LABELS. (NO CITATIONS)" }],
-                "references": [],
-                    "enhancements": [{ "type": "String", "title": "String", "description": "String", "content": "LaTeX", "location": "String", "reasoning": "String" }]
-}
+SECTION NAME: "${sectionPlan.name}"
+ARGUMENT GOAL: ${sectionPlan.goal}
+TARGET LENGTH: ~${sectionPlan.approximate_words} words.
+ENHANCEMENT LEVEL: ${ctx.enhancementLevel.toUpperCase()}
 
-ENHANCEMENT TYPES: ${enabledEnhancementTypes.join(", ")}
+${evidenceContext}
 
-SPECIAL INSTRUCTIONS FOR DIAGRAMS:
-- For "diagram" type: MUST USE 'tikzpicture' environment.
-- NO COLOR: Academic papers are printed in black & white. Use grayscale (black!10, gray!50), patterns (dotted, dashed), or thick lines for contrast. Do NOT use red, blue, green, etc.
-- Avoid 'pgfplots' / 'axis'.Use standard TikZ primitives(\\draw, \\node, etc.).
-- Use fixed dimensions(cm) and explicit calculations.
+ACADEMIC ENHANCEMENTS (THE TRANSFORMER PROTOCOL):
+You are NOT just writing text. You are creating a "World-Class" academic paper.
+Your goal is to ACTIVELY FORMALIZE the concepts. Do not wait for opportunities—CREATE THEM.
 
-Return ONLY the JSON.`;
+IF you describe a process -> CONVERT it into a \begin{algorithm} or \begin{figure} (TikZ).
+IF you describe a relationship -> FORMULATE it as a \begin{equation} or \begin{theorem}.
+IF you describe data/comparison -> STRUCTURE it into a \begin{table}.
 
-        return await pRetry(async () => {
+MANDATORY TOOLKIT (Use at least 1-2 per section if possible):
+- **Formula**: \begin{equation} ... \end{equation}
+- **Hypothesis**: \begin{hypothesis} ... \end{hypothesis}
+- **Diagram**: \begin{tikzpicture} ... \end{tikzpicture} (Keep it simple, minimal nodes).
+- **Logical Structure**: \begin{proof} ... \end{proof}
+- **Symbol**: Define math symbols clearly.
+- **Table**: \begin{table} ... \end{table}
+- **Equation**: Numbered math models.
+- **Theorem**: \begin{theorem} ... \end{theorem}
+- **Proof**: Rigorous derivation.
+- **Code Listing**: \begin{algorithm} ... \end{algorithm}
+- **Algorithm**: Pseudocode logic.
+
+CRITICAL RULES:
+1. WRITE ONLY THE SECTION CONTENT.
+2. BE COMPREHENSIVE.
+3. USE THE EVIDENCE.
+4. AGGRESSIVELY ENHANCE. If the source text is simple, ELEVATE IT using these tools.
+5. NO CITATION MARKERS like (ref_X).`;
+
+            const userPrompt = `Write section "${sectionPlan.name}". 
+GOAL: ${sectionPlan.goal}
+TRANSFORM the content using the Mandatory Toolkit. Make it look like a top-tier journal paper.`;
+
+            let sectionContent = "";
             let lastLogTime = 0;
-            const timeoutPromise = new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Thinker timed out after 15 minutes")), 900000)
-            );
 
-            const completionPromise = this.writer.jsonCompletion(
-                userPrompt,
-                systemPrompt,
-                aiResponseSchema,
-                async (text) => {
-                    const now = Date.now();
-                    if (now - lastLogTime > 5000) {
-                        await this.log(`[Thinker] Drafting... (${text.length} chars generated)`, { phase: "Phase 3: Drafting", step: "Generating Text", progress: 40, details: `${text.length} chars` });
-                        lastLogTime = now;
-                    }
-                }
-            );
-
-            const result: any = await Promise.race([completionPromise, timeoutPromise]);
-
-            if (typeof result === 'string') {
-                const sanitized = sanitizeLatexOutput(result);
-                ctx.draft = extractJson(sanitized);
-            } else {
-                ctx.draft = result;
+            try {
+                sectionContent = await pRetry(async () => {
+                    return await this.writer.completion(
+                        userPrompt,
+                        systemPrompt,
+                        async (text) => {
+                            const now = Date.now();
+                            if (now - lastLogTime > 3000) { // Log every 3s
+                                await this.log(`[Thinker] Writing "${sectionPlan.name}"... (${text.length} chars)`, {
+                                    phase: "Phase 3: Drafting",
+                                    step: `Drafting: ${sectionPlan.name}`,
+                                    progress: progress,
+                                    details: `${text.length} chars generated`
+                                });
+                                lastLogTime = now;
+                            }
+                        }
+                    );
+                }, { retries: 2 });
+            } catch (err: any) {
+                await this.log(`[Thinker] Error drafting section "${sectionPlan.name}": ${err.message}. Using placeholder.`, { phase: "Phase 3: Drafting", step: "Error", progress: progress });
+                sectionContent = `[Error generating section: ${err.message}]`;
             }
 
-            await this.log(`[Thinker] Draft complete: ${ctx.draft?.sections?.length || 0} sections.`, { phase: "Phase 3: Drafting", step: "Draft Complete", progress: 50, details: `${ctx.draft?.sections?.length || 0} sections` });
-        }, {
-            retries: 2,
-            onFailedAttempt: async (error: any) => {
-                const errorMsg = error.message || String(error);
-                if (errorMsg.includes("AI_OUTPUT_TRUNCATED")) {
-                    await this.log(`[Thinker] Aborting: Output truncated(Limit Reached).`, { phase: "Phase 3: Drafting", step: "Error", progress: 0 });
-                    throw new AbortError(errorMsg);
-                }
-                await this.log(`[Thinker] Attempt ${error.attemptNumber} failed: ${errorMsg}. Retrying...`, { phase: "Phase 3: Drafting", step: "Error - Retrying", progress: 35 });
-            }
-        });
+            draftedSections.push({
+                name: sectionPlan.name,
+                content: sectionContent
+            });
+        }
+
+        ctx.draft.sections = draftedSections;
+        await this.log(`[Thinker] Deep Drafting complete.`, { phase: "Phase 3: Drafting", step: "Draft Complete", progress: 50 });
     }
 
     // ====== PHASE 4: THE PEER REVIEWER ======
@@ -561,7 +575,24 @@ OUTPUT FORMAT(JSON):
 Return ONLY the JSON.`;
 
         return await pRetry(async () => {
-            const result: any = await this.librarian.jsonCompletion(userPrompt, systemPrompt);
+            let lastLogTime = 0;
+            const result: any = await this.librarian.jsonCompletion(
+                userPrompt,
+                systemPrompt,
+                undefined,
+                async (text) => {
+                    const now = Date.now();
+                    if (now - lastLogTime > 3000) {
+                        await this.log(`[PeerReviewer] Reviewing... (${text.length} chars)`, {
+                            phase: "Phase 4: Peer Review",
+                            step: "Reviewing Draft",
+                            progress: 55,
+                            details: `${text.length} chars analyzed`
+                        });
+                        lastLogTime = now;
+                    }
+                }
+            );
             ctx.reviewReport = result || { supported_claims: [], unverified_claims: [], critique: "No review generated.", novelty_check: "N/A" };
 
             const supportedCount = ctx.reviewReport?.supported_claims?.length || 0;
@@ -625,7 +656,10 @@ Return ONLY the JSON.`;
         await this.log(`[DeepReview] 4.1 Extracting Claims...`, { phase: "Phase 4: Peer Review", step: "4.1 Extracting Claims", progress: 54 });
         const draftText = ctx.draft!.sections.map(s => s.content).join("\n\n");
         const prompt = `Extract all substantive factual claims, data points, and specific arguments from the text below.Ignore general intro / outro fluff.Return a JSON list of strings.`;
-        const result = await this.librarian.jsonCompletion(`TEXT: \n${draftText} `, prompt);
+        const result = await this.librarian.jsonCompletion(`TEXT: \n${draftText} `, prompt, undefined, async (text) => {
+            // Optional: Log extraction progress if needed, usually fast enough to skip, but for consistency:
+            if (text.length % 500 === 0) await this.log(`[DeepReview] Extracting claims... (${text.length} chars)`);
+        });
         return result?.claims || result || [];
     }
 
@@ -672,8 +706,9 @@ Return ONLY the JSON.`;
     }
 
     // ====== PHASE 5: THE REWRITER ======
+    // ====== PHASE 5: THE REWRITER (Refactored v1.7.0: Patch-Based) ======
     private async phase5_Rewriter(ctx: PipelineContext): Promise<void> {
-        await this.log(`[Phase 5 / 6] The Rewriter: Strengthening text with evidence...`, { phase: "Phase 5: Rewriting", step: "Starting Rewrite", progress: 60 });
+        await this.log(`[Phase 5/6] The Rewriter: Strengthening text with evidence (Surgical Patching)...`, { phase: "Phase 5: Rewriting", step: "Starting Rewrite", progress: 60 });
 
         if (!ctx.draft) {
             await this.log(`[Rewriter] Error: No draft to rewrite.`);
@@ -682,110 +717,79 @@ Return ONLY the JSON.`;
 
         // If no report or no verified claims, skip rewrite?
         if (!ctx.reviewReport || (ctx.reviewReport.supported_claims.length === 0 && ctx.reviewReport.unverified_claims.length === 0)) {
-            await this.log(`[Rewriter] No claims to address in Peer Review.Skipping rewrite.`);
+            await this.log(`[Rewriter] No claims to address in Peer Review. Skipping rewrite.`);
             ctx.improvedDraft = ctx.draft;
             return;
         }
 
-        const draftText = JSON.stringify({
-            title: ctx.draft.title,
-            abstract: ctx.draft.abstract,
-            sections: ctx.draft.sections
-        }, null, 2);
-
+        const sectionsText = ctx.draft.sections.map(s => `=== SECTION: ${s.name} ===\n${s.content}\n=== END SECTION ===`).join("\n\n");
         const referencesText = JSON.stringify(ctx.references, null, 2);
 
         // Build enhancement-level specific instructions
         const enhancementInstructions = {
             minimal: `ENHANCEMENT LEVEL: MINIMAL
     - Make only essential changes to integrate evidence.
-- Keep the original writing style intact.
-- Add evidence as brief parenthetical notes.
-- Do NOT add new formulas, theorems, or complex structures.`,
+    - Keep the original writing style intact.
+    - Add evidence as brief parenthetical notes.`,
             standard: `ENHANCEMENT LEVEL: STANDARD
     - Rewrite claims to naturally incorporate evidence.
-- Improve clarity and academic rigor.
-- Add transitional phrases that connect evidence to arguments.
-- Maintain a balanced, professional tone.`,
+    - Improve clarity and academic rigor.
+    - Add transitional phrases that connect evidence to arguments.`,
             advanced: `ENHANCEMENT LEVEL: ADVANCED
     - Significantly strengthen arguments with detailed evidence synthesis.
-- Add scholarly discourse markers("This finding aligns with...", "Building upon...").
-- Create logical bridges between claims and supporting research.
-- Elevate the prose to publication - quality academic writing.
-- Add nuanced qualifications where appropriate.`
+    - Add scholarly discourse markers ("This finding aligns with...", "Building upon...").
+    - Create logical bridges between claims and supporting research.`
         };
 
         const enhancementGuide = enhancementInstructions[ctx.enhancementLevel as keyof typeof enhancementInstructions] || enhancementInstructions.standard;
 
-        // Build paper type context (keys must match schema: research_paper, essay, thesis)
-        const paperTypeContext = {
-            research_paper: "Focus on methodology and empirical evidence.",
-            thesis: "Build comprehensive arguments with thorough evidence integration.",
-            essay: "Maintain a clear argumentative thread while incorporating evidence."
-        };
-        const paperContext = paperTypeContext[ctx.paperType as keyof typeof paperTypeContext] || "";
-
-        const systemPrompt = `You are a distinguished academic editor specializing in evidence integration.
+        const systemPrompt = `You are a distinguished academic editor specializing in surgical evidence integration.
 
 YOUR MISSION:
-Transform a draft paper into a compelling, well - supported academic document by integrating available research evidence into the prose.
+Review the DRAFT PAPER and the PEER REVIEW REPORT. Generate a list of "Patches" (Search & Replace operations) to improve the text based on the review.
 
-    ${enhancementGuide}
+${enhancementGuide}
 
-PAPER TYPE: ${ctx.paperType}
-${paperContext}
+=== PATCHING PROTOCOL ===
+1. You must NOT output the whole paper. Output ONLY the specific changes.
+2. For each change, you provide:
+   - "original": The EXACT text segment to be replaced (must be unique enough to locate).
+   - "new": The new text segment (rewritten with evidence).
+   - "rationale": Why you made this change.
 
 CRITICAL RULES:
-1. You are REWRITING sentences, not just adding citation markers.
-2. Integrate evidence NATURALLY into the prose structure.
-3. PRESERVE all LaTeX formatting(\\\\textbf, \\\\begin{ itemize }, etc.).
-4. Do NOT add(ref_X) or \\\\cite{ } markers - that's for the next phase.
-5. NO EQREF: Do NOT use \\\\eqref{ }.Use(\\\\ref{}) manually.
-6. Keep the academic tone consistent throughout.
-7. Ensure each claim is strengthened by the most relevant reference.
-8. USE \\begin{description} ... \\end{description} for lists of definitions.
-9. NEVER use \\ref{ref_X}. Wait for Phase 6 to insert citations.
-9. NEVER use \\ref{ref_X}. Wait for Phase 6 to insert citations.
-10. DO NOT include "SECTION NAME:" or "CONTENT:" labels. Just return the raw LaTeX content.
-11. ESCAPE SPECIAL CHARACTERS: You MUST escape & (as \\&) and % (as \\%) in text, especially in tables.
-12. NO COLOR: If rewriting TikZ or Tables, use grayscale/patterns only. No \textcolor or \color.
+- The "original" text must match the input EXACTLY (whitespace, punctuation). Copy-paste it.
+- Do NOT rewrite sections that don't need changes.
+- Do NOT add citation markers ((ref_X)) yet - that is Phase 6.
+- PRESERVE LaTeX formatting.
+- If a sentence is listed in "Supported Claims", you MUST add the supporting evidence (ref_X) context naturally, but NOT the (ref_X) string itself yet (Phase 6 does that). Actually, wait - instructions say "DO NOT add citation markers". Okay, just integrate the *content/context* of the evidence. Phase 6 inserts actual (ref_X).
 
-EVIDENCE INTEGRATION TECHNIQUES:
-- "Research by [Author] demonstrates that..."
-    - "According to recent studies in this field..."
-    - "This phenomenon is well-documented in the literature..."
-    - "Empirical evidence supports the notion that..."`;
+OUTPUT FORMAT (JSON):
+{
+    "patches": [
+        {
+            "original": "Text to find...",
+            "new": "Replacement text...",
+            "rationale": "integrated reference ref_1"
+        }
+    ]
+}`;
 
-        const userPrompt = `DRAFT PAPER:
-${draftText}
+        const userPrompt = `DRAFT PAPER SECTIONS:
+${sectionsText}
 
 PEER REVIEW REPORT:
 ${JSON.stringify(ctx.reviewReport, null, 2)}
 
-AVAILABLE REFERENCES(from our research):
+AVAILABLE REFERENCES:
 ${referencesText}
 
-        TASK:
-        1. Address the PEER REVIEW REPORT.
-2. FOR SUPPORTED CLAIMS: Rewrite sentences to naturally integrate the specific evidence identified($$ref_X$$) and Reasoning.
-3. FOR UNVERIFIED CLAIMS: Apply the "Suggestion"(e.g., soften "It is proven" to "It is hypothesized").
-4. FOR CRITICAL FEEDBACK: Improve the logical flow and emphasize the "Novelty" points identified by the PI.
-5. Maintain academic rigor and flow.
-6. Apply ${ctx.enhancementLevel.toUpperCase()} enhancement level guidance.
-7. Do NOT add citation markers((ref_X)) yet - that is Phase 6.
+TASK:
+Generate the patches to address the Peer Review Report. 
+Focus ONLY on the specific "Supported Claims" (integrate evidence) and "Unverified Claims" (fix/soften).
+Return JSON with 'patches' array.`;
 
-OUTPUT SCHEMA:
-        {
-            "title": "String",
-                "abstract": "String",
-                    "sections": [{ "name": "String", "content": "Raw LaTeX Only. Starts directly with text/commands. NO LABELS." }],
-                        "references": [],
-                            "enhancements": [preserve existing]
-        }
-
-Return ONLY the JSON.`;
-
-        return await pRetry(async () => {
+        await pRetry(async () => {
             let lastLogTime = 0;
             const timeoutPromise = new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error("Rewriter timed out after 15 minutes")), 900000)
@@ -794,40 +798,50 @@ Return ONLY the JSON.`;
             const completionPromise = this.writer.jsonCompletion(
                 userPrompt,
                 systemPrompt,
-                aiResponseSchema,
+                undefined, // Schema optional
                 async (text) => {
                     const now = Date.now();
                     if (now - lastLogTime > 5000) {
-                        await this.log(`[Rewriter] Rewriting... (${text.length} chars)`, { phase: "Phase 5: Rewriting", step: "Rewriting Text", progress: 68, details: `${text.length} chars` });
+                        await this.log(`[Rewriter] Generating patches... (${text.length} chars)`, { phase: "Phase 5: Rewriting", step: "Generating Patches", progress: 68 });
                         lastLogTime = now;
                     }
                 }
             );
 
             const result: any = await Promise.race([completionPromise, timeoutPromise]);
+            const patches = result.patches || [];
 
-            if (typeof result === 'string') {
-                const sanitized = sanitizeLatexOutput(result);
-                ctx.improvedDraft = extractJson(sanitized);
-            } else {
-                ctx.improvedDraft = result;
+            await this.log(`[Rewriter] Generated ${patches.length} patches. Applying...`, { phase: "Phase 5: Rewriting", step: "Applying Patches", progress: 70 });
+
+            // Apply patches to each section
+            // We need to match patches to sections. Since patches are just string replacements, 
+            // we can try applying them to all sections or finding which section contains the 'original'.
+            // Simpler: Iterate all sections and try to apply all patches. 
+            // applyPatches utility handles "patch not found" gracefully.
+
+            // Deep copy sections to avoid mutating previous phase state if something goes wrong
+            const improvedSections = ctx.draft!.sections.map(s => ({ ...s }));
+
+            let appliedCount = 0;
+            for (const section of improvedSections) {
+                const originalContent = section.content;
+                section.content = applyPatches(originalContent, patches);
+                if (section.content !== originalContent) {
+                    appliedCount++; // This count is rough, applyPatches logs details
+                }
             }
 
-            // Preserve enhancements from original draft
-            if (ctx.improvedDraft && ctx.draft?.enhancements) {
-                ctx.improvedDraft.enhancements = ctx.draft.enhancements;
-            }
+            ctx.improvedDraft = {
+                ...ctx.draft!,
+                sections: improvedSections
+            };
 
-            await this.log(`[Rewriter] Rewrite complete.`, { phase: "Phase 5: Rewriting", step: "Complete", progress: 75 });
+            await this.log(`[Rewriter] Patching complete. Modified content in ${appliedCount} sections.`, { phase: "Phase 5: Rewriting", step: "Complete", progress: 75 });
+
         }, {
             retries: 2,
             onFailedAttempt: async (error: any) => {
-                const errorMsg = error.message || String(error);
-                if (errorMsg.includes("AI_OUTPUT_TRUNCATED")) {
-                    await this.log(`[Rewriter] Aborting: Output truncated(Limit Reached).`, { phase: "Phase 5: Rewriting", step: "Error", progress: 0 });
-                    throw new AbortError(errorMsg);
-                }
-                await this.log(`[Rewriter] Attempt ${error.attemptNumber} failed: ${errorMsg}. Retrying...`, { phase: "Phase 5: Rewriting", step: "Error - Retrying", progress: 60 });
+                await this.log(`[Rewriter] Attempt ${error.attemptNumber} failed: ${error.message}. Retrying...`, { phase: "Phase 5: Rewriting", step: "Error - Retrying", progress: 60 });
             }
         });
     }
@@ -908,6 +922,12 @@ TASK:
                 // If result is wrapped in quotes or markdown block, strip them
                 newContent = newContent.replace(/^```latex\n?/, '').replace(/\n?```$/, '').trim();
 
+                // SAFETY NET: If AI returns garbage or empty string, REVERT to original
+                if (!newContent || newContent.length < 50) {
+                    await this.log(`[Editor] Warning: Generated content too short or empty. Reverting to original for section '${section.name}'.`);
+                    newContent = section.content; // Revert
+                }
+
                 // Validate LaTeX Validity of this chunk
                 const val = validateLatexSyntax(newContent);
                 if (!val.valid) {
@@ -976,5 +996,33 @@ TASK:
         ctx.finalDraft.references = ctx.references;
 
         await this.log(`[Editor] Editing complete. Pipeline finished.`, { phase: "Phase 6: Editing", step: "Complete", progress: 95 });
+    }
+
+    // ====== REPAIR: THE MECHANIC ======
+    async repairLatex(latex: string, errors: string[]): Promise<string> {
+        await this.log(`[Repair] Attempting to fix ${errors.length} LaTeX errors...`, { phase: "Finalization", step: "Repairing LaTeX", progress: 99 });
+
+        const systemPrompt = `You are a LaTeX Syntax Repair Specialist.
+YOUR TASK: Fix the syntax errors in the provided LaTeX code.
+ERRORS FOUND:
+${errors.map(e => `- ${e}`).join("\n")}
+
+CRITICAL RULES:
+1. Fix ONLY the errors listed. Do not rewrite the content.
+2. Return the FULL corrected LaTeX document.
+3. Ensure all environments (begin/end) are balanced.
+4. Escape special characters if they caused the error.
+
+OUTPUT: The corrected LaTeX code ONLY. No markdown, no explanations.`;
+
+        const userPrompt = `BROKEN LATEX:
+${latex}`;
+
+        try {
+            return await this.writer.completion(userPrompt, systemPrompt);
+        } catch (e: any) {
+            await this.log(`[Repair] Failed to repair LaTeX: ${e.message}`);
+            return latex; // Return original if repair fails
+        }
     }
 }

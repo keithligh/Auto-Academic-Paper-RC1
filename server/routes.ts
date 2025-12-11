@@ -599,8 +599,32 @@ async function processDocumentFile(
 
       if (!validation.valid) {
         console.warn('[LaTeX Validation] Errors detected:', validation.errors);
-        validationWarnings = validation.errors;
-        await logJobProgress(jobId, `Validation Errors: ${validation.errors.length} found.`, { phase: "Phase 5: Compilation", step: "Validation Failed", progress: 98, details: "Errors found" });
+
+        // --- AUTO-REPAIR LOOP ---
+        await logJobProgress(jobId, `Validation failed. Attempting auto-repair for ${validation.errors.length} errors...`, { phase: "Phase 5: Compilation", step: "Auto-Repairing", progress: 98 });
+
+        try {
+          const aiService = new AIService(aiConfig, logger);
+          const repairedLatex = await aiService.repairLatex(latex, validation.errors);
+
+          // Re-validate
+          const revalidation = validateLatexSyntax(repairedLatex);
+          if (revalidation.valid) {
+            latex = repairedLatex; // Success!
+            validationWarnings.push("LaTeX was auto-repaired successfully.");
+            await logJobProgress(jobId, "Auto-repair successful. LaTeX is valid.", { phase: "Phase 5: Compilation", step: "Repair Success", progress: 99 });
+          } else {
+            validationWarnings.push(...revalidation.errors);
+            await logJobProgress(jobId, "Auto-repair partially failed. Some errors remain.", { phase: "Phase 5: Compilation", step: "Repair Warning", progress: 99 });
+            // We still save the repaired version as it's likely better than the original
+            latex = repairedLatex;
+          }
+        } catch (repairErr: any) {
+          console.error("Repair failed:", repairErr);
+          validationWarnings.push(`Repair system failed: ${repairErr.message}`);
+        }
+        // ------------------------
+
       } else {
         await logJobProgress(jobId, "LaTeX syntax is valid.", { phase: "Phase 5: Compilation", step: "Validation Passed", progress: 98 });
       }

@@ -376,3 +376,12 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 ## 74. CSS Specificity for Tables
 - **Incident**: Lists inside tables looked broken (weird spacing) because they inherited `text-align: justify` from the global article style.
 - **Lesson**: **Tables require strict alignment**. The complex layout of a table cell breaks down under "justification" algorithms designed for page-width text. Always enforce `text-align: left` for table content to preserve structure.
+
+## 75. The "Rewriter Aggression" Lesson (Surgical vs Global Prompts)
+- **Incident**: The Phase 5 Rewriter was acting as a "Global Optimizer", rewriting entire sections of the paper that the Peer Reviewer never flagged, condensing paragraphs and stripping context in the name of "academic rigor".
+- **Root Cause**: The prompt gave positive instructions ("Improve flow", "Maintain rigor") without negative constraints. The LLM interpreted "Improve" as "Rewrite Everything".
+- **Solution**: Implemented a **Surgical Editing Protocol**.
+    - **Explicit Scope**: `WHAT TO MODIFY` vs `WHAT TO PRESERVE`.
+    - **Negative Constraints**: "DO NOT improve unflagged sentences."
+    - **Targeted Task**: "Rewrite ONLY the exact sentences listed."
+- **Lesson**: **Positive Instructions are Dangerous.** If you tell an AI to "Make it better" without saying "Don't touch X", it will touch X. For maintenance tasks, you must explicitly forbid optimization of the "good" parts.
