@@ -388,7 +388,7 @@ export function processLatex(latex: string): SanitizeResult {
         // v1.9.65: Algorithm has special handling - [H] is position, \caption{} is title
         if (env === "algorithm") {
             console.log('[DEBUG] Processing algorithm env, content includes algorithm:', content.includes('\\begin{algorithm}'));
-            const algoRegex = /\\begin\{algorithm\}(?:\[[^\]]*\])?([\\s\\S]*?)\\end\{algorithm\}/g;
+            const algoRegex = /\\begin\{algorithm\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{algorithm\}/g;
             const matches = content.match(algoRegex);
             console.log('[DEBUG] Algorithm regex matches:', matches ? matches.length : 0);
             // Show snippet of content around \begin{algorithm}
