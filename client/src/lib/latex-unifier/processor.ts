@@ -245,7 +245,14 @@ export function processLatex(latex: string): SanitizeResult {
     content = tikzSanitized;
     Object.assign(blocks, tikzBlocks);
 
-    // --- CODE BLOCKS (Verbatim & Listings) ---
+    // --- QUOTE ENVIRONMENT (v1.9.78) ---
+    content = content.replace(/\\begin\{quote\}([\s\S]*?)\\end\{quote\}/g, (m, quoteContent) => {
+        // Parse formatting inside the quote (keep LaTeX commands)
+        const formatted = parseLatexFormatting(quoteContent.trim());
+        return createPlaceholder(`<blockquote class="latex-quote">${formatted}</blockquote>`);
+    });
+
+    // --- VERBATIM / CODE BLOCKS ---
     // Extract early to prevent Math/Command parsing inside code
     content = content.replace(/\\begin\{(verbatim|lstlisting)\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, envName, code) => {
         const escaped = code
@@ -494,7 +501,9 @@ export function processLatex(latex: string): SanitizeResult {
                 const titleHtml = title ? `<strong>${title}</strong>` : '';
                 // Remove label too
                 body = body.replace(/\\label\{[^}]*\}/g, '');
-                return createPlaceholder(`<div class="algorithm"><strong>Algorithm.</strong> ${titleHtml}<div class="algorithm-body">${parseLatexFormatting(body)}</div></div>`);
+                // Process lists inside algorithm body before formatting (v1.9.80 - Fix \end{enumerate} literal text bug)
+                const processedBody = processLists(body);
+                return createPlaceholder(`<div class="algorithm"><strong>Algorithm.</strong> ${titleHtml}<div class="algorithm-body">${parseLatexFormatting(processedBody)}</div></div>`);
             });
         } else {
             const robustRegex = new RegExp(`\\\\begin\\{${env}\\}(?:\\[(.*?)\\])?([\\s\\S]*?)\\\\end\\{${env}\\}`, 'g');
