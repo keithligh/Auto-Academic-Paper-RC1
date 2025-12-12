@@ -387,7 +387,10 @@ export function processLatex(latex: string): SanitizeResult {
     envs.forEach(env => {
         // v1.9.65: Algorithm has special handling - [H] is position, \caption{} is title
         if (env === "algorithm") {
+            console.log('[DEBUG] Processing algorithm env, content includes algorithm:', content.includes('\\begin{algorithm}'));
             const algoRegex = /\\begin\{algorithm\}(?:\[[^\]]*\])?([\\s\\S]*?)\\end\{algorithm\}/g;
+            const matches = content.match(algoRegex);
+            console.log('[DEBUG] Algorithm regex matches:', matches ? matches.length : 0);
             content = content.replace(algoRegex, (match, body) => {
                 console.log('[DEBUG Algorithm] Body BEFORE processing:', body);
                 // Extract caption as title
@@ -404,7 +407,9 @@ export function processLatex(latex: string): SanitizeResult {
                 console.log('[DEBUG Algorithm] Body AFTER cleanup, BEFORE processLists:', body);
                 const processedBody = processLists(body);
                 console.log('[DEBUG Algorithm] Body AFTER processLists:', processedBody);
-                return createPlaceholder(`<div class="algorithm"><strong>Algorithm.</strong> ${titleHtml}<div class="algorithm-body">${parseLatexFormatting(processedBody)}</div></div>`);
+                const finalHtml = parseLatexFormatting(processedBody);
+                console.log('[DEBUG Algorithm] Final HTML after parseLatexFormatting:', finalHtml);
+                return createPlaceholder(`<div class="algorithm"><strong>Algorithm.</strong> ${titleHtml}<div class="algorithm-body">${finalHtml}</div></div>`);
             });
         } else {
             const robustRegex = new RegExp(`\\\\begin\\{${env}\\}(?:\\[(.*?)\\])?([\\s\\S]*?)\\\\end\\{${env}\\}`, 'g');
