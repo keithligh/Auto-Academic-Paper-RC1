@@ -17,8 +17,9 @@ export interface AIProvider {
 
     /**
      * Structured JSON completion
+     * @param enableWebSearch Optional flag to enable web search (Poe-specific)
      */
-    jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void): Promise<any>;
+    jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void, enableWebSearch?: boolean): Promise<any>;
 
     /**
      * Whether this provider supports online research

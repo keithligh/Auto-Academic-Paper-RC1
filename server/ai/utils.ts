@@ -170,11 +170,34 @@ export function extractJson(content: string): any {
     try {
         return JSON.parse(clean);
     } catch (e) {
+        // AUTO-ACADEMIC-PAPER-RC1 FIX: Handle Unwrapped JSON Properties
+        // Flash models often output `"found": false` instead of `{ "found": false }`
+        // Error: "Unexpected non-whitespace character after JSON at position 7"
+        const errStr = String(e);
+        if (errStr.includes("Unexpected non-whitespace character") || errStr.includes("Unexpected token :")) {
+            // Check if it looks like a property: starts with "key":
+            if (/^\s*"[^"]+"\s*:/.test(clean)) {
+                try {
+                    const wrapped = `{${clean}}`;
+                    return JSON.parse(wrapped);
+                } catch (wrapErr) {
+                    // Ignore wrapper failure, proceed to standard escaping fix
+                }
+            }
+        }
+
         // If simple parse fails, try fixing escaping
         const fixed = fixAIJsonEscaping(clean);
         try {
             return JSON.parse(fixed);
         } catch (e2) {
+            // Check if wrapping helps the FIXED string (e.g. unwrapped + bad escapes)
+            if (/^\s*"[^"]+"\s*:/.test(fixed)) {
+                try {
+                    return JSON.parse(`{${fixed}}`);
+                } catch (e3) { /* Ignore */ }
+            }
+
             // DETECT TRUNCATION: Check for common JSON parsing errors related to incomplete output
             const errorMsg = e2 instanceof Error ? e2.message : String(e2);
             const isTruncated =

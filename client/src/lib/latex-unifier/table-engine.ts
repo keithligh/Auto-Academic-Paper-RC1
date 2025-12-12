@@ -132,11 +132,16 @@ export function processTables(text: string, formatText: (s: string) => string): 
         }
         if (currentRow.trim()) rows.push(currentRow);
 
-        // CELL SPLITTING
+        // CELL SPLITTING with ROWSPAN TRACKING
+        // Track which column positions have active rowspans
+        const activeRowspans: Map<number, number> = new Map(); // column -> remaining rows
+
         const htmlRows = rows.map(row => {
-            if (row.trim().match(/^\\(hline|midrule|toprule|bottomrule)$/)) return '';
+            if (row.trim().match(/^\\(hline|midrule|toprule|bottomrule|cline\{[^}]*\})$/)) return '';
 
             let cleanRow = row.replace(/\\(hline|midrule|toprule|bottomrule)/g, '');
+            // Strip \cline{X-Y} commands (partial horizontal lines)
+            cleanRow = cleanRow.replace(/\\cline\{[^}]*\}/g, '');
 
             const cells: string[] = [];
             let currentCell = '';
@@ -162,17 +167,96 @@ export function processTables(text: string, formatText: (s: string) => string): 
             }
             cells.push(currentCell.trim());
 
-            const htmlCells = cells.map(cell => {
+            // Process cells with column position awareness
+            let actualColPos = 0;
+            const htmlCellsArr: string[] = [];
+
+            for (let cellIdx = 0; cellIdx < cells.length; cellIdx++) {
+                // Skip columns that have active rowspans
+                while (activeRowspans.has(actualColPos) && activeRowspans.get(actualColPos)! > 0) {
+                    actualColPos++;
+                }
+
+                const cell = cells[cellIdx];
+
+                // If cell is empty and this is likely a multirow continuation, skip it
+                // This handles the LaTeX pattern where rows under multirow start with &
+                if (cell === '' && cellIdx === 0) {
+                    // Check if there's an active rowspan at column 0
+                    // If so, this empty cell is the "shadow" of the rowspan - skip it
+                    // If not, it's a genuinely empty first cell - render it
+                    if (activeRowspans.has(0) && activeRowspans.get(0)! > 0) {
+                        continue; // Skip this phantom cell
+                    }
+                }
+
+                // Handle \multicolumn{N}{align}{content}
                 const multicolMatch = cell.match(/^\\multicolumn\{(\d+)\}\{[^}]+\}\{([\s\S]*)\}$/);
                 if (multicolMatch) {
-                    const span = multicolMatch[1];
+                    const span = parseInt(multicolMatch[1]);
                     const content = formatText(multicolMatch[2]);
-                    return `<td colspan="${span}">${content}</td>`;
+                    htmlCellsArr.push(`<td colspan="${span}">${content}</td>`);
+                    actualColPos += span;
+                    continue;
                 }
-                return `<td>${formatText(cell)}</td>`;
-            }).join('');
 
-            return `<tr>${htmlCells}</tr>`;
+                // Handle \multirow{N}{width}{content}
+                if (cell.startsWith('\\multirow{')) {
+                    const multirowBasic = cell.match(/^\\multirow\{(\d+)\}/);
+                    if (multirowBasic) {
+                        const rowspan = parseInt(multirowBasic[1]);
+                        const startPos = multirowBasic[0].length;
+
+                        let braceCount = 0;
+                        let argNum = 0;
+                        let contentStart = -1;
+                        let contentEnd = -1;
+
+                        for (let i = startPos; i < cell.length; i++) {
+                            if (cell[i] === '{') {
+                                braceCount++;
+                                if (braceCount === 1) {
+                                    argNum++;
+                                    if (argNum === 2) contentStart = i + 1;
+                                }
+                            } else if (cell[i] === '}') {
+                                braceCount--;
+                                if (braceCount === 0 && argNum === 2) {
+                                    contentEnd = i;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (contentStart !== -1 && contentEnd !== -1) {
+                            const content = cell.substring(contentStart, contentEnd);
+                            htmlCellsArr.push(`<td rowspan="${rowspan}">${formatText(content)}</td>`);
+                            // Track this rowspan for subsequent rows
+                            activeRowspans.set(actualColPos, rowspan);
+                        } else {
+                            htmlCellsArr.push(`<td>${formatText(cell)}</td>`);
+                        }
+                        actualColPos++;
+                        continue;
+                    }
+                }
+
+                // Default cell
+                htmlCellsArr.push(`<td>${formatText(cell)}</td>`);
+                actualColPos++;
+            }
+
+            // Decrement all active rowspans for next row
+            Array.from(activeRowspans.keys()).forEach(col => {
+                const count = activeRowspans.get(col)!;
+                if (count > 1) {
+                    activeRowspans.set(col, count - 1);
+                } else {
+                    activeRowspans.delete(col);
+                }
+            });
+
+            return `<tr>${htmlCellsArr.join('')}</tr>`;
         }).join('');
 
         result += createPlaceholder(`<div class="table-wrapper"><table><tbody>${htmlRows}</tbody></table></div>`);

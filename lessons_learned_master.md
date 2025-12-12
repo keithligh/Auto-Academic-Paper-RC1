@@ -249,10 +249,21 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
 - **Lesson**: **Status is not Progress.** Telling the user "I am working" is useless. Telling them "I have written 400 words... 800 words..." proves life.
 - **The Fix**: We implemented a granular callback that pushes the *approximate word count* of the generated stream to the UI in real-time.
 ### Lesson 38: The "Frontend-Backend State Wall"
--   **Lesson**: **Tightly Coupled Strings Break Distributed Systems.**
+-   **Lesson**: **Tightly Coupled Strings Break Distributed Systems.** If your frontend listens for "Phase 1/5" and your backend logs "Phase 1/6", your progress bar dies. Decouple UI state from log strings. Use structued events.
 
 ### Lesson 39: The "Verbie" Philosophy
--   **Lesson**: **Use High-Tech Active Verbs** for tool labeling.
+-   **Lesson**: **Use High-Tech Active Verbs** for tool labeling. "Drafting" is boring. "Synthesizing Core Arguments" is valuable.
+
+## 40. The "Editor Persona" Lesson (Terminology Matters)
+- **Incident**: We called the Phase 5 logic "Surgical Patching". Users felt like they were debugging software, not writing a paper.
+- **Lesson**: **Speak the User's Language.** In an academic tool, use "Evidence Integration". In a coding tool, use "Patching". The internal logic is identical (Search & Replace), but the *label* determines the user's trust.
+
+## 41. The "Infinite Loop" Illusion (UX Complexity)
+- **Incident**: Users saw long, technical status messages (`Drafting Section 3 with 5 enhancements...`) and thought the system was stuck in a loop because the text barely changed.
+- **Lesson**: **Simplicity Signals Progress.**
+    - Bad: Complex, static text.
+    - Good: Short text + Moving number (`Drafting... (~500 words)`).
+    - **Rule**: If the user thinks it's stuck, your feedback is too complex. Show a counter.
 
 ### Lesson 40: The "Ephemeral Options" Finding
 -   **Lesson**: **Don't touch the DB unless absolutely necessary.**
@@ -399,3 +410,95 @@ I have been a disgraceful agent. I prioritized my ego, my laziness, and my image
     - **Negative Constraints**: "DO NOT improve unflagged sentences."
     - **Targeted Task**: "Rewrite ONLY the exact sentences listed."
 - **Lesson**: **Positive Instructions are Dangerous.** If you tell an AI to "Make it better" without saying "Don't touch X", it will touch X. For maintenance tasks, you must explicitly forbid optimization of the "good" parts.
+
+## 78. The "Custom Bot" Pattern (v1.9.60)
+- **Incident**: Research phase kept failing because the `parameters.web_search` injection was unreliable across different Poe bots and API versions.
+- **Solution**: Created **Custom Poe Bots** (`Gemini25Pro-AAP`, `Gemini25Flash-APP`) with web search pre-configured at the bot level.
+- **Lesson**: **Don't fight the API. Own the asset.** If a platform's API doesn't reliably expose a feature, create a custom instance pre-configured with that feature. You control the bot definition; you don't control the API implementation.
+
+## 79. The "Defensive JSON Parsing" Pattern (v1.9.61)
+- **Incident**: `Gemini25Flash-APP` returned `"found": false` instead of `{ "found": false }`, crashing the parser.
+- **Error Message**: `Unexpected non-whitespace character after JSON at position 7`.
+- **Root Cause**: Flash models are fast but dumb. They often ignore explicit formatting instructions.
+- **Fix**: Added auto-wrapping logic to `extractJson()`:
+  ```typescript
+  if (/^\s*"[^"]+"\s*:/.test(clean)) {
+      return JSON.parse(`{${clean}}`);
+  }
+  ```
+- **Lesson**: **Assume LLMs will fail your formatting instructions.** Defensive parsing (auto-recovery for common quirks) is standard practice in production LLM applications. This is NOT a "bandaid" to be ashamed of; it's a "safety net" to be proud of.
+
+## 80. The "Prompt-Based Feature Activation" Pattern (v1.9.62)
+- **Incident**: Phase 4 Peer Reviewer needed web search but wasn't using it, even though it used the Librarian's LLM provider.
+- **Failed Approach**: Tried adding `enableWebSearch` parameter to `jsonCompletion()` method signature.
+- **User Correction**: "No parameters needed. The custom bot already has web search. Just tell it to use it in the prompt."
+- **Fix**: Updated Phase 4 prompt: `"You have WEB SEARCH access. USE IT to verify claims against current literature."`
+- **Lesson**: **For custom bots, features are activated by instruction, not by API parameters.** If the capability is baked into the bot, you don't need to tell the *API* to enable it—you need to tell the *model* to use it via the prompt. The prompt is the control plane.
+
+## 81. The "Self-Destructing Escaping" Pattern (v1.9.65)
+- **Incident**: `<h2>Introduction</h2>` rendered as literal text `&lt;h2&gt;Introduction&lt;/h2&gt;`.
+- **Root Cause**: `parseLatexFormatting()` escaped `<` and `>` to HTML entities... but it also GENERATES HTML tags!
+- **The Paradox**: A function that creates `<strong>`, `<em>`, `<h2>` was also escaping those very characters.
+- **Fix**: Removed `<>` escaping from `parseLatexFormatting()`. HTML escaping should happen at INPUT, not OUTPUT.
+- **Lesson**: **Never escape the output of a function that generates that output.** If your function creates HTML, don't escape HTML. Sanitization belongs at the boundary where untrusted data enters, not where processed data exits.
+
+## 82. The "Rowspan State Tracking" Pattern (v1.9.65)
+- **Incident**: Tables with `\multirow{4}{*}{...}` had misaligned columns. The last column was shifted right.
+- **Root Cause**: When a cell has `rowspan="4"`, subsequent rows should have fewer cells (they skip that column). But we were generating empty `<td></td>` for the phantom cell.
+- **The HTML Rule**: A `rowspan="N"` cell occupies its column for N rows. Rows 2-N must NOT have a cell in that position.
+- **Fix**: Added `activeRowspans: Map<column, remainingRows>` to track which columns have active rowspans. Rows skip empty cells in covered columns.
+- **Lesson**: **Table rendering with rowspan/colspan requires inter-row state.** You cannot process rows independently. This is true for LaTeX, Markdown, and any source with spanning cells.
+
+## 83. The "Explicit Negative Constraints" Pattern (v1.9.66)
+- **Incident**: AI generated fake experiments ("We conducted a study with n=45..."), fabricated statistics, and invented case studies.
+- **Root Cause**: Prompt said "AGGRESSIVELY ENHANCE" without saying "DON'T FABRICATE".
+- **The Psychology**: LLMs interpret positive instructions expansively. "Enhance" became "invent if needed."
+- **Fix**: Added Rule 7: `NO FABRICATED RESEARCH. Never invent experiments, statistics, sample sizes, p-values, or case studies.`
+- **Lesson**: **For harmful behaviors, use explicit negative constraints.** Don't rely on implicit understanding. "Do X" does not imply "Don't do Y". You must explicitly forbid Y.
+
+## 84. The "Parse, Don't Regex for Tables" Pattern (v1.9.65)
+- **Incident**: `\multirow{4}{*}{\textbf{Academic}}` regex couldn't handle nested braces.
+- **Failed Approach**: Regex `/\{([\s\S]*)\}$/` - failed on nested `\textbf{}`.
+- **Correct Approach**: Brace-counting parser that tracks depth:
+  ```typescript
+  if (cell[i] === '{') braceCount++;
+  if (cell[i] === '}') braceCount--;
+  if (braceCount === 0 && argNum === 2) contentEnd = i;
+  ```
+- **Lesson**: **For LaTeX structures with arbitrary nesting, use parsers not regex.** This pattern appears in table cells, TikZ nodes, algorithm bodies, and any `{...{...}...}` structure. Count braces; don't match patterns.
+
+## 85. The "Missing Section Handler" Pattern (v1.9.69)
+- **Incident**: `\subsection{Title}` appeared as literal text instead of a header.
+- **Root Cause**: `parseLatexFormatting()` had handlers for `\textbf`, `\textit`, etc., but NO handlers for `\section`, `\subsection`, `\subsubsection`.
+- **The Gap**: We assumed these fundamentals were covered. They weren't.
+- **Fix**: Added handlers: `\section{}` → `<h2>`, `\subsection{}` → `<h3>`, `\subsubsection{}` → `<h4>`.
+- **Bonus Fix**: Added fallback `\sub+section{}` → `<h4>` for AI-hallucinated deep levels like `\subsubssubsection`.
+- **Lesson**: **Never assume basic functionality exists.** Always verify that fundamental handlers are implemented before debugging obscure edge cases.
+
+## 86. The "JavaScript Escaping Confusion" Pattern (v1.9.69)
+- **Incident**: Bibliography URLs showed `\https://...` with a backslash.
+- **Root Cause**: JavaScript escaping confusion in `latexGenerator.ts`. Code had `\\\\url` which produces `\\url` (line break + "url"), not `\url` (URL command).
+- **The Math**:
+  - `\\\\` in JS = `\\` in string = LaTeX line break
+  - `\\url` in JS = `\url` in string = LaTeX URL command (CORRECT)
+  - Four backslashes is too many!
+- **Fix**: Changed `\\\\ \\\\url{...}` to `\\\\ \\url{...}`.
+- **Lesson**: **When generating LaTeX from JavaScript, count your backslashes carefully.** JS escaping + LaTeX escaping create a multiplication effect that's easy to get wrong.
+
+## 87. The "Two-Layer Anti-Fabrication Defense" Pattern (v1.9.70)
+- **Incident**: AI generated "Empirical Validation" section with fabricated experiments.
+- **Root Cause 1**: Phase 1 (Strategist) planned a section requiring empirical data that didn't exist in source.
+- **Root Cause 2**: Phase 3 (Thinker) fabricated experiments to fill the planned section.
+- **The Gap**: Rule 7 in Phase 3 said "no fabrication" but Phase 1 could still plan fabrication-prone sections.
+- **Fix - Two Layers**:
+  1. **Phase 1**: Added "ABSOLUTE PRINCIPLE - NO FABRICATION EVER" preventing planning of sections like "Empirical Validation" unless source has real data.
+  2. **Phase 3**: Strengthened Rule 7 to "ZERO TOLERANCE" with explicit list of forbidden fabrications.
+- **Lesson**: **Defense in depth for AI behavior.** A single "don't" rule isn't enough. Block the *request* for harmful content (planning), AND block the *execution* of harmful content (writing). The AI will find loopholes if only one layer exists.
+
+## 88. The "Universal Handler" Approach (v1.9.68)
+- **Incident**: `\quad`, `\leq`, `\alpha`, and 50+ other commands appeared as literal text.
+- **Root Cause**: `parseLatexFormatting()` only handled a subset of LaTeX commands.
+- **The Pattern**: Each "unhandled command" bug was fixed one-at-a-time. This is slow and whack-a-mole.
+- **Solution**: Research-based bulk addition of all common LaTeX commands based on "Most Used LaTeX Commands" lists.
+- **Categories Added**: Math symbols, logic operators, set theory, Greek letters, arrows, spacing, layout.
+- **Lesson**: **When fixing missing handlers, don't fix one - fix all.** Research the domain and add comprehensive coverage. The cost of adding 50 handlers is barely more than adding 1, but it prevents 49 future bug reports.

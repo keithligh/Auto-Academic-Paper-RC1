@@ -36,7 +36,7 @@ export class GeminiProvider implements AIProvider {
         return (result as any).response.text();
     }
 
-    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any): Promise<any> {
+    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void, enableWebSearch?: boolean): Promise<any> {
         const model = this.client.getGenerativeModel({
             model: this.config.model,
             systemInstruction: systemPrompt,

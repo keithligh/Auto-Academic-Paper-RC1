@@ -96,14 +96,17 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(/\\\&/g, '&')  // Then single
             .replace(/\\#/g, '#')
             .replace(/\\_/g, '_')
+            .replace(/\\\$/g, '$')   // Escaped dollar (v1.9.68) for \$68,000
             .replace(/\\\{/g, '{')
             .replace(/\\\}/g, '}');
 
-        // 3. HTML Escaping
+        // 3. Ampersand Escaping ONLY (for HTML entities)
+        // NOTE: We do NOT escape < and > here because:
+        //   - This function GENERATES HTML tags (<strong>, <em>, <code>, etc.)
+        //   - Escaping would destroy our own output
+        //   - Input sanitization happens in healer.ts, not here
         protectedText = protectedText
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+            .replace(/&(?!amp;|lt;|gt;|nbsp;|mdash;|ndash;|ldquo;|rdquo;|rarr;|larr;|harr;|rArr;|lArr;|hArr;|times;|thinsp;|#)/g, '&amp;');
 
         // 4. Typography Normalization
         protectedText = protectedText
@@ -121,6 +124,14 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(/\\label\{([^{}]*)\}/g, '')
             .replace(/\\url\{([^{}]*)\}/g, '<code>$1</code>')
             .replace(/\\footnote\{([^{}]*)\}/g, ' ($1)')
+            // Section headers (v1.9.69) - Convert to HTML headers
+            .replace(/\\section\*?\{([^{}]*)\}/g, '<h2>$1</h2>')
+            .replace(/\\subsection\*?\{([^{}]*)\}/g, '<h3>$1</h3>')
+            .replace(/\\subsubsection\*?\{([^{}]*)\}/g, '<h4>$1</h4>')
+            .replace(/\\paragraph\*?\{([^{}]*)\}/g, '<strong>$1</strong> ')
+            .replace(/\\subparagraph\*?\{([^{}]*)\}/g, '<strong>$1</strong> ')
+            // Fallback: AI-hallucinated deep sections (e.g., \subsubssubsection) → normalize to h4
+            .replace(/\\sub+section\*?\{([^{}]*)\}/g, '<h4>$1</h4>')
             .replace(new RegExp(`\\\\textbf\\{${nested}\\}`, 'g'), '<strong>$1</strong>')
             .replace(new RegExp(`\\\\textit\\{${nested}\\}`, 'g'), '<em>$1</em>')
             .replace(new RegExp(`\\\\emph\\{${nested}\\}`, 'g'), '<em>$1</em>')
@@ -129,12 +140,19 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(new RegExp(`\\\\textsc\\{${nested}\\}`, 'g'), '<span style="font-variant: small-caps;">$1</span>')
             // Markdown Compatibility (v1.9.15) - Handle AI Hallucinations
             .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            // Markdown Headers (v1.9.64) - Strip hallucinated Markdown headers
+            // AI sometimes outputs "# TITLE" or "## SECTION" inside LaTeX
+            .replace(/^#{1,6}\s+.*$/gm, '')
             .replace(/\\bullet/g, '&#8226;')
             .replace(/~/g, '&nbsp;')
             .replace(/\\times/g, '&times;')
             .replace(/\\checkmark/g, '&#10003;')
             .replace(/\\approx/g, '&#8776;')
             .replace(/\\,/g, '&thinsp;')
+            // LaTeX spacing commands (v1.9.67)
+            .replace(/\\quad(?![a-zA-Z])/g, '&emsp;')   // 1em space
+            .replace(/\\qquad(?![a-zA-Z])/g, '&emsp;&emsp;') // 2em space
+            // Arrows
             .replace(/\\rightarrow/g, '&rarr;')
             .replace(/\\Rightarrow/g, '&rArr;')
             .replace(/\\leftarrow/g, '&larr;')
@@ -143,6 +161,62 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(/\\Leftrightarrow/g, '&hArr;')
             .replace(/\\longrightarrow/g, '&rarr;')
             .replace(/\\Longrightarrow/g, '&rArr;')
+            .replace(/\\uparrow/g, '&uarr;')
+            .replace(/\\downarrow/g, '&darr;')
+            .replace(/\\updownarrow/g, '&#8597;')
+            // Math symbols (v1.9.68 - Common LaTeX Commands)
+            .replace(/\\leq(?![a-zA-Z])/g, '≤')
+            .replace(/\\geq(?![a-zA-Z])/g, '≥')
+            .replace(/\\neq(?![a-zA-Z])/g, '≠')
+            .replace(/\\pm(?![a-zA-Z])/g, '±')
+            .replace(/\\cdot(?![a-zA-Z])/g, '·')
+            .replace(/\\ldots/g, '…')
+            .replace(/\\dots/g, '…')
+            .replace(/\\cdots/g, '⋯')
+            .replace(/\\infty/g, '∞')
+            .replace(/\\degree/g, '°')
+            .replace(/\\circ(?![a-zA-Z])/g, '°')
+            .replace(/\\therefore/g, '∴')
+            .replace(/\\because/g, '∵')
+            .replace(/\\forall/g, '∀')
+            .replace(/\\exists/g, '∃')
+            .replace(/\\subset/g, '⊂')
+            .replace(/\\supset/g, '⊃')
+            .replace(/\\cup/g, '∪')
+            .replace(/\\cap/g, '∩')
+            .replace(/\\in(?![a-zA-Z])/g, '∈')
+            .replace(/\\notin/g, '∉')
+            // Greek letters (text mode - v1.9.68)
+            .replace(/\\alpha(?![a-zA-Z])/g, 'α')
+            .replace(/\\beta(?![a-zA-Z])/g, 'β')
+            .replace(/\\gamma(?![a-zA-Z])/g, 'γ')
+            .replace(/\\delta(?![a-zA-Z])/g, 'δ')
+            .replace(/\\epsilon(?![a-zA-Z])/g, 'ε')
+            .replace(/\\zeta(?![a-zA-Z])/g, 'ζ')
+            .replace(/\\eta(?![a-zA-Z])/g, 'η')
+            .replace(/\\theta(?![a-zA-Z])/g, 'θ')
+            .replace(/\\lambda(?![a-zA-Z])/g, 'λ')
+            .replace(/\\mu(?![a-zA-Z])/g, 'μ')
+            .replace(/\\pi(?![a-zA-Z])/g, 'π')
+            .replace(/\\sigma(?![a-zA-Z])/g, 'σ')
+            .replace(/\\tau(?![a-zA-Z])/g, 'τ')
+            .replace(/\\phi(?![a-zA-Z])/g, 'φ')
+            .replace(/\\omega(?![a-zA-Z])/g, 'ω')
+            .replace(/\\Delta(?![a-zA-Z])/g, 'Δ')
+            .replace(/\\Sigma(?![a-zA-Z])/g, 'Σ')
+            .replace(/\\Omega(?![a-zA-Z])/g, 'Ω')
+            // Spacing commands with arguments (v1.9.68)
+            .replace(/\\hspace\*?\{[^}]*\}/g, '&emsp;')  // Horizontal space → 1em
+            .replace(/\\vspace\*?\{[^}]*\}/g, '')        // Vertical space → strip (CSS handles)
+            // Layout commands to strip (v1.9.68)
+            .replace(/\\clearpage(?![a-zA-Z])/g, '')
+            .replace(/\\newpage(?![a-zA-Z])/g, '')
+            .replace(/\\noindent(?![a-zA-Z])/g, '')
+            .replace(/\\centering(?![a-zA-Z])/g, '')
+            .replace(/\\raggedright(?![a-zA-Z])/g, '')
+            .replace(/\\raggedleft(?![a-zA-Z])/g, '')
+            .replace(/\\par(?![a-zA-Z])/g, '\n\n')
+            // Punctuation and special
             .replace(/\{:\}/g, ':')
             .replace(/\{,\}/g, ',')
             .replace(/\\:/g, ':')
@@ -326,9 +400,14 @@ export function processLatex(latex: string): SanitizeResult {
     }
 
     // --- ALGORITHMS ---
+    // Handles BOTH packages:
+    // - algorithmic package: \STATE, \IF, \ENDIF (uppercase)
+    // - algpseudocode package: \State, \If, \EndIf (mixed case)
     const processAlgorithms = (content: string): string => {
-        return content.replace(/\\begin\{algorithmic\}(\[[^\]]*\])?([\s\S]*?)\\end\{algorithmic\}/g, (m, opt, body) => {
-            let lines = body.split(/\\STATE\s+/).filter((l: string) => l.trim().length > 0);
+        // Handle both \begin{algorithmic} and content inside \begin{algorithm}
+        return content.replace(/\\begin\{algorithmic\}(\[[^\]]*\])?([\s\S]*?)\\end\{algorithmic\}/gi, (m, opt, body) => {
+            // Split by STATE/State/Statex commands (case insensitive)
+            let lines = body.split(/\\(?:STATE|State|Statex)\s+/i).filter((l: string) => l.trim().length > 0);
 
             // If no STATE commands, try splitting by newline if it looks like raw code
             if (lines.length <= 1 && body.includes('\n')) {
@@ -343,31 +422,35 @@ export function processLatex(latex: string): SanitizeResult {
                 let lineContent = line.trim();
                 let currentIndent = indentLevel;
 
-                if (/^\\IF/i.test(lineContent) || /^\\FOR/i.test(lineContent) || /^\\WHILE/i.test(lineContent)) {
+                // Handle block starts (case insensitive)
+                if (/^\\(?:IF|If)\b/i.test(lineContent) || /^\\(?:FOR|For)\b/i.test(lineContent) || /^\\(?:WHILE|While)\b/i.test(lineContent)) {
                     indentLevel++;
-                } else if (/^\\ENDIF/i.test(lineContent) || /^\\ENDFOR/i.test(lineContent) || /^\\ENDWHILE/i.test(lineContent)) {
+                } else if (/^\\(?:ENDIF|EndIf)\b/i.test(lineContent) || /^\\(?:ENDFOR|EndFor)\b/i.test(lineContent) || /^\\(?:ENDWHILE|EndWhile)\b/i.test(lineContent)) {
                     indentLevel--;
                     currentIndent = indentLevel;
-                    lineContent = lineContent.replace(/^\\(ENDIF|ENDFOR|ENDWHILE)/i, '<span class="latex-alg-keyword">$1</span>');
-                } else if (/^\\ELSE/i.test(lineContent)) {
+                } else if (/^\\(?:ELSE|Else)\b/i.test(lineContent)) {
                     currentIndent = indentLevel - 1;
-                    lineContent = lineContent.replace(/^\\ELSE/i, '<span class="latex-alg-keyword">else</span>');
                 }
 
                 let formattedContent = parseLatexFormatting(lineContent);
 
+                // Replace algorithm keywords (case insensitive)
                 formattedContent = formattedContent
-                    .replace(/^\\IF(?![a-zA-Z])/i, '<span class="latex-alg-keyword">if</span>')
-                    .replace(/^\\FOR(?![a-zA-Z])/i, '<span class="latex-alg-keyword">for</span>')
-                    .replace(/^\\WHILE(?![a-zA-Z])/i, '<span class="latex-alg-keyword">while</span>')
-                    .replace(/\\IF\s*\{([^}]+)\}/i, '<span class="latex-alg-keyword">if</span> $1 <span class="latex-alg-keyword">then</span>')
-                    .replace(/\\FOR\s*\{([^}]+)\}/i, '<span class="latex-alg-keyword">for</span> $1 <span class="latex-alg-keyword">do</span>')
-                    .replace(/\\WHILE\s*\{([^}]+)\}/i, '<span class="latex-alg-keyword">while</span> $1 <span class="latex-alg-keyword">do</span>')
-                    .replace(/^\\ENDIF/i, '<span class="latex-alg-keyword">endif</span>')
-                    .replace(/^\\ENDFOR/i, '<span class="latex-alg-keyword">endfor</span>')
-                    .replace(/^\\ENDWHILE/i, '<span class="latex-alg-keyword">endwhile</span>')
-                    .replace(/^\\ELSE/i, '<span class="latex-alg-keyword">else</span>')
-                    .replace(/^\\STATE\s*/i, '');
+                    .replace(/^\\(?:IF|If)\b/i, '<span class="latex-alg-keyword">if</span>')
+                    .replace(/^\\(?:FOR|For)\b/i, '<span class="latex-alg-keyword">for</span>')
+                    .replace(/^\\(?:WHILE|While)\b/i, '<span class="latex-alg-keyword">while</span>')
+                    .replace(/\\(?:IF|If)\s*\{([^}]+)\}/gi, '<span class="latex-alg-keyword">if</span> $1 <span class="latex-alg-keyword">then</span>')
+                    .replace(/\\(?:FOR|For)\s*\{([^}]+)\}/gi, '<span class="latex-alg-keyword">for</span> $1 <span class="latex-alg-keyword">do</span>')
+                    .replace(/\\(?:WHILE|While)\s*\{([^}]+)\}/gi, '<span class="latex-alg-keyword">while</span> $1 <span class="latex-alg-keyword">do</span>')
+                    .replace(/^\\(?:ENDIF|EndIf)\b/i, '<span class="latex-alg-keyword">endif</span>')
+                    .replace(/^\\(?:ENDFOR|EndFor)\b/i, '<span class="latex-alg-keyword">endfor</span>')
+                    .replace(/^\\(?:ENDWHILE|EndWhile)\b/i, '<span class="latex-alg-keyword">endwhile</span>')
+                    .replace(/^\\(?:ELSE|Else|ElsIf|ELSIF)\b/i, '<span class="latex-alg-keyword">else</span>')
+                    .replace(/^\\(?:STATE|State|Statex)\s*/i, '')
+                    .replace(/\\(?:RETURN|Return)\b/gi, '<span class="latex-alg-keyword">return</span>')
+                    .replace(/\\(?:REQUIRE|Require)\b/gi, '<span class="latex-alg-keyword">Require:</span>')
+                    .replace(/\\(?:ENSURE|Ensure)\b/gi, '<span class="latex-alg-keyword">Ensure:</span>')
+                    .replace(/\\(?:COMMENT|Comment)\{([^}]*)\}/gi, '<span class="latex-alg-comment">// $1</span>');
 
                 const indentStyle = `style="padding-left: ${currentIndent * 1.5}em"`;
 
@@ -377,12 +460,13 @@ export function processLatex(latex: string): SanitizeResult {
                   </div>`;
             };
 
-            const commands = body.split(/(?=\\(?:STATE|IF|FOR|WHILE|ENDIF|ENDFOR|ENDWHILE|ELSE))/g).filter((s: string) => s.trim().length > 0);
+            // Split by algorithm commands (case insensitive)
+            const commands = body.split(/(?=\\(?:STATE|State|Statex|IF|If|FOR|For|WHILE|While|ENDIF|EndIf|ENDFOR|EndFor|ENDWHILE|EndWhile|ELSE|Else|RETURN|Return))/gi).filter((s: string) => s.trim().length > 0);
 
             commands.forEach((cmd: string) => {
                 let cleanCmd = cmd.trim();
-                if (cleanCmd.startsWith('\\STATE')) {
-                    cleanCmd = cleanCmd.replace(/^\\STATE\s*/, '');
+                if (/^\\(?:STATE|State|Statex)\b/i.test(cleanCmd)) {
+                    cleanCmd = cleanCmd.replace(/^\\(?:STATE|State|Statex)\s*/i, '');
                 }
                 html += parseLine(cleanCmd);
             });
@@ -396,18 +480,37 @@ export function processLatex(latex: string): SanitizeResult {
     // --- ENVIRONMENT NORMALIZATION (Robust Loop from LatexPreview) ---
     const envs = ["algorithm", "hypothesis", "remark", "definition", "theorem", "lemma", "proposition", "corollary"];
     envs.forEach(env => {
-        const robustRegex = new RegExp(`\\\\begin\\{${env}\\}(?:\\[(.*?)\\])?([\\s\\S]*?)\\\\end\\{${env}\\}`, 'g');
-        content = content.replace(robustRegex, (match, title, body) => {
-            const titleHtml = title ? `<strong>(${title})</strong> ` : '';
-            // We use a safe placeholder to prevent text processing from mangling the env logic
-            return createPlaceholder(`<div class="${env}"> <strong>${env.charAt(0).toUpperCase() + env.slice(1)}.</strong> ${titleHtml}${parseLatexFormatting(body)}</div> `);
-        });
+        // v1.9.65: Algorithm has special handling - [H] is position, \caption{} is title
+        if (env === "algorithm") {
+            const algoRegex = /\\begin\{algorithm\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{algorithm\}/g;
+            content = content.replace(algoRegex, (match, body) => {
+                // Extract caption as title
+                let title = '';
+                const captionMatch = body.match(/\\caption\{([^}]*)\}/);
+                if (captionMatch) {
+                    title = captionMatch[1];
+                    body = body.replace(/\\caption\{[^}]*\}/g, ''); // Remove caption from body
+                }
+                const titleHtml = title ? `<strong>${title}</strong>` : '';
+                // Remove label too
+                body = body.replace(/\\label\{[^}]*\}/g, '');
+                return createPlaceholder(`<div class="algorithm"><strong>Algorithm.</strong> ${titleHtml}<div class="algorithm-body">${parseLatexFormatting(body)}</div></div>`);
+            });
+        } else {
+            const robustRegex = new RegExp(`\\\\begin\\{${env}\\}(?:\\[(.*?)\\])?([\\s\\S]*?)\\\\end\\{${env}\\}`, 'g');
+            content = content.replace(robustRegex, (match, title, body) => {
+                const titleHtml = title ? `<strong>(${title})</strong> ` : '';
+                return createPlaceholder(`<div class="${env}"><strong>${env.charAt(0).toUpperCase() + env.slice(1)}.</strong> ${titleHtml}${parseLatexFormatting(body)}</div>`);
+            });
+        }
     });
 
     // --- ABSTRACT & CENTER (Moved from LatexPreview) ---
-    content = content.replace(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/g, (m, body) =>
-        createPlaceholder(`<div class="abstract"><h3>Abstract</h3><p>${parseLatexFormatting(body)}</p></div>`)
-    );
+    content = content.replace(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/g, (m, body) => {
+        // Strip duplicate "ABSTRACT" word that AI sometimes outputs at the start
+        const cleanBody = body.replace(/^\s*ABSTRACT\s*/i, '');
+        return createPlaceholder(`<div class="abstract"><h3>Abstract</h3><p>${parseLatexFormatting(cleanBody)}</p></div>`);
+    });
     content = content.replace(/\\begin\{center\}([\s\S]*?)\\end\{center\}/g, (m, body) =>
         `<div style="text-align: center;">${parseLatexFormatting(body)}</div>`
     );
@@ -557,7 +660,8 @@ export function processLatex(latex: string): SanitizeResult {
         return createPlaceholder(bibHtml);
     });
 
-    // --- SECTION HEADERS (Moved from LatexPreview) ---
+    // --- SECTION HEADERS ---
+    // Now safe to use direct HTML since parseLatexFormatting no longer escapes < and >
     content = content.replace(/\\section\*?\s*\{([\s\S]*?)\}/g, '<h2>$1</h2>');
     content = content.replace(/\\subsection\*?\s*\{([\s\S]*?)\}/g, '<h3>$1</h3>');
     content = content.replace(/\\subsubsection\*?\s*\{([\s\S]*?)\}/g, '<h4>$1</h4>');

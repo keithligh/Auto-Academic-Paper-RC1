@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { useDropzone } from "react-dropzone";
 import { useMutation } from "@tanstack/react-query";
-import { User, ListChecks, Code, ChartLine, Settings2, Upload, FolderOpen, RotateCcw, FileUp } from "lucide-react";
+import { User, ListChecks, Code, ChartLine, Settings2, Upload, FolderOpen, RotateCcw, FileUp, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { FileCard } from "@/components/FileCard";
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { enhancementLevels, paperTypes } from "@shared/schema";
 import { useAIConfig } from "@/context/AIConfigContext";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // Generate a sanitized unique ID for file uploads
 function generateUploadId(originalName: string) {
@@ -87,29 +88,30 @@ export default function LandingPage() {
         setAdvancedOptions(prev => ({ ...prev, [key]: !prev[key] }));
     };
 
+    // v1.9.2: Inline error state for job submission failures
+    const [jobError, setJobError] = useState<string | null>(null);
+    const clearJobError = () => setJobError(null);
+
+    // v1.9.2: Inline error state for header actions (Recall Last, Import LaTeX)
+    const [actionError, setActionError] = useState<string | null>(null);
+    const clearActionError = () => setActionError(null);
+
     const handleRecallLast = useCallback(async () => {
         try {
+            setActionError(null);  // Clear previous error
             const res = await apiRequest("GET", "/api/conversions/latest");
             const job = await res.json();
 
             if (!job || !job.id) {
-                toast({
-                    title: "No previous generation found",
-                    description: "Generate a paper first to use this feature",
-                    variant: "destructive"
-                });
+                setActionError("No previous generation found. Generate a paper first to use this feature.");
                 return;
             }
 
             setLocation(`/results/${job.id}`);
         } catch (err: any) {
-            toast({
-                title: "Failed to recall generation",
-                description: err.message || "Could not fetch latest generation",
-                variant: "destructive"
-            });
+            setActionError(`Failed to recall generation: ${err.message || "Could not fetch latest generation"}`);
         }
-    }, [setLocation, toast]);
+    }, [setLocation]);
 
     // Import LaTeX file for debugging
     const latexInputRef = useRef<HTMLInputElement>(null);
@@ -119,6 +121,7 @@ export default function LandingPage() {
         if (!file) return;
 
         try {
+            setActionError(null);  // Clear previous error
             const latexContent = await file.text();
 
             // Create a debug job entry via API
@@ -128,6 +131,7 @@ export default function LandingPage() {
             });
             const job = await res.json();
 
+            // Success - can use toast for non-error feedback
             toast({
                 title: "LaTeX imported",
                 description: `Imported ${file.name} for preview`
@@ -135,11 +139,7 @@ export default function LandingPage() {
 
             setLocation(`/results/${job.id}`);
         } catch (err: any) {
-            toast({
-                title: "Failed to import LaTeX",
-                description: err.message || "Could not create preview job",
-                variant: "destructive"
-            });
+            setActionError(`Failed to import LaTeX: ${err.message || "Could not create preview job"}`);
         }
 
         // Reset input for re-import
@@ -184,14 +184,12 @@ export default function LandingPage() {
             return res.json();
         },
         onSuccess: (data) => {
+            setJobError(null);  // Clear any previous error
             setLocation(`/processing/${data.jobId}`);
         },
         onError: (error) => {
-            toast({
-                title: "Processing Failed",
-                description: error.message,
-                variant: "destructive",
-            });
+            // v1.9.2: Set inline error instead of toast
+            setJobError(error.message);
         },
     });
 
@@ -296,6 +294,24 @@ export default function LandingPage() {
             <main className="flex flex-col h-screen pt-24">
                 <div className="flex-1 flex flex-col justify-center px-6">
                     <div className="w-full max-w-5xl mx-auto space-y-6">
+
+                        {/* v1.9.2: Inline Action Error Display */}
+                        {actionError && (
+                            <Alert variant="destructive" className="max-w-3xl mx-auto mb-4">
+                                <XCircle className="w-5 h-5" />
+                                <AlertTitle className="flex items-center justify-between">
+                                    <span>Action Failed</span>
+                                    <Button variant="ghost" size="sm" onClick={clearActionError} className="h-6 px-2 text-xs">
+                                        Dismiss
+                                    </Button>
+                                </AlertTitle>
+                                <AlertDescription className="mt-2">
+                                    <pre className="text-sm whitespace-pre-wrap break-all font-mono bg-destructive/10 p-3 rounded-md max-h-40 overflow-y-auto select-text cursor-text">
+                                        {actionError}
+                                    </pre>
+                                </AlertDescription>
+                            </Alert>
+                        )}
 
                         {/* Hero Section - Kept Commanding (text-7xl/8xl) but slightly tighter margin */}
                         {!stagedFile && (
@@ -543,6 +559,24 @@ export default function LandingPage() {
                                                         ))}
                                                     </RadioGroup>
                                                 </div>
+
+                                                {/* v1.9.2: Inline Error Display */}
+                                                {jobError && (
+                                                    <Alert variant="destructive" className="mb-4">
+                                                        <XCircle className="w-5 h-5" />
+                                                        <AlertTitle className="flex items-center justify-between">
+                                                            <span>Processing Failed</span>
+                                                            <Button variant="ghost" size="sm" onClick={clearJobError} className="h-6 px-2 text-xs">
+                                                                Dismiss
+                                                            </Button>
+                                                        </AlertTitle>
+                                                        <AlertDescription className="mt-2">
+                                                            <pre className="text-sm whitespace-pre-wrap break-all font-mono bg-destructive/10 p-3 rounded-md max-h-40 overflow-y-auto select-text cursor-text">
+                                                                {jobError}
+                                                            </pre>
+                                                        </AlertDescription>
+                                                    </Alert>
+                                                )}
 
                                                 <Button
                                                     size="lg"

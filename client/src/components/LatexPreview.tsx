@@ -119,7 +119,29 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
 
       // 3. Inject HTML
       // FIX (v1.9.12): Pre-inject placeholders at string level to ensure Lists/Tables catch them.
-      // The DOM Walker is a safety net, but string replacement is more robust for simple substitutions.
+      // FIX (v1.9.65): Recursive resolution - blocks may contain other placeholders (Algorithm with Math)
+
+      // First, resolve nested placeholders INSIDE block values
+      let resolveCount = 0;
+      const maxResolves = 10; // Safety limit
+      let hasUnresolved = true;
+      while (hasUnresolved && resolveCount < maxResolves) {
+        hasUnresolved = false;
+        for (const key in blocks) {
+          const originalValue = blocks[key];
+          const resolvedValue = originalValue.replace(/(LATEXPREVIEW[A-Z]+[0-9]+)/g, (match) => {
+            if (blocks[match] && match !== key) { // Don't self-reference
+              hasUnresolved = true;
+              return blocks[match];
+            }
+            return match;
+          });
+          blocks[key] = resolvedValue;
+        }
+        resolveCount++;
+      }
+
+      // Then resolve top-level placeholders in sanitized HTML
       html = html.replace(/(LATEXPREVIEW[A-Z]+[0-9]+)/g, (match) => {
         return blocks[match] ? blocks[match] : match;
       });

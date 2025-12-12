@@ -43,10 +43,11 @@ interface ProviderSectionProps {
 }
 
 function ProviderSection({ title, description, role, isExpanded, onToggle, showWebSearchWarning, showSameAsWriterSwitch, useSameAsWriter, onToggleSameAsWriter }: ProviderSectionProps) {
-    const { config, updateProviderConfig, verifyConnection, isVerifying, verifyingScope } = useAIConfig();
+    const { config, updateProviderConfig, verifyConnection, isVerifying, verifyingScope, lastError, clearError } = useAIConfig();
     const providerConfig = config[role];
 
     const isTestingThis = verifyingScope === role;
+    const hasError = lastError && lastError.scope === role;  // v1.9.2: Inline error
 
     return (
         <Card className="overflow-hidden">
@@ -125,25 +126,58 @@ function ProviderSection({ title, description, role, isExpanded, onToggle, showW
                                     <Label className="text-lg font-medium text-gray-700">Provider</Label>
                                     <Select
                                         value={providerConfig.provider}
-                                        onValueChange={(val: any) => updateProviderConfig(role, { provider: val })}
+                                        onValueChange={(val: any) => {
+                                            if (role === 'librarian') {
+                                                // Reset model when switching providers if switching FROM/TO Poe for Librarian
+                                                const isPoe = val === "poe";
+                                                const defaultModel = isPoe ? "Gemini25Pro-AAP" : "";
+                                                updateProviderConfig(role, { provider: val, model: defaultModel });
+                                            } else {
+                                                updateProviderConfig(role, { provider: val });
+                                            }
+                                        }}
                                     >
                                         <SelectTrigger className="h-12 text-lg px-4">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {providers.map(p => <SelectItem key={p.value} value={p.value} className="text-lg py-3">{p.label}</SelectItem>)}
+                                            {role === 'librarian'
+                                                ? providers.filter(p => ["poe", "openrouter", "grok"].includes(p.value)).map(p => <SelectItem key={p.value} value={p.value} className="text-lg py-3">{p.label}</SelectItem>)
+                                                : providers.map(p => <SelectItem key={p.value} value={p.value} className="text-lg py-3">{p.label}</SelectItem>)
+                                            }
                                         </SelectContent>
                                     </Select>
                                 </div>
                                 <div className="space-y-3">
                                     <Label className="text-lg font-medium text-gray-700">Model Name</Label>
-                                    <Input
-                                        value={providerConfig.model}
-                                        onChange={(e) => updateProviderConfig(role, { model: e.target.value })}
-                                        placeholder="e.g. Claude-Sonnet-4.5, GPT-5.1"
-                                        className="h-12 text-lg px-4"
-                                    />
-                                    <p className="text-base text-muted-foreground">Must match the provider's model ID exactly.</p>
+
+                                    {role === 'librarian' && providerConfig.provider === 'poe' ? (
+                                        <Select
+                                            value={providerConfig.model}
+                                            onValueChange={(val) => updateProviderConfig(role, { model: val })}
+                                        >
+                                            <SelectTrigger className="h-12 text-lg px-4">
+                                                <SelectValue placeholder="Select Poe Model" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="Gemini25Pro-AAP" className="text-lg py-3">Gemini 2.5 Pro (Custom Bot)</SelectItem>
+                                                <SelectItem value="Gemini25Flash-APP" className="text-lg py-3">Gemini 2.5 Flash (Custom Bot)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <Input
+                                            value={providerConfig.model}
+                                            onChange={(e) => updateProviderConfig(role, { model: e.target.value })}
+                                            placeholder="e.g. Claude-Sonnet-4.5, GPT-5.1"
+                                            className="h-12 text-lg px-4"
+                                        />
+                                    )}
+
+                                    {role === 'librarian' && providerConfig.provider === 'poe' ? (
+                                        <p className="text-base text-muted-foreground">Only these models are whitelisted for Librarian on Poe.</p>
+                                    ) : (
+                                        <p className="text-base text-muted-foreground">Must match the provider's model ID exactly.</p>
+                                    )}
                                 </div>
                             </div>
 
@@ -187,6 +221,24 @@ function ProviderSection({ title, description, role, isExpanded, onToggle, showW
                                         "Test Connection"
                                     )}
                                 </Button>
+
+                                {/* v1.9.2: Inline Error Display */}
+                                {hasError && (
+                                    <Alert variant="destructive" className="mt-4">
+                                        <XCircle className="w-5 h-5" />
+                                        <AlertTitle className="flex items-center justify-between">
+                                            <span>Connection Failed</span>
+                                            <Button variant="ghost" size="sm" onClick={clearError} className="h-6 px-2 text-xs">
+                                                Dismiss
+                                            </Button>
+                                        </AlertTitle>
+                                        <AlertDescription className="mt-2">
+                                            <pre className="text-sm whitespace-pre-wrap break-all font-mono bg-destructive/10 p-3 rounded-md max-h-40 overflow-y-auto select-text cursor-text">
+                                                {lastError?.message}
+                                            </pre>
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
                             </div>
                         </>
                     )}

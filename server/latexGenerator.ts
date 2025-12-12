@@ -230,9 +230,9 @@ ${abstract}
 
                 // SANITIZATION: Remove "SECTION NAME:" / "CONTENT:" hallucinations (AI chat residue)
                 // Example: "SECTION NAME: Introduction\nCONTENT:\nThis paper..."
-                secContent = secContent.replace(/^SECTION NAME:.*?\nCONTENT:\s*/is, "");
-                secContent = secContent.replace(/^SECTION TITLE:.*?\nCONTENT:\s*/is, "");
-                secContent = secContent.replace(/^CONTENT:\s*/is, "");
+                secContent = secContent.replace(/^SECTION NAME:[\s\S]*?\nCONTENT:\s*/i, "");
+                secContent = secContent.replace(/^SECTION TITLE:[\s\S]*?\nCONTENT:\s*/i, "");
+                secContent = secContent.replace(/^CONTENT:\s*/i, "");
 
                 // Add Section Header
                 latex += `\\section{${secName}}\n\n`;
@@ -294,8 +294,11 @@ ${abstract}
                 const refTitle = escapeLatex(ref.title);
                 const venue = escapeLatex(ref.venue);
                 const year = ref.year;
-                // Check if URL exists (needs casting if Typescript doesn't see it yet, or strict check)
-                const url = (ref as any).url ? `\\\\ Available at: \\url{${escapeLatex((ref as any).url)}}` : "";
+                // Check if url exists (needs casting if Typescript doesn't see it yet, or strict check)
+                // v1.9.63: URL now starts on a new line for better readability
+                // \\\\  = LaTeX line break (\\)
+                // \\url = LaTeX \url command
+                const url = (ref as any).url ? `\\\\ \\url{${(ref as any).url}}` : "";
 
                 latex += `\\bibitem{${ref.key}} ${author}. \\textit{${refTitle}}. ${venue}, ${year}.${url}\n`;
             }

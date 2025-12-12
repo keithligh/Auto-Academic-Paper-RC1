@@ -1,28 +1,86 @@
 # Poe API Integration Guide
 
 ## Overview
-Poe is a primary provider for the **Auto Academic Paper** system, particularly for the **Librarian Agent** due to its access to search-capable bots like Google Gemini. We connect to Poe using its **OpenAI-compatible API**.
+Poe is a primary provider for the **Auto Academic Paper** system, particularly for the **Librarian Agent** and **Peer Reviewer** due to its access to search-capable bots like Google Gemini. We connect to Poe using its **OpenAI-compatible API**.
 
 ## Connection Details
-- **Base URL**: `https://api.poe.com/bot/` (or similar, handled by `openai` lib with custom base URL)
+- **Base URL**: `https://api.poe.com/v1/chat/completions`
 - **Authentication**: Bearer Token (User's API Key)
-- **Library**: Standard `openai` Node.js library
+- **Library**: Standard `openai` Node.js library or raw `fetch`
 
-## Web Search & Research (Librarian Agent)
+## Custom Bots (v1.9.60+)
 
-The **Librarian Agent** requires a model capable of browsing the internet to verify claims. On Poe, we rely on specific bots that have native web search capabilities enabled.
+As of v1.9.60, we use **Custom Poe Bots** for the Librarian and Peer Reviewer phases. These bots are pre-configured with web search capabilities, eliminating the need for unreliable API parameter injection.
 
-### Whitelisted Research Models
-The system explicitly whitelists the following bots for the Librarian phase. If a user selects a non-whitelisted bot, the research phase will fail or warn.
+### Available Custom Bots
 
-*   **Gemini-2.5-Pro**: High-reasoning, search-capable model (Recommended).
-*   **Gemini-2.5-Flash**: Faster, search-capable model.
-*   **Gemini-3.0-Pro**: Latest flagship model.
+| Bot Name | Base Model | Web Search | Recommended Use |
+|----------|------------|------------|-----------------|
+| `Gemini25Pro-AAP` | Gemini 2.5 Pro | ✅ Pre-configured | **Librarian** (Research), **Peer Reviewer** (Fact-checking) |
+| `Gemini25Flash-APP` | Gemini 2.5 Flash | ✅ Pre-configured | Quick queries, cost-sensitive tasks |
 
-> **Note**: `Gemini-2.0-Flash` was previously supported but has been removed from the whitelist.
+> **Note**: The bot names use different suffixes (`-AAP` vs `-APP`). This is intentional based on the bot creation on Poe.
 
-### Implementation Strategy
-We do **not** use special flags like `--web_search true` in the prompt. Instead, we select a bot that has search enabled by default (like the Gemini bots on Poe) and prompt it to "search for X".
+### Why Custom Bots?
+
+1. **Reliability**: The `parameters.web_search` API injection was unreliable across Poe API versions.
+2. **Simplicity**: No need to manage whitelists or parameter injection logic.
+3. **Control**: We own the bot definition and can modify its behavior directly on Poe.
+
+**Lesson 78**: *"Don't fight the API. Own the asset."* If a platform's API doesn't reliably expose a feature, create a custom instance pre-configured with that feature.
+
+## Web Search Activation
+
+For custom bots, **web search is activated via the prompt, not API parameters**.
+
+```typescript
+// Phase 4 Peer Reviewer Prompt (v1.9.62)
+const systemPrompt = `You have WEB SEARCH access. USE IT to verify claims against current literature.`;
+```
+
+**Lesson 80**: *"For custom bots, features are activated by instruction, not by API parameters."*
+
+## JSON Handling (Defensive Parsing)
+
+Flash models (`Gemini25Flash-APP`) may output malformed JSON:
+
+**Example Problem**:
+```json
+"found": false
+```
+Instead of:
+```json
+{ "found": false }
+```
+
+**Solution**: `extractJson()` in `server/ai/utils.ts` auto-wraps bare key-value pairs:
+```typescript
+if (/^\s*"[^"]+"\s*:/.test(clean)) {
+    return JSON.parse(`{${clean}}`);
+}
+```
+
+**Lesson 79**: *"Assume LLMs will fail your formatting instructions."* Defensive parsing is standard practice.
+
+## Phase Usage
+
+| Phase | Agent | Provider | Model (Default) | Web Search |
+|-------|-------|----------|-----------------|------------|
+| Phase 2 | Librarian | Poe | `Gemini25Pro-AAP` | ✅ Yes (via prompt) |
+| Phase 4 | Peer Reviewer | Poe (Librarian LLM) | `Gemini25Pro-AAP` | ✅ Yes (via prompt) |
+
+## Legacy: API Parameter Injection (Deprecated)
+
+The old approach used `parameters.web_search` injection:
+
+```typescript
+// DEPRECATED - Use custom bots instead
+if (enableWebSearch) {
+    messages[1].parameters = { web_search: true };
+}
+```
+
+This is unreliable and has been superseded by custom bot integration.
 
 ## Supported Writer/Strategist Models (Dec 2025)
 For the Writer and Strategist agents, we recommend the following high-intelligence models available on Poe:
@@ -30,21 +88,6 @@ For the Writer and Strategist agents, we recommend the following high-intelligen
 *   **Claude-Sonnet-4.5**: Anthropic's latest agentic model (1M context).
 *   **Claude-Opus-4.5**: Maximum intelligence model.
 *   **GPT-5.1**: OpenAI's latest flagship.
-
-## Code Example (Adapter)
-
-```typescript
-// server/ai/adapters/poe.ts
-
-const poeSearchModels = ["Gemini-2.5-Pro", "Gemini-2.5-Flash", "Gemini-3.0-Pro"];
-
-if (!poeSearchModels.includes(config.model)) {
-    throw new Error(`Model ${config.model} is not whitelisted for research on Poe.`);
-}
-
-// The prompt explicitly instructs the bot to search
-const prompt = "You are a Research Librarian. Search for the following claims...";
-```
 
 ## Important Notes
 - **Rate Limits**: Subject to Poe's API limits.

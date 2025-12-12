@@ -191,7 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             provider: "poe",
             apiKey: poeApiKey,
             baseURL: "https://api.poe.com/v1",
-            model: process.env.POE_SEARCH_BOT || "Gemini-2.5-Pro",
+            model: process.env.POE_SEARCH_BOT || "Gemini25Pro-AAP",
             isVerified: true
           },
           strategist: {

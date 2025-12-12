@@ -11,6 +11,8 @@ interface AIConfigContextType {
     verifyConnection: (scope?: string, configOverride?: AIConfig) => Promise<boolean>;
     isVerifying: boolean;
     verifyingScope: string | null;
+    lastError: { scope: string; message: string } | null;  // v1.9.2: Persistent error
+    clearError: () => void;
 }
 
 const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
@@ -52,7 +54,10 @@ export function AIConfigProvider({ children }: { children: React.ReactNode }) {
     });
 
     const [verifyingScope, setVerifyingScope] = useState<string | null>(null);
+    const [lastError, setLastError] = useState<{ scope: string; message: string } | null>(null);  // v1.9.2
     const { toast } = useToast();
+
+    const clearError = () => setLastError(null);
 
     // Persist to localStorage whenever config changes
     useEffect(() => {
@@ -131,9 +136,11 @@ export function AIConfigProvider({ children }: { children: React.ReactNode }) {
                 throw new Error(data.error || "Verification failed");
             }
         } catch (error: any) {
+            // v1.9.2: Set persistent error for inline display
+            setLastError({ scope: scope || 'all', message: error.message });
             toast({
                 title: "Connection Failed",
-                description: error.message,
+                description: "See error details below.",
                 variant: "destructive"
             });
             return false;
@@ -150,7 +157,9 @@ export function AIConfigProvider({ children }: { children: React.ReactNode }) {
             resetConfig,
             verifyConnection,
             isVerifying: !!verifyingScope,
-            verifyingScope
+            verifyingScope,
+            lastError,
+            clearError
         }}>
             {children}
         </AIConfigContext.Provider>

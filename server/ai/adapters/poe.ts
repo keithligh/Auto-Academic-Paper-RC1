@@ -27,21 +27,16 @@ export class PoeProvider implements AIProvider {
 
     async completion(prompt: string, systemPrompt: string, onProgress?: (text: string) => void, enableWebSearch?: boolean): Promise<string> {
         // Build user message with optional web search
-        const userMessage: any = {
-            role: "user",
-            content: prompt
-        };
+        const messages: any[] = [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt }
+        ];
 
         // Whitelist Check (Refined from test_whitelist_refined.ts)
-        // Verified models that support web search on Poe
         const poeSearchModels = [
-            "Gemini-1.5-Pro",
-            "Gemini-1.5-Flash",
-            "Gemini-2.5-Pro",
+            "Gemini-2.0-Flash",
             "Gemini-2.5-Flash",
-            "GPT-4o",
-            "Claude-3.5-Sonnet", // Allows generic search context
-            "Perplexity-Sonar"
+            "Gemini-2.5-Pro"
         ];
 
         // Only attach web_search parameter if the model supports it or if it's explicitly requested
@@ -50,42 +45,209 @@ export class PoeProvider implements AIProvider {
                 this.config.model.includes(m) || m.includes(this.config.model)
             );
 
-            if (isKnownSearchModel) {
-                userMessage.parameters = { web_search: true };
-            } else {
-                console.warn(`[PoeProvider] Model ${this.config.model} may not support web_search, but parameters are being sent.`);
-                userMessage.parameters = { web_search: true }; // Try anyway, as Poe often updates support
-            }
+            // Poe-specific: Attach 'parameters' to the protocol (Wait, Poe's OpenAI proxy might not support 'parameters' in message)
+            // Correction: Poe's OpenAI-compatible API usually maps standard tool calls, but 'web_search' is a specific extension.
+            // Documentation update: For Poe, 'web_search' is often automatic for search-bots, strict for others?
+            // Actually, the most reliable way on Poe is to append "[Enable Search]" or similar if using a specific bot, 
+            // OR relying on the bot configuration.
+            // BUT, if we use the official OpenAI endpoint provided by Poe, we might need to rely on the bot settings.
+            // HOWEVER, the user specifically asked for 'Gemini-2.5-Flash' which might NOT be a search bot.
+
+            // CRITICAL: If we are using `api.poe.com/v1`, it expects OpenAI format.
+            // Some proxies accept `web_search: true` at the top level or in `tools`.
+            // Let's try to inject it as a top-level parameter in the payload, which `openai` SDK filters out.
+            // Hence `fetch` is necessary.
         }
 
-        const stream = await this.client.chat.completions.create({
-            model: this.config.model,
-            messages: [
-                { role: "system", content: systemPrompt },
-                userMessage,
-            ],
-            temperature: 0.7,
-            stream: true,
-        });
+        try {
+            // Construct Payload Manually
+            const payload: any = {
+                model: this.config.model,
+                messages: messages,
+                temperature: 0.7,
+                stream: true
+            };
 
-        let fullText = "";
+            // Inject Poe-specific parameters if needed (Unverified if Poe supports top-level 'web_search' in OpenAI compatibility)
+            // Alternate strategy: Prepend system prompt with "Use your Web Search tool..."
+            // But let's verify the payload injection first.
+            // According to some Poe docs, `logit_bias` etc are supported. `tools` are supported.
+            // We'll stick to the standard OpenAI 'tools' definition for search if possible, OR
+            // Assume the previous logic was attempting to use a proprietary field.
 
-        for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || "";
-            if (content) {
-                fullText += content;
-                if (onProgress) {
-                    onProgress(fullText);
+            // LET'S USE THE RAW FETCH TO PASS `parameters` inside the message, which is a known Poe hack/feature.
+            if (enableWebSearch) {
+                // For Poe, sometimes parameters go into the message object itself??
+                // "messages": [{"role": "user", "content": "...", "parameters": {"web_search": true}}]
+                messages[1].parameters = { web_search: true };
+            }
+
+            const response = await fetch(`${this.client.baseURL}/chat/completions`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${this.config.apiKey}`,
+                    "X-Title": "Auto-Academic-Paper",
+                    "HTTP-Referer": "https://github.com/keithligh/Auto-Academic-Paper"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Poe API Error: ${response.status} ${response.statusText} - ${errText}`);
+            }
+
+            if (!response.body) throw new Error("No response body");
+
+            // Streaming Parser
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+                for (const line of lines) {
+                    if (line === 'data: [DONE]') continue;
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            const content = data.choices[0]?.delta?.content || "";
+                            if (content) {
+                                fullText += content;
+                                if (onProgress) onProgress(fullText);
+                            }
+                        } catch (e) {
+                            // Incrementally parsing partial JSON is hard, ignoring partials
+                        }
+                    }
                 }
             }
-        }
+            return fullText;
 
-        return fullText;
+        } catch (e: any) {
+            console.error("Poe Completion Error:", e);
+            throw new Error(`Poe completion failed: ${e.message}`);
+        }
     }
 
-    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void): Promise<any> {
+    /**
+     * JSON completion with optional web search support.
+     * Uses raw fetch (like completion) when enableWebSearch is true to inject Poe-specific parameters.
+     */
+    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void, enableWebSearch?: boolean): Promise<any> {
         const enhancedSystemPrompt = `${systemPrompt}\n\nIMPORTANT: Output valid JSON only. Do not include markdown formatting like \`\`\`json.`;
 
+        // If web search is enabled, use raw fetch approach (same as completion)
+        if (enableWebSearch) {
+            const messages: any[] = [
+                { role: "system", content: enhancedSystemPrompt },
+                { role: "user", content: prompt, parameters: { web_search: true } }
+            ];
+
+            const payload: any = {
+                model: this.config.model,
+                messages: messages,
+                temperature: 0.3,
+                stream: true
+            };
+
+            try {
+                const response = await fetch(`${this.client.baseURL}/chat/completions`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${this.config.apiKey}`,
+                        "X-Title": "Auto-Academic-Paper",
+                        "HTTP-Referer": "https://github.com/keithligh/Auto-Academic-Paper"
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Poe API Error: ${response.status} ${response.statusText} - ${errText}`);
+                }
+
+                if (!response.body) throw new Error("No response body");
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let content = "";
+                let consecutiveNewlines = 0;
+                const MAX_CONSECUTIVE_NEWLINES = 10;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+                    for (const line of lines) {
+                        if (line === 'data: [DONE]') continue;
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                const delta = data.choices[0]?.delta?.content || "";
+                                if (delta) {
+                                    content += delta;
+                                    if (onProgress) onProgress(content);
+
+                                    // Loop detection
+                                    if (delta.includes('\n')) {
+                                        let i = content.length - 1;
+                                        let count = 0;
+                                        while (i >= 0 && content[i] === '\n') {
+                                            count++;
+                                            i--;
+                                        }
+                                        consecutiveNewlines = count;
+                                    } else {
+                                        consecutiveNewlines = 0;
+                                    }
+
+                                    if (consecutiveNewlines >= MAX_CONSECUTIVE_NEWLINES) {
+                                        console.warn(`[PoeProvider] Detected whitespace loop. Terminating stream.`);
+                                        break;
+                                    }
+                                }
+                            } catch (e) {
+                                // Ignore partial JSON
+                            }
+                        }
+                    }
+                }
+
+                console.log("[Poe Raw Response (WebSearch)]", content.length > 500 ? content.substring(0, 500) + "... [TRUNCATED]" : content);
+
+                try {
+                    const fs = await import("fs");
+                    const path = await import("path");
+                    fs.appendFileSync(path.join(process.cwd(), "server", "raw_response.log"), `\n\n[${new Date().toISOString()}] POE RAW (WebSearch): ${content}\n`);
+                } catch (err) {
+                    console.error("Failed to write log", err);
+                }
+
+                try {
+                    return extractJson(content);
+                } catch (e) {
+                    console.error("Failed to parse JSON response from Poe (WebSearch):", content);
+                    throw new Error("AI response was not valid JSON");
+                }
+
+            } catch (e: any) {
+                console.error("Poe JSON Completion (WebSearch) Error:", e);
+                throw new Error(`Poe JSON completion failed: ${e.message}`);
+            }
+        }
+
+        // Standard path (no web search) - use OpenAI SDK
         const stream = await this.client.chat.completions.create({
             model: this.config.model,
             messages: [

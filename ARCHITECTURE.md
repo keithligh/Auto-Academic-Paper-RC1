@@ -20,7 +20,7 @@
 
 **Agent:** Writer Agent
 **Purpose:** Draft the paper with full awareness of available evidence.
-**Behavior:** Writes the content, structuring arguments around the known evidence from Phase 2. Generates `enhancements` (diagrams, tables) within strict limits (20 for Standard, Unlimited for Advanced). **Streams progress** via real-time word count updates.
+**Behavior:** Writes the content, structuring arguments around the known evidence from Phase 2. Generates `enhancements` (diagrams, tables) within strict limits (20 for Standard, Unlimited for Advanced). **Streams progress** via concise updates (e.g., `~500 w`).
 **Output:** Draft JSON (No in-text citations yet).
 
 ### Phase 4: THE PEER REVIEWER (Critique)
@@ -30,7 +30,7 @@
 **Behavior:** Verifies claims against evidence, audits for logical flow, and assesses novelty/significance.
 **Output:** A structured `ReviewReport` (Supported, Unverified, Novelty Check, Critique).
 
-### Phase 5: THE REWRITER (Synthesis)
+### Phase 5: THE REWRITER (Evidence Integration)
 
 **Agent:** Writer Agent
 **Purpose:** Integrate evidence naturally into the prose.

@@ -69,11 +69,13 @@ graph TD
 1.  **Analysis:** Analyzes the input text to identify the core thesis and maintain arguments.
 2.  **Strategy:** Generates targeted search queries to find supporting academic evidence *before* a single word is drafted.
 3.  **Config:** Query count scales with `enhancementLevel` (3-4 for minimal, 8-10 for advanced).
+4.  **Anti-Fabrication (v1.9.70):** Checks if the source contains actual data. If not, it is FORBIDDEN from planning sections like "Empirical Validation" or "Experimental Results", forcing a theoretical structure instead.
 
 #### System Prompt
 ```text
 You are an academic research strategist specializing in {paperType} documents.
 Your task is to analyze input text and generate specific, targeted research queries...
+CRITICAL ANTI-FABRICATION RULE: Do NOT plan sections requiring data unless source has data.
 ```
 
 ### Phase 2: The Librarian (Research)
@@ -98,7 +100,8 @@ By researching *before* drafting, we avoid the "hallucinated citation" problem. 
 2.  **Constraint:** It must **NOT** insert citations yet. This separates the "creative flow" from the "technical referencing".
 3.  **Enhancements:** Generates diagrams/tables in a separate array.
     *   **Limits**: 20 Enhancements (Standard) vs Unlimited (Advanced).
-4.  **Streaming Feedback:** Pushes real-time *approximate word counts* to the UI so the user knows work is happening.
+4.  **Zero Tolerance (v1.9.70):** Explicit "ABSOLUTE NO FABRICATION" rule. Banned from inventing experiments, statistics, sample sizes, p-values, or stories. Must use source data AS-IS.
+4.  **Streaming Feedback:** Pushes real-time, concise word counts (`~500 w`) to the UI so the user sees immediate progress.
 
 #### System Prompt
 ```text
@@ -111,10 +114,18 @@ AVAILABLE EVIDENCE:
 You may structure your arguments knowing this evidence exists, but do NOT insert citations yet.
 ```
 
+> **v1.9.66 Update**: Added **Anti-Fabrication Rule** (Rule 7): *"NO FABRICATED RESEARCH. Never invent experiments, statistics, sample sizes, p-values, or case studies. For empirical claims, cite from AVAILABLE EVIDENCE. Theoretical arguments and logical frameworks are encouraged."* This prevents the AI from generating fake experiments, fabricated data, or invented case studies while still allowing theoretical contributions.
+
+> **v1.9.64 Update**: Added **LaTeX Purity Rules**: *"PURE LATEX ONLY. No Markdown (# Headers, **bold**)."* and *"NO MARKDOWN HEADERS"* in abstract prompt. This prevents AI from mixing Markdown syntax into LaTeX output.
+
+
 ### Phase 4: The Peer Reviewer (Verification)
 **Agent:** Librarian (Role: Senior PI)
 **Input:** Draft + **Available References** (The Card Catalog).
 **Output:** `Review Report` (Supported Claims, Unverified Claims, Novelty, Critique, Methodology, Structure).
+
+> **v1.9.62 Update**: The Peer Reviewer now has **Web Search Access** via the custom Poe bot (`Gemini25Pro-AAP`). The prompt explicitly instructs: *"USE WEB SEARCH to verify claims against current literature."* This transforms the reviewer from a passive "Reference Checker" into an active "Fact Checker" that can verify claims against the current state of research.
+
 **Modes:**
 
 The Peer Reviewer operates in two distinct modes, selectable via the frontend (`advancedOptions.reviewDepth`):
@@ -142,7 +153,7 @@ The Peer Reviewer operates in two distinct modes, selectable via the frontend (`
 1.  **No Hallucinations:** The Reviewer is strictly bound to the provided `references` array.
 2.  **Output:** A structured `ReviewReport` used by the Rewriter (Phase 5) to fix the paper.
 
-### Phase 5: The Rewriter (Synthesis)
+### Phase 5: The Rewriter (Evidence Integration)
 **Agent:** Writer
 **Input:** Draft + Claims + References.
 **Output:** `Improved Draft`.

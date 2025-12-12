@@ -255,6 +255,13 @@ STRATEGY:
 3. **Form Follows Function**: Let the argument dictate the structure. Use standard sections ONLY if that is the most rigorous way to present this specific data.
 4. **Scale the Depth**: Adapt the complexity to the "${ctx.enhancementLevel}" level.
 
+CRITICAL ANTI-FABRICATION RULE:
+ABSOLUTE PRINCIPLE - NO FABRICATION EVER:
+1. If source has NO data → Plan THEORETICAL sections only (frameworks, arguments, analysis).
+2. If source HAS data → Plan sections that USE THAT EXACT DATA. Never add fake statistics, fake percentages, fake sample sizes, fake case studies, or fake stories.
+3. NEVER plan sections like "Empirical Validation", "Experimental Results", "Case Studies", or "User Studies" that require data not present in the source.
+4. The Writer will ONLY use data AS-IS from the source. NO TAMPERING. NO EMBELLISHMENT. NO HALLUCINATION.
+
 For each section, define:
 1. The ARGUMENT GOAL (what must be proven/discussed).
 2. The EVIDENCE required (what kind of papers we need to find).
@@ -302,8 +309,8 @@ Make the plan ROBUST. The "Thinker" (Writer) will follow this blindly.`;
                 executionPlanSchema,
                 async (text) => {
                     const now = Date.now();
-                    if (now - lastLogTime > 3000) {
-                        await this.log(`[Strategist] Designing Plan... (${text.length} chars)`, {
+                    if (now - lastLogTime > 2000) {
+                        await this.log(`[Strategist] Designing Plan (${text.length} chars)...`, {
                             phase: "Phase 1: Strategy",
                             step: "Designing Structure",
                             progress: 10,
@@ -327,16 +334,19 @@ Make the plan ROBUST. The "Thinker" (Writer) will follow this blindly.`;
     }
 
     // ====== PHASE 2: THE LIBRARIAN (THE SCOUT) ======
+    // v1.9.2: Improved prompt clarity, fixed ref key trailing space, added error tracking
     private async phase2_Librarian(ctx: PipelineContext): Promise<void> {
         const queryCount = ctx.plan?.search_queries?.length || 0;
         await this.log(`[Phase 2 / 6] The Librarian: Searching for ${queryCount} papers...`, { phase: "Phase 2: Research", step: "Starting Research", progress: 15 });
 
         if (!this.librarian.supportsResearch) {
-            await this.log(`[Librarian] Warning: Provider does not support research.Skipping.`);
+            await this.log(`[Librarian] Warning: Provider does not support research. Skipping.`);
             return;
         }
 
         let refNumber = 1;
+        let apiErrors = 0;  // Track API failures separately from "no results"
+        let noResultsCount = 0;
 
         if (!ctx.plan?.search_queries) return;
 
@@ -349,29 +359,37 @@ Make the plan ROBUST. The "Thinker" (Writer) will follow this blindly.`;
             try {
                 // Retry specific query search 3 times
                 await pRetry(async () => {
+                    // v1.9.2: Improved prompt - removed misleading "SEARCH TOOL" reference
                     const prompt = `Find ONE peer-reviewed academic paper for this query:
 
-    QUERY: ${query}
+QUERY: ${query}
+
+CONTEXT: Web search results have been provided to augment your knowledge. Use them to find a real, verifiable paper.
 
 TASK:
-1. Search for a real, verifiable academic paper from a CREDITABLE SOURCE (e.g. Journal, Conference, Preprint).
-2. Verify the paper exists.
-3. Extract the Source URL if available.
-4. Return the reference.
+1. From the web search context, identify a real, peer-reviewed academic paper.
+2. Extract the author(s), title, venue, year, and URL (DOI or arXiv preferred).
+3. Include a brief abstract snippet as proof of verification.
 
-OUTPUT FORMAT(JSON):
+**ZERO HALLUCINATION POLICY**:
+- If NO relevant paper appears in the search results, return { "found": false }.
+- DO NOT invent titles, authors, or DOIs from memory.
+- Only cite papers that appear in the provided search context.
+
+OUTPUT FORMAT (JSON only, no markdown fences):
 {
     "found": true,
     "reference": {
         "author": "Author names",
         "title": "Paper title",
         "venue": "Journal/Conference",
-        "year": YYYY,
-        "url": "https://doi.org/..." OR "https://arxiv.org/..."
+        "year": 2024,
+        "url": "https://doi.org/...",
+        "abstract": "Brief abstract snippet..."
     }
 }
 
-If NO suitable paper found, return: { "found": false } `;
+If NO suitable paper found, return: { "found": false }`;
 
                     // TIMEOUT WRAPPER (Increased to 3m per user request, effectively 2m here for per-query safety)
                     const timeoutMs = 120000;
@@ -386,26 +404,33 @@ If NO suitable paper found, return: { "found": false } `;
 
                     if (research.found && research.reference) {
                         ctx.references.push({
-                            key: `ref_${refNumber} `,
+                            key: `ref_${refNumber}`,  // v1.9.2: Fixed trailing space bug
                             author: research.reference.author,
                             title: research.reference.title,
                             venue: research.reference.venue,
                             year: research.reference.year,
                             url: research.reference.url
                         });
-                        await this.log(`[Librarian] ✓ Found: ${research.reference.author} `, { phase: "Phase 2: Research", step: `Found Source`, progress: progressPercent, details: research.reference.title });
+                        await this.log(`[Librarian] ✓ Found: ${research.reference.author}`, { phase: "Phase 2: Research", step: `Found Source`, progress: progressPercent, details: research.reference.title });
                         refNumber++;
                     } else {
+                        noResultsCount++;
                         await this.log(`[Librarian] ✗ No paper found for query.`, { phase: "Phase 2: Research", step: `No Source`, progress: progressPercent });
                     }
                 }, { retries: 2 }); // Total 3 attempts per query
 
             } catch (e: any) {
-                await this.log(`[Librarian] Error on query ${i + 1}: ${e.message} `, { phase: "Phase 2: Research", step: `Error`, progress: progressPercent, details: e.message });
+                apiErrors++;  // v1.9.2: Track API failures
+                const isApiError = e.message.includes('API Error') || e.message.includes('403') || e.message.includes('401');
+                const stepLabel = isApiError ? 'API Error' : 'Error';
+                await this.log(`[Librarian] ✗ ${stepLabel} on query ${i + 1}: ${e.message.substring(0, 100)}`, { phase: "Phase 2: Research", step: stepLabel, progress: progressPercent, details: e.message.substring(0, 150) });
             }
         }
 
-        await this.log(`[Librarian] Research complete: ${ctx.references.length} papers found.`, { phase: "Phase 2: Research", step: "Complete", progress: 30, details: `${ctx.references.length} references` });
+        // v1.9.2: Enhanced completion log with failure breakdown
+        const totalQueries = ctx.plan.search_queries.length;
+        const successRate = totalQueries > 0 ? Math.round((ctx.references.length / totalQueries) * 100) : 0;
+        await this.log(`[Librarian] Research complete: ${ctx.references.length}/${totalQueries} papers found (${successRate}%). API errors: ${apiErrors}, No results: ${noResultsCount}`, { phase: "Phase 2: Research", step: "Complete", progress: 30, details: `${ctx.references.length} references` });
     }
 
     // ====== PHASE 3: THE THINKER (THE WRITER) ======
@@ -438,7 +463,7 @@ If NO suitable paper found, return: { "found": false } `;
 GOAL: ${ctx.plan.abstract_goal}
 TITLE: ${ctx.plan.title_idea}
 PAPER TYPE: ${ctx.paperType}
-NO CITATIONS.`;
+NO CITATIONS. NO MARKDOWN HEADERS.`;
         const abstractResult = await this.writer.completion(abstractPrompt, "You are an academic abstract writer.");
         ctx.draft.abstract = abstractResult;
 
@@ -502,6 +527,9 @@ CRITICAL RULES:
 3. USE THE EVIDENCE.
 4. AGGRESSIVELY ENHANCE. If the source text is simple, ELEVATE IT using these tools.
 5. NO CITATION MARKERS like (ref_X).
+6. PURE LATEX ONLY. No Markdown (# Headers, **bold**).
+7. ABSOLUTE NO FABRICATION. ZERO TOLERANCE. Never invent experiments, statistics, sample sizes, p-values, case studies, user quotes, anecdotes, or stories. If the source has data, use it EXACTLY AS-IS - no embellishment, no modification, no "improved" numbers. If you need empirical claims and source has no data, use theoretical arguments only. Violation of this rule makes the paper INVALID.
+8. VALID SECTIONING ONLY. Only use \\section{}, \\subsection{}, \\subsubsection{}, \\paragraph{}. NO deeper levels like \\subsubssubsection (not real LaTeX).
 
 OUTPUT FORMAT (JSON):
 {
@@ -534,14 +562,13 @@ Return JSON Object.`;
                         undefined,
                         async (text) => {
                             const now = Date.now();
-                            if (now - lastLogTime > 3000) { // Log every 3s
-                                // Estimate word count (naive split by spaces)
-                                const wordCount = text.split(/\s+/).length;
-                                await this.log(`[Thinker] Writing "${sectionPlan.name}"...`, {
+                            if (now - lastLogTime > 2000) { // Log every 2s, more responsive
+                                // SHORT STATUS as requested by User - STANDARDIZED TO CHARS
+                                await this.log(`[Drafting] ${sectionPlan.name} (${text.length} chars)...`, {
                                     phase: "Phase 3: Drafting",
                                     step: `Drafting: ${sectionPlan.name}`,
                                     progress: progress,
-                                    details: `Writing... (~${wordCount} words)`
+                                    details: `Writing... (${text.length} chars)`
                                 });
                                 lastLogTime = now;
                             }
@@ -630,23 +657,27 @@ Return JSON Object.`;
         const referencesText = JSON.stringify(ctx.references, null, 2);
 
         const systemPrompt = `You are a Senior Principal Investigator conducting a rigorous Peer Review of a draft paper.
-YOUR AUTHORITY:
-You have the "Card Catalog"(our gathered evidence) and the Draft.Your word is law.
+
+YOUR CAPABILITIES:
+You have WEB SEARCH access. USE IT to verify claims against current literature.
+You also have the "Card Catalog" (our gathered evidence) for reference.
 
 YOUR TASK:
 Perform a "Nature/Science" caliber review focusing on:
-1. ** Verification **: Do the references actually support the claims ? (The Evidence Map).
-2. ** Novelty **: Does this paper offer new insights or just repeat known facts ?
-3. ** Rigor **: Is the logical flow sound ? Are the conclusions earned ?
+1. **Verification**: USE WEB SEARCH to fact-check key claims. Do they align with current research? Are the cited references accurate?
+2. **Novelty**: Search for similar recent work. Does this paper offer new insights or just repeat known facts?
+3. **Rigor**: Is the logical flow sound? Are the conclusions earned?
 
-        OUTPUT STRUCTURE:
-- ** supported_claims **: Claims where you can point to a specific 'ref_X' and say "This proves it."
-    - ** unverified_claims **: Claims that sound factual but look like hallucinations or guesses.
-- ** novelty_check **: A brief assessment of whether the work feels derivative or significant.
-- ** critique **: High - level feedback on logic and flow.
+OUTPUT STRUCTURE:
+- **supported_claims**: Claims you verified via web search or Card Catalog. Include the source.
+- **unverified_claims**: Claims that could not be verified or contradict current literature.
+- **novelty_check**: Assessment based on your web search of the current state of the field.
+- **critique**: High-level feedback on logic and flow.
 
-CRITICAL RULE:
-Do NOT hallucinate connections.If the reference doesn't mention it, it's UNVERIFIED.`;
+CRITICAL RULES:
+1. ACTIVELY SEARCH THE WEB to verify factual claims.
+2. Do NOT hallucinate connections. If you cannot find evidence, mark as UNVERIFIED.
+3. Cite URLs or paper titles from your search when possible.`;
 
         const userPrompt = `DRAFT PAPER:
 ${draftText}
@@ -680,12 +711,12 @@ Return ONLY the JSON.`;
                 undefined,
                 async (text) => {
                     const now = Date.now();
-                    if (now - lastLogTime > 3000) {
-                        await this.log(`[PeerReviewer] Reviewing... (${text.length} chars)`, {
+                    if (now - lastLogTime > 2000) {
+                        await this.log(`[Reviewing] Analyzing Draft (${text.length} chars)...`, {
                             phase: "Phase 4: Peer Review",
                             step: "Reviewing Draft",
                             progress: 55,
-                            details: `${text.length} chars analyzed`
+                            details: `(${text.length} chars)`
                         });
                         lastLogTime = now;
                     }
@@ -754,9 +785,17 @@ Return ONLY the JSON.`;
         await this.log(`[DeepReview] 4.1 Extracting Claims...`, { phase: "Phase 4: Peer Review", step: "4.1 Extracting Claims", progress: 54 });
         const draftText = ctx.draft!.sections.map(s => s.content).join("\n\n");
         const prompt = `Extract all substantive factual claims, data points, and specific arguments from the text below.Ignore general intro / outro fluff.Return a JSON list of strings.`;
+
+        // STREAMING ADDED
+        let lastLogTime = 0;
         const result = await this.librarian.jsonCompletion(`TEXT: \n${draftText} `, prompt, undefined, async (text) => {
-            // Optional: Log extraction progress if needed, usually fast enough to skip, but for consistency:
-            if (text.length % 500 === 0) await this.log(`[DeepReview] Extracting claims... (${text.length} chars)`);
+            const now = Date.now();
+            if (now - lastLogTime > 2000) {
+                await this.log(`[DeepReview] Extracting claims (${text.length} chars)...`, {
+                    phase: "Phase 4: Peer Review", step: "Extracting Claims", progress: 54, details: `(${text.length} chars)`
+                });
+                lastLogTime = now;
+            }
         });
         return result?.claims || result || [];
     }
@@ -766,16 +805,36 @@ Return ONLY the JSON.`;
         const referencesText = JSON.stringify(ctx.references, null, 2);
         const claimsText = JSON.stringify(claims.slice(0, 50), null, 2); // Limit to top 50 to avoid overload if massive
         const prompt = `Map these claims to the provided references.Which reference supports which claim ? Return JSON { "mappings": [{ "claim": text, "ref_key": key }] } `;
-        return await this.librarian.jsonCompletion(`CLAIMS: \n${claimsText} \n\nREFS: \n${referencesText} `, prompt);
+
+        // STREAMING ADDED
+        let lastLogTime = 0;
+        return await this.librarian.jsonCompletion(`CLAIMS: \n${claimsText} \n\nREFS: \n${referencesText} `, prompt, undefined, async (text) => {
+            const now = Date.now();
+            if (now - lastLogTime > 2000) {
+                await this.log(`[DeepReview] Mapping Evidence (${text.length} chars)...`, {
+                    phase: "Phase 4: Peer Review", step: "Mapping Evidence", progress: 55, details: `(${text.length} chars)`
+                });
+                lastLogTime = now;
+            }
+        });
     }
 
     private async phase4_3_Verify(ctx: PipelineContext, claims: string[], evidenceMap: any): Promise<{ supported_claims: SupportedClaim[], unverified_claims: UnverifiedClaim[] }> {
         await this.log(`[DeepReview] 4.3 Verifying Claims...`, { phase: "Phase 4: Peer Review", step: "4.3 Verifying", progress: 56 });
-        // Simplified verification logic for brevity - in real deep mode, could validte each mapping
-        // Here we ask the AI to produce the final lists based on the map
         const prompt = `Based on the evidence map, generate the final list of verified vs unverified claims.Be strict.Return JSON { supported_claims: [], unverified_claims: [] } matching the schema.`;
         const input = `CLAIMS: \n${JSON.stringify(claims)} \n\nEVIDENCE_MAP: \n${JSON.stringify(evidenceMap)} `;
-        const result = await this.librarian.jsonCompletion(input, prompt);
+
+        // STREAMING ADDED
+        let lastLogTime = 0;
+        const result = await this.librarian.jsonCompletion(input, prompt, undefined, async (text) => {
+            const now = Date.now();
+            if (now - lastLogTime > 2000) {
+                await this.log(`[DeepReview] Verifying (${text.length} chars)...`, {
+                    phase: "Phase 4: Peer Review", step: "Verifying", progress: 56, details: `(${text.length} chars)`
+                });
+                lastLogTime = now;
+            }
+        });
         return result || { supported_claims: [], unverified_claims: [] };
     }
 
@@ -783,7 +842,18 @@ Return ONLY the JSON.`;
         await this.log(`[DeepReview] 4.4 Critiquing Methodology...`, { phase: "Phase 4: Peer Review", step: "4.4 Methodology", progress: 57 });
         const draftText = ctx.draft!.sections.map(s => s.content).join("\n\n");
         const prompt = `Critique the research methodology.Limitations ? Validity ? Sampling bias ? logical fallacies ? Return a concise paragraph string.`;
-        const result = await this.librarian.completion(prompt, `Draft: \n${draftText} `);
+
+        // STREAMING ADDED
+        let lastLogTime = 0;
+        const result = await this.librarian.completion(prompt, `Draft: \n${draftText} `, async (text) => {
+            const now = Date.now();
+            if (now - lastLogTime > 2000) {
+                await this.log(`[DeepReview] Critiquing (${text.length} chars)...`, {
+                    phase: "Phase 4: Peer Review", step: "Critiquing", progress: 57, details: `(${text.length} chars)`
+                });
+                lastLogTime = now;
+            }
+        });
         return result || "No methodology critique generated.";
     }
 
@@ -791,7 +861,18 @@ Return ONLY the JSON.`;
         await this.log(`[DeepReview] 4.5 Analyzing Structure...`, { phase: "Phase 4: Peer Review", step: "4.5 Structure", progress: 58 });
         const draftText = ctx.draft!.sections.map(s => s.content).join("\n\n");
         const prompt = `Analyze the structure, flow, and coherence.Redundancies ? Missing sections ? Logical progression ? Return a concise paragraph string.`;
-        const result = await this.librarian.completion(prompt, `Draft: \n${draftText} `);
+
+        // STREAMING ADDED
+        let lastLogTime = 0;
+        const result = await this.librarian.completion(prompt, `Draft: \n${draftText} `, async (text) => {
+            const now = Date.now();
+            if (now - lastLogTime > 2000) {
+                await this.log(`[DeepReview] Analyzing Structure (${text.length} chars)...`, {
+                    phase: "Phase 4: Peer Review", step: "Analyzing Structure", progress: 58, details: `(${text.length} chars)`
+                });
+                lastLogTime = now;
+            }
+        });
         return result || "No structure analysis generated.";
     }
 
@@ -799,14 +880,25 @@ Return ONLY the JSON.`;
         await this.log(`[DeepReview] 4.6 Assessing Novelty...`, { phase: "Phase 4: Peer Review", step: "4.6 Novelty", progress: 59 });
         const draftText = ctx.draft!.sections.map(s => s.content).join("\n\n");
         const prompt = `Assess the novelty and contribution.Originality ? derivatives ? New insights ? Return a concise paragraph string.`;
-        const result = await this.librarian.completion(prompt, `Draft: \n${draftText} `);
+
+        // STREAMING ADDED
+        let lastLogTime = 0;
+        const result = await this.librarian.completion(prompt, `Draft: \n${draftText} `, async (text) => {
+            const now = Date.now();
+            if (now - lastLogTime > 2000) {
+                await this.log(`[DeepReview] Assessing Novelty (${text.length} chars)...`, {
+                    phase: "Phase 4: Peer Review", step: "Assessing Novelty", progress: 59, details: `(${text.length} chars)`
+                });
+                lastLogTime = now;
+            }
+        });
         return result || "Novelty assessment unavailable.";
     }
 
     // ====== PHASE 5: THE REWRITER ======
     // ====== PHASE 5: THE REWRITER (Refactored v1.7.0: Patch-Based) ======
     private async phase5_Rewriter(ctx: PipelineContext): Promise<void> {
-        await this.log(`[Phase 5/6] The Rewriter: Strengthening text with evidence (Surgical Patching)...`, { phase: "Phase 5: Rewriting", step: "Starting Rewrite", progress: 60 });
+        await this.log(`[Phase 5/6] The Rewriter: Strengthening text with evidence (Evidence Integration)...`, { phase: "Phase 5: Rewriting", step: "Starting Rewrite", progress: 60 });
 
         if (!ctx.draft) {
             await this.log(`[Rewriter] Error: No draft to rewrite.`);
@@ -903,8 +995,13 @@ Return JSON with 'patches' array.`;
                 undefined, // Schema optional
                 async (text) => {
                     const now = Date.now();
-                    if (now - lastLogTime > 5000) {
-                        await this.log(`[Rewriter] Generating patches... (${text.length} chars)`, { phase: "Phase 5: Rewriting", step: "Generating Patches", progress: 68 });
+                    if (now - lastLogTime > 2000) { // Changed to 2s
+                        await this.log(`[Rewriter] Synthesizing revisions (${text.length} chars)...`, {
+                            phase: "Phase 5: Rewriting",
+                            step: "Synthesizing Revisions",
+                            progress: 68,
+                            details: `(${text.length} chars)`
+                        });
                         lastLogTime = now;
                     }
                 }
@@ -913,7 +1010,7 @@ Return JSON with 'patches' array.`;
             const result: any = await Promise.race([completionPromise, timeoutPromise]);
             const patches = result.patches || [];
 
-            await this.log(`[Rewriter] Generated ${patches.length} patches. Applying...`, { phase: "Phase 5: Rewriting", step: "Applying Patches", progress: 70 });
+            await this.log(`[Rewriter] Synthesized ${patches.length} revisions. Applying...`, { phase: "Phase 5: Rewriting", step: "Applying Revisions", progress: 70 });
 
             // Apply patches to each section
             // We need to match patches to sections. Since patches are just string replacements, 
@@ -938,7 +1035,7 @@ Return JSON with 'patches' array.`;
                 sections: improvedSections
             };
 
-            await this.log(`[Rewriter] Patching complete. Modified content in ${appliedCount} sections.`, { phase: "Phase 5: Rewriting", step: "Complete", progress: 75 });
+            await this.log(`[Rewriter] Integration complete. Modified content in ${appliedCount} sections.`, { phase: "Phase 5: Rewriting", step: "Complete", progress: 75 });
 
         }, {
             retries: 2,
@@ -968,21 +1065,25 @@ Return JSON with 'patches' array.`;
         // Initialize finalDraft as a deep copy of improvedDraft
         // We will update it section by section
         ctx.finalDraft = JSON.parse(JSON.stringify(ctx.improvedDraft));
-        if (!ctx.finalDraft) return; // Typescript safety
+        const finalDraft = ctx.finalDraft; // Capture for closure safety
+        if (!finalDraft) { // Added null check for finalDraft
+            await this.log(`[Editor] Error: finalDraft is null after initialization.`);
+            return;
+        }
 
         const referencesText = JSON.stringify(ctx.references, null, 2);
         const globalContext = `PAPER CONTEXT:
-        TITLE: ${ctx.finalDraft.title}
-        ABSTRACT: ${ctx.finalDraft.abstract}
+        TITLE: ${finalDraft.title}
+        ABSTRACT: ${finalDraft.abstract}
 
 REFERENCES TO INSERT:
 ${referencesText} `;
 
         // Process Sections (Chunked)
-        for (let i = 0; i < ctx.finalDraft.sections.length; i++) {
-            const section = ctx.finalDraft.sections[i];
-            await this.log(`[Editor] Processing Section ${i + 1} /${ctx.finalDraft.sections.length}: "${section.name}"...`, {
-                phase: "Phase 6: Editing", step: `Editing Section ${i + 1}`, progress: 80 + Math.floor((i / ctx.finalDraft.sections.length) * 10)
+        for (let i = 0; i < finalDraft.sections.length; i++) {
+            const section = finalDraft.sections[i];
+            await this.log(`[Editor] Processing Section ${i + 1} /${finalDraft.sections.length}: "${section.name}"...`, {
+                phase: "Phase 6: Editing", step: `Editing Section ${i + 1}`, progress: 80 + Math.floor((i / finalDraft.sections.length) * 10)
             });
 
             let lastError: string | null = null;
@@ -997,7 +1098,7 @@ CRITICAL RULES:
 2. MATCHING: Match references to their sentences using the provided Reference List.
 3. PRESERVATION: PRESERVE all existing LaTeX formatting.
 4. SCOPE: Do NOT rewrite content. Only ADD markers.
-5. NO HALLUCINATION: If a claim has no matching reference, DO NOT fabricate one.
+5. ZERO HALLUCINATION: If a claim has no matching reference, DO NOT fabricate one. DO NOT insert (ref_X) if you are not 100% sure it applies.
 
 LATEX SYNTAX RULES:
 - Use \\\\ for manual line breaks inside lists if needed.
@@ -1018,7 +1119,21 @@ TASK:
 2. Return ONLY the updated LaTeX content for this section.
 3. Do not return JSON, just the LaTeX string.`;
 
-                const result = await this.writer.completion(userPrompt, systemPrompt);
+                // STREAMING ADDED
+                let lastLogTime = 0;
+                const result = await this.writer.completion(userPrompt, systemPrompt, async (text) => {
+                    const now = Date.now();
+                    if (now - lastLogTime > 2000) {
+                        await this.log(`[Editing] ${section.name} (${text.length} chars)...`, {
+                            phase: "Phase 6: Editing",
+                            step: `Editing Section ${i + 1}`,
+                            progress: 80 + Math.floor((i / finalDraft.sections.length) * 10), // Added ! for finalDraft
+                            details: `(${text.length} chars)`
+                        });
+                        lastLogTime = now;
+                    }
+                });
+
                 let newContent = sanitizeLatexOutput(result);
 
                 // If result is wrapped in quotes or markdown block, strip them
@@ -1037,7 +1152,7 @@ TASK:
                 }
 
                 // Update the section in place
-                ctx.finalDraft!.sections[i].content = newContent;
+                finalDraft.sections[i].content = newContent;
 
             }, {
                 retries: 3,
@@ -1049,12 +1164,12 @@ TASK:
         }
 
         // Process Enhancements (Chunked - Text Fields Only)
-        if (ctx.finalDraft.enhancements) {
-            for (let i = 0; i < ctx.finalDraft.enhancements.length; i++) {
-                const enh = ctx.finalDraft.enhancements[i];
+        if (finalDraft.enhancements) {
+            for (let i = 0; i < finalDraft.enhancements.length; i++) {
+                const enh = finalDraft.enhancements[i];
                 // SKIP modifying 'content' for diagrams to prevent truncation/corruption
                 // Only allowed to modify title and description
-                await this.log(`[Editor] Processing Enhancement ${i + 1}/${ctx.finalDraft.enhancements.length}: "${enh.title}"...`, { phase: "Phase 6: Editing", step: `Editing Enhancement ${i + 1}`, progress: 90 });
+                await this.log(`[Editor] Processing Enhancement ${i + 1}/${finalDraft.enhancements.length}: "${enh.title}"...`, { phase: "Phase 6: Editing", step: `Editing Enhancement ${i + 1}`, progress: 90 });
 
                 let lastError: string | null = null;
 
@@ -1077,11 +1192,19 @@ TASK:
 1. Insert (ref_X) markers into Title or Description if relevant.
 2. Return JSON: { "title": "...", "description": "..." }`;
 
-                    const result = await this.writer.jsonCompletion(userPrompt, systemPrompt);
+                    // STREAMING ADDED
+                    let lastLogTime = 0;
+                    const result = await this.writer.jsonCompletion(userPrompt, systemPrompt, undefined, async (text) => {
+                        const now = Date.now();
+                        if (now - lastLogTime > 2000) {
+                            await this.log(`[Editing] Enhancement (${text.length} chars)...`, { phase: "Phase 6: Editing", step: "Editing Enhancement", progress: 90, details: `(${text.length} chars)` });
+                            lastLogTime = now;
+                        }
+                    });
 
                     if (result && result.description) {
-                        ctx.finalDraft!.enhancements![i].title = result.title || enh.title;
-                        ctx.finalDraft!.enhancements![i].description = result.description;
+                        finalDraft.enhancements![i].title = result.title || enh.title;
+                        finalDraft.enhancements![i].description = result.description;
                         // CONTENT IS PRESERVED AUTOMATICALLY AS WE DON'T OVERWRITE IT
                     }
                 }, {
@@ -1095,7 +1218,7 @@ TASK:
         }
 
         // Ensure references are from our Card Catalog (prevent hallucination)
-        ctx.finalDraft.references = ctx.references;
+        finalDraft.references = ctx.references;
 
         await this.log(`[Editor] Editing complete. Pipeline finished.`, { phase: "Phase 6: Editing", step: "Complete", progress: 95 });
     }

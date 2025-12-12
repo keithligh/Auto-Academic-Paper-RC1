@@ -299,6 +299,24 @@ To ensure consistent rendering in **manually parsed blocks** (Tables, Algorithms
      - `\/` -> `/` (Converts escaped slash to forward slash)
      - `~` -> `&nbsp;` (Non-breaking space)
 
+### 8a. Section Header Processing (v1.9.69)
+
+**Problem**: `\section{}`, `\subsection{}`, `\subsubsection{}` were NOT being processed.
+
+**Fix**: Added handlers: `\section{}` → `<h2>`, `\subsection{}` → `<h3>`, `\subsubsection{}` → `<h4>`, `\paragraph{}` → `<strong>`.
+
+**Fallback**: `\sub+section{}` → `<h4>` handles AI-hallucinated deep levels like `\subsubssubsection`.
+
+### 8aa. Comprehensive Command Support (v1.9.68)
+
+50+ commands added: Math (`\leq`, `\geq`, `\pm`, `\infty`), Logic (`\forall`, `\exists`), Greek letters (`\alpha` through `\omega`), Arrows (`\uparrow`, `\downarrow`), Spacing (`\quad`, `\qquad`).
+
+**Special**: `\$` → `$` for financial notation.
+
+### 8ab. Algorithm Package Dual-Support (v1.9.68)
+
+Both `algorithmic` (uppercase: `\STATE`) and `algpseudocode` (mixed: `\State`) packages now supported via case-insensitive regexes.
+
 ### 8b. The Universal Text Formatter (v1.9.37)
 Previously, only manually parsing blocks (Tables, Algorithms) received nice formatting (bold, italic, symbols). Standard text paragraphs were just getting wrapped in `<p>` tags, leaving `\textbf{}` raw.
 
@@ -919,3 +937,62 @@ To prevent "Blank Diagrams" (silent crashes), the TikZ engine now performs aggre
 **Problem**: Lists inside tables inherited the global `text-align: justify`, causing awkward gaps in narrow table columns.
 **Solution**: Enforced `text-align: left !important` via CSS selector `.latex-preview td *`.
 **Universality**: Applies to ALL content (lists, paragraphs, divs) inside ANY table cell, overriding all conflicting global styles.
+
+### 37. Bibliography URL Line Break (v1.9.63)
+**Change**: Bibliography URLs now appear on a new line for improved readability.
+- **Before**: `Author. Title. Venue, 2024. URL: https://...`
+- **After**: `Author. Title. Venue, 2024.` (new line) `\url{https://...}`
+- **Implementation**: Added `\\\\` (LaTeX line break) before `\url{}` in `latexGenerator.ts`.
+
+### 38. The "Self-Destructing Escaping" Fix (v1.9.65)
+**Problem**: HTML header tags (`<h2>`, `<h3>`) rendered as literal text (`&lt;h2&gt;Introduction&lt;/h2&gt;`).
+**Root Cause**: `parseLatexFormatting()` escaped `<` and `>` to HTML entities, but it also GENERATES those very tags!
+**The Paradox**: A function that creates `<strong>`, `<em>`, `<h2>` was destroying its own output by escaping angle brackets.
+**Solution**: Removed `<>` escaping from `parseLatexFormatting()`. HTML escaping should happen at INPUT (untrusted data boundary), not OUTPUT (processed data exit).
+**Universal Impact**: Fixed rendering of ALL HTML tags: `<h2>`, `<h3>`, `<h4>`, `<strong>`, `<em>`, `<code>`, `<br/>`, etc.
+
+### 39. Algorithm Environment Caption Handling (v1.9.65)
+**Problem**: `Algorithm. (H) \caption{Title}` appeared as literal text instead of a properly formatted header.
+**Root Cause 1**: The `[H]` option is a LaTeX **position specifier** (like `[htbp]` for floats), NOT a title. The parser was treating it as title text.
+**Root Cause 2**: `\caption{...}` inside the algorithm body was passed through unprocessed.
+**Solution**: Special handling for `algorithm` environment in `processor.ts`:
+1. Ignore `[H]` (or any position specifier like `[t]`, `[b]`)
+2. Extract `\caption{...}` from body and use it as the title
+3. Strip `\caption{}` and `\label{}` from the body before rendering
+
+### 40. Nested Placeholder Resolution (v1.9.65)
+**Problem**: `LATEXPREVIEWMATH99` appearing as literal text inside algorithm blocks.
+**Root Cause**: When `processMath()` extracts math to placeholders, and then `processAlgorithms()` wraps the body (containing those placeholders) into ANOTHER placeholder, the math placeholders become "nested". The final restoration only resolved top-level placeholders.
+**Solution**: Added recursive placeholder resolution in `LatexPreview.tsx`:
+```typescript
+while (hasUnresolved && resolveCount < maxResolves) {
+    for (const key in blocks) {
+        blocks[key] = blocks[key].replace(/(LATEXPREVIEW[A-Z]+[0-9]+)/g, (match) => {
+            return blocks[match] || match;
+        });
+    }
+}
+```
+This ensures placeholders within placeholder HTML content are fully resolved before DOM injection.
+
+### 41. Markdown Header Stripping (v1.9.64)
+**Problem**: AI sometimes outputs Markdown headers (`# ABSTRACT`, `## Section`) inside LaTeX content.
+**Root Cause**: LLMs occasionally mix Markdown and LaTeX syntax, especially for section headers.
+**Solution**: Added stripping of Markdown headers in `parseLatexFormatting()`:
+```typescript
+.replace(/^#{1,6}\s+.*$/gm, '')
+```
+**Prompt Fix**: Added `NO MARKDOWN HEADERS` to abstract prompt and `PURE LATEX ONLY` rule to Phase 3.
+
+### 42. Multirow Table Support with Rowspan Tracking (v1.9.65)
+**Problem 1**: `\multirow{4}{*}{\textbf{Academic}}` rendered as literal text.
+**Root Cause**: Simple regex couldn't handle nested braces like `\textbf{}` inside `\multirow{}`.
+**Solution**: Implemented brace-counting parser that tracks depth to correctly extract the content argument.
+
+**Problem 2**: Tables with `\multirow` had misaligned columns - the last column shifted right.
+**Root Cause**: In HTML tables, when a cell has `rowspan="4"`, subsequent rows should have fewer cells (they skip that column). But we were generating empty `<td></td>` for the "phantom cell" that starts rows 2-4 in LaTeX.
+**The HTML Rule**: A `rowspan="N"` cell occupies its column for N rows. Rows 2-N must NOT have a cell in that position.
+**Solution**: Implemented `activeRowspans: Map<column, remainingRows>` to track which columns have active rowspans. On each row:
+1. Decrement all active rowspan counters
+2. If first cell is empty AND column 0 has active rowspan → skip the phantom cell
+**Result**: Correct column alignment for all multirow tables.

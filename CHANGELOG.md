@@ -1,4 +1,3 @@
-<!-- GOSPEL RULE: NEVER USE replace_file_content. ALWAYS USE multi_replace_file_content or write_to_file. -->
 # Changelog
 
 All notable changes to this project will be documented in this file.
@@ -6,7 +5,151 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.50] - 2025-12-11 (Optimization & Hardening Sprint)
+## [1.9.70] - 2025-12-12 (Absolute Anti-Fabrication Rule)
+### Changed
+- **Phase 1 & 3 Anti-Fabrication Rules Strengthened**:
+  - **Problem**: AI was planning sections like "Empirical Validation" and fabricating experiments to fill them.
+  - **Root Cause**: Phase 1 (Strategist) planned sections requiring data that didn't exist in source.
+  - **Solution - Two-Layer Defense**:
+    1. **Phase 1**: Added `ABSOLUTE PRINCIPLE - NO FABRICATION EVER` with 4 sub-rules preventing planning of fabrication-prone sections.
+    2. **Phase 3 Rule 7**: Made absolute: "ZERO TOLERANCE. Never invent experiments, statistics, sample sizes, p-values, case studies, user quotes, anecdotes, or stories."
+  - **Key Principle**: "If source has data → Use EXACTLY AS-IS. No embellishment. No hallucination."
+
+## [1.9.69] - 2025-12-12 (Section Headers & Bibliography Fix)
+### Fixed
+- **Section Headers Not Rendering** (Critical Missing Feature):
+  - **Symptom**: `\subsection{Title}` appeared as literal text.
+  - **Root Cause**: `\section`, `\subsection`, `\subsubsection` handlers were COMPLETELY MISSING from `parseLatexFormatting()`.
+  - **Fix**: Added handlers: `\section{}` → `<h2>`, `\subsection{}` → `<h3>`, `\subsubsection{}` → `<h4>`, `\paragraph{}` → `<strong>`.
+
+- **AI-Hallucinated Section Depths**:
+  - **Symptom**: `\subsubssubsection{Title}` (invalid LaTeX) appearing as text.
+  - **Root Cause**: AI invented non-existent section commands.
+  - **Fix**: Added fallback `\sub+section{}` → `<h4>` to gracefully handle any depth.
+  - **Prompt Fix**: Added Rule 8 to Phase 3: "VALID SECTIONING ONLY."
+
+- **Bibliography URL Escaping Bug**:
+  - **Symptom**: `\https://...` appearing with backslash in bibliography.
+  - **Root Cause**: JavaScript escaping error - `\\\\url` produced `\\url` (line break + `url`) instead of `\url`.
+  - **Fix**: Changed to `\\url` which correctly produces `\url{}` command.
+
+- **Duplicate "ABSTRACT" Text**:
+  - **Symptom**: "Abstract" header followed by "ABSTRACT The content..."
+  - **Root Cause**: AI sometimes outputs "ABSTRACT" as first word inside abstract environment.
+  - **Fix**: Strip leading `ABSTRACT` word from abstract body since header is generated automatically.
+
+## [1.9.68] - 2025-12-12 (Common LaTeX Commands Overhaul)
+### Added
+- **50+ Common LaTeX Commands**: Research-based addition of frequently-used commands that were missing:
+  - **Math Symbols**: `\leq`, `\geq`, `\neq`, `\pm`, `\cdot`, `\ldots`, `\dots`, `\cdots`, `\infty`
+  - **Logic**: `\therefore`, `\because`, `\forall`, `\exists`
+  - **Set Theory**: `\subset`, `\supset`, `\cup`, `\cap`, `\in`, `\notin`
+  - **Greek Letters**: `\alpha` through `\omega`, plus `\Delta`, `\Sigma`, `\Omega`
+  - **Arrows**: `\uparrow`, `\downarrow`, `\updownarrow`
+  - **Spacing**: `\hspace{}`, `\vspace{}`
+  - **Layout**: `\clearpage`, `\newpage`, `\noindent`, `\centering`, `\raggedright`, `\raggedleft`, `\par`
+
+- **Dollar Sign Escaping**: Added `\$` → `$` for financial notation like `\$68,000`.
+
+- **Algorithm Package Dual Support**:
+  - **Problem**: Preview only handled `algorithmic` package (uppercase: `\STATE`), not `algpseudocode` (mixed case: `\State`).
+  - **Fix**: Made all algorithm regexes case-insensitive and added: `\State`, `\Statex`, `\If`, `\EndIf`, `\For`, `\EndFor`, `\While`, `\EndWhile`, `\Return`, `\Require`, `\Ensure`, `\Comment`.
+
+## [1.9.67] - 2025-12-12 (LaTeX Spacing Commands)
+### Fixed
+- **`\quad` and `\qquad` Not Rendering**:
+  - **Symptom**: `\quad` appearing as literal text in algorithm blocks.
+  - **Root Cause**: These spacing commands were not handled in `parseLatexFormatting()`.
+  - **Fix**: Added `\quad` → `&emsp;` (1em) and `\qquad` → `&emsp;&emsp;` (2em).
+  - **Universality**: These are the only two "quad" spacing commands in LaTeX.
+
+
+## [1.9.66] - 2025-12-12 (Anti-Fabrication Prompt Rule)
+### Changed
+- **Phase 3 Critical Rule 7**: Added anti-fabrication constraint to prevent AI from inventing fake research:
+  - **Rule**: `NO FABRICATED RESEARCH. Never invent experiments, statistics, sample sizes, p-values, or case studies.`
+  - **Problem**: AI was generating fake experiments ("We conducted a study with n=45..."), fabricated statistics, and invented case studies.
+  - **Root Cause**: Prompt said "AGGRESSIVELY ENHANCE" without explicit negative constraints. AI interpreted "enhance" as permission to invent.
+  - **Solution**: Explicit negative constraint preserves theoretical writing while blocking fabrication.
+  - **Reasoning**: Lesson 75 - "Positive Instructions are Dangerous." LLMs need explicit forbiddens, not just encouragements.
+
+## [1.9.65] - 2025-12-12 (LaTeX Preview Engine Overhaul)
+### Fixed
+- **HTML Angle Bracket Escaping** (The "Headers Not Rendering" Bug):
+  - **Symptom**: `<h2>Introduction</h2>` rendered as literal text instead of a header.
+  - **Root Cause**: `parseLatexFormatting()` escaped `<` and `>` to `&lt;` and `&gt;`, destroying our own generated HTML.
+  - **Fix**: Removed `<>` escaping from `parseLatexFormatting()`. The function GENERATES HTML, so escaping its output is self-defeating.
+  - **Universal Impact**: Fixed all HTML tags (`<h2>`, `<h3>`, `<strong>`, `<em>`, `<code>`, etc.).
+
+- **Algorithm Environment Parsing**:
+  - **Symptom**: `Algorithm. (H) \caption{Title}` appeared as literal text.
+  - **Root Cause**: `[H]` is a position specifier, not a title. `\caption{}` inside body was not extracted.
+  - **Fix**: Special handling for `algorithm` environment - ignores `[H]`, extracts `\caption{}` as title, strips both from body.
+
+- **Nested Placeholder Resolution**:
+  - **Symptom**: `LATEXPREVIEWMATH99` appearing inside algorithm blocks instead of rendered math.
+  - **Root Cause**: Placeholders inside other placeholders were never resolved (algorithm wrapped body before math was restored).
+  - **Fix**: Added recursive placeholder resolution in `LatexPreview.tsx` - resolves placeholders inside block values before final injection.
+
+- **Multirow Table Support** (The "Column Shift" Bug):
+  - **Symptom**: `\multirow{4}{*}{\textbf{Academic}}` rendered as literal text, last column misaligned.
+  - **Root Cause 1**: Simple regex couldn't handle nested braces like `\textbf{}` inside `\multirow{}`.
+  - **Root Cause 2**: No rowspan state tracking - rows after multirow had phantom empty cells.
+  - **Fix**: Implemented brace-counting parser + `activeRowspans` Map to track which columns have active rowspans. Subsequent rows skip empty cells covered by rowspans.
+  - **Lesson**: "Parse, don't Regex" for nested LaTeX structures.
+
+## [1.9.64] - 2025-12-12 (Markdown Header Stripping)
+### Fixed
+- **AI Markdown Hallucinations**:
+  - **Symptom**: `# ABSTRACT` appearing as literal text in preview.
+  - **Root Cause**: AI sometimes outputs Markdown headers (`# Title`, `## Section`) inside LaTeX content.
+  - **Fix**: Added stripping of Markdown headers in `parseLatexFormatting()`: `.replace(/^#{1,6}\s+.*$/gm, '')`.
+  - **Prompt Fix**: Added `NO MARKDOWN HEADERS` to abstract prompt and `PURE LATEX ONLY` rule to Phase 3.
+
+## [1.9.63] - 2025-12-12 (Bibliography URL Formatting)
+### Changed
+- **Bibliography URL Line Break**:
+  - **Before**: `Author. Title. Venue, 2024. URL: https://...`
+  - **After**: `Author. Title. Venue, 2024.` (new line) `\url{https://...}`
+  - **Reasoning**: Improves readability in academic papers where URLs can be long.
+
+## [1.9.62] - 2025-12-12 (Phase 4 Web Search Integration)
+### Changed
+- **Peer Reviewer Web Search**: The Phase 4 Peer Reviewer now actively uses web search for fact-checking claims.
+  - **Prompt Upgrade**: Updated system prompt to explicitly instruct the model to "USE WEB SEARCH to verify claims against current literature."
+  - **Capabilities**: The Peer Reviewer now verifies claims via live web search, checks novelty against recent publications, and cites URLs/paper titles when possible.
+  - **Architecture**: Phase 4 uses `this.librarian` (already implemented), which is now connected to search-capable custom bots.
+  - **Reasoning**: A "Peer Reviewer" should not just review existing references but actively fact-check claims against the current state of the field.
+
+
+## [1.9.61] - 2025-12-12 (JSON Parser Hardening for Flash Models)
+### Fixed
+- **Unwrapped JSON Properties (The "Flash Model" Bug)**:
+  - **Symptom**: `Gemini25Flash-APP` outputs `"found": false` instead of `{ "found": false }`, causing `Failed to parse JSON: Unexpected non-whitespace character after JSON at position 7`.
+  - **Root Cause**: Flash models sometimes ignore JSON object wrapper instructions, outputting bare key-value pairs.
+  - **Fix**: Enhanced `extractJson()` in `server/ai/utils.ts` to detect this pattern and auto-wrap in `{}`:
+    ```typescript
+    if (/^\s*"[^"]+"\s*:/.test(clean)) {
+        return JSON.parse(`{${clean}}`);
+    }
+    ```
+  - **Reasoning**: This is a pragmatic "bandaid" for unpredictable LLM behavior. The proper fix is using smarter models, but defensive parsing is standard practice in production LLM applications.
+
+## [1.9.60] - 2025-12-12 (Custom Poe Bots for Librarian)
+### Changed
+- **Custom Bot Integration**:
+  - **Librarian**: Now uses custom Poe bots instead of vanilla Gemini models.
+  - **Available Bots**:
+    - `Gemini25Pro-AAP`: High-reasoning, web search-capable (Recommended for research).
+    - `Gemini25Flash-APP`: Faster, cheaper, but less reliable JSON formatting.
+  - **UI Update**: `ConfigPage.tsx` now shows "Gemini 2.5 Pro (Custom Bot)" and "Gemini 2.5 Flash (Custom Bot)" in the Librarian dropdown.
+  - **Default**: Set to `Gemini25Pro-AAP` in `schema.ts` and `routes.ts` fallback.
+  - **Reasoning**: Custom bots have web search pre-configured, eliminating reliance on the flaky `parameters.web_search` injection.
+
+### Fixed
+- **Bot Name Typo**: Fixed `Gemini25Flash-AAP` → `Gemini25Flash-APP` (the actual bot name on Poe).
+
+
 ### Added
 - **System Hardening (Robustness)**:
     - **Timeouts**: Increased global AI timeout to **3 minutes** (180s) to prevent premature termination of deep research tasks.
@@ -22,6 +165,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - **Search Queries**: Limited to 15 (Standard) or 50 (Advanced).
     - **Enhancements**: Limited to 20 (Standard) or Unlimited (Advanced).
     - **Reasoning**: Prevents token explosions on lower tiers while allowing deep research for power users.
+
+## [1.9.55] - 2025-12-11 (UX & Terminology Polish)
+### Fixed
+- **Streaming Feedback (Complexity Reduction)**:
+    - **Problem**: Users felt "loops" were infinite because status messages were too long and technical.
+    - **Fix**: Shortened status messages (`[Drafting] Section (~500 w)...`) and made the count visible.
+    - **Scope**: Expanded to Phase 4 (Deep Review) and Phase 6 (Editor).
+- **Terminology Polish (Professionalization)**:
+    - **Change**: Replaced specific internal terms with academic equivalents.
+        - "Surgical Patching" -> **"Evidence Integration"**
+        - "Generating patches" -> **"Synthesizing revisions"**
+    - **Reasoning**: The "Editor" persona requires professional, academic language, not software dev slang.
 
 ## [1.9.49] - 2025-12-11 (Surgical Editing Prompts)
 ### Changed
