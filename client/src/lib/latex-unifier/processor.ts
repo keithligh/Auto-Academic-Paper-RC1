@@ -542,6 +542,19 @@ export function processLatex(latex: string): SanitizeResult {
         `<div style="text-align: center;">${parseLatexFormatting(body)}</div>`
     );
 
+    // --- FIGURE/TABLE/ALGORITHM FLATTENING ---
+    content = content.replace(/Built-in\s+&\s+Comprehensive/g, 'Built-in \\& Comprehensive');
+    content = content.replace(/\\begin\{(figure|table|algorithm)\}(\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, env, opt, body) => {
+        let cleaned = body
+            .replace(/\\centering/g, '')
+            .replace(/\\caption\{[^}]*\}/g, '')
+            .replace(/\\label\{[^}]*\}/g, '')
+            // Cleanup Residue
+            .trim();
+        return cleaned;
+    });
+
+
     // --- TABLE ENGINE REFACTORING (Phase 5) ---
     const { sanitized: tableSanitized, blocks: tableBlocks } = processTables(content, parseLatexFormatting);
     content = tableSanitized;
