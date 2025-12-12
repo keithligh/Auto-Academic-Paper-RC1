@@ -543,7 +543,11 @@ export function processLatex(latex: string): SanitizeResult {
     );
 
     // --- FIGURE/TABLE/ALGORITHM FLATTENING ---
-    content = content.replace(/Built-in\s+&\s+Comprehensive/g, 'Built-in \\& Comprehensive');
+    console.log('[DEBUG Flattening] Content includes algorithm:', content.includes('\\begin{algorithm}'));
+    const flattenRegex = /\\begin\{(figure|table|algorithm)\}(\[[^\]]*\])?([\\s\\S]*?)\\end\{\1\}/g;
+    const flattenMatches = content.match(flattenRegex);
+    console.log('[DEBUG Flattening] Regex matches:', flattenMatches ? flattenMatches.length : 0);
+    content = content.replace(/Built-in\s+&\s+Comprehensive/g, 'Built-in \\&amp; Comprehensive');
     content = content.replace(/\\begin\{(figure|table|algorithm)\}(\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, env, opt, body) => {
         let cleaned = body
             .replace(/\\centering/g, '')
