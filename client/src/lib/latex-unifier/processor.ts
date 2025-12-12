@@ -391,6 +391,12 @@ export function processLatex(latex: string): SanitizeResult {
             const algoRegex = /\\begin\{algorithm\}(?:\[[^\]]*\])?([\\s\\S]*?)\\end\{algorithm\}/g;
             const matches = content.match(algoRegex);
             console.log('[DEBUG] Algorithm regex matches:', matches ? matches.length : 0);
+            // Show snippet of content around \begin{algorithm}
+            const idx = content.indexOf('\\begin{algorithm}');
+            if (idx !== -1) {
+                const snippet = content.substring(Math.max(0, idx - 20), Math.min(content.length, idx + 100));
+                console.log('[DEBUG] Content snippet around algorithm:', JSON.stringify(snippet));
+            }
             content = content.replace(algoRegex, (match, body) => {
                 console.log('[DEBUG Algorithm] Body BEFORE processing:', body);
                 // Extract caption as title
