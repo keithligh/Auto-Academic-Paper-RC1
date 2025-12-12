@@ -245,14 +245,7 @@ export function processLatex(latex: string): SanitizeResult {
     content = tikzSanitized;
     Object.assign(blocks, tikzBlocks);
 
-    // --- QUOTE ENVIRONMENT (v1.9.78) ---
-    content = content.replace(/\\begin\{quote\}([\s\S]*?)\\end\{quote\}/g, (m, quoteContent) => {
-        // Parse formatting inside the quote (keep LaTeX commands)
-        const formatted = parseLatexFormatting(quoteContent.trim());
-        return createPlaceholder(`<blockquote class="latex-quote">${formatted}</blockquote>`);
-    });
-
-    // --- VERBATIM / CODE BLOCKS ---
+    // --- CODE BLOCKS (Verbatim & Listings) ---
     // Extract early to prevent Math/Command parsing inside code
     content = content.replace(/\\begin\{(verbatim|lstlisting)\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, envName, code) => {
         const escaped = code
@@ -379,54 +372,6 @@ export function processLatex(latex: string): SanitizeResult {
         }
         return output;
     };
-
-    // --- ENVIRONMENT NORMALIZATION (Robust Loop from LatexPreview) ---
-    // CRITICAL: Must process BEFORE global processLists so that enumerate inside algorithms
-    // are handled in their algorithm context, not converted to placeholders globally (v1.9.81)
-    const envs = ["algorithm", "hypothesis", "remark", "definition", "theorem", "lemma", "proposition", "corollary"];
-    envs.forEach(env => {
-        // v1.9.65: Algorithm has special handling - [H] is position, \caption{} is title
-        if (env === "algorithm") {
-            console.log('[DEBUG] Processing algorithm env, content includes algorithm:', content.includes('\\begin{algorithm}'));
-            const algoRegex = /\\begin\{algorithm\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{algorithm\}/g;
-            const matches = content.match(algoRegex);
-            console.log('[DEBUG] Algorithm regex matches:', matches ? matches.length : 0);
-            // Show snippet of content around \begin{algorithm}
-            const idx = content.indexOf('\\begin{algorithm}');
-            if (idx !== -1) {
-                const snippet = content.substring(Math.max(0, idx - 20), Math.min(content.length, idx + 100));
-                console.log('[DEBUG] Content snippet around algorithm:', JSON.stringify(snippet));
-            }
-            content = content.replace(algoRegex, (match, body) => {
-                console.log('[DEBUG Algorithm] Body BEFORE processing:', body);
-                // Extract caption as title
-                let title = '';
-                const captionMatch = body.match(/\\caption\{([^}]*)\}/);
-                if (captionMatch) {
-                    title = captionMatch[1];
-                    body = body.replace(/\\caption\{[^}]*\}/g, ''); // Remove caption from body
-                }
-                const titleHtml = title ? `<strong>${title}</strong>` : '';
-                // Remove label too
-                body = body.replace(/\\label\{[^}]*\}/g, '');
-                // Process lists inside algorithm body before formatting (v1.9.80 - Fix \end{enumerate} literal text bug)
-                console.log('[DEBUG Algorithm] Body AFTER cleanup, BEFORE processLists:', body);
-                const processedBody = processLists(body);
-                console.log('[DEBUG Algorithm] Body AFTER processLists:', processedBody);
-                const finalHtml = parseLatexFormatting(processedBody);
-                console.log('[DEBUG Algorithm] Final HTML after parseLatexFormatting:', finalHtml);
-                return createPlaceholder(`<div class="algorithm"><strong>Algorithm.</strong> ${titleHtml}<div class="algorithm-body">${finalHtml}</div></div>`);
-            });
-        } else {
-            const robustRegex = new RegExp(`\\\\begin\\{${env}\\}(?:\\[(.*?)\\])?([\\s\\S]*?)\\\\end\\{${env}\\}`, 'g');
-            content = content.replace(robustRegex, (match, title, body) => {
-                const titleHtml = title ? `<strong>(${title})</strong> ` : '';
-                return createPlaceholder(`<div class="${env}"><strong>${env.charAt(0).toUpperCase() + env.slice(1)}.</strong> ${titleHtml}${parseLatexFormatting(body)}</div>`);
-            });
-        }
-    });
-
-    console.log('[DEBUG] Content before processLists, checking for algorithm:', content.includes('\\begin{algorithm}'));
     content = processLists(content);
 
     // --- METADATA EXTRACTION (Moved from LatexPreview) ---
@@ -532,6 +477,34 @@ export function processLatex(latex: string): SanitizeResult {
     };
     content = processAlgorithms(content);
 
+    // --- ENVIRONMENT NORMALIZATION (Robust Loop from LatexPreview) ---
+    const envs = ["algorithm", "hypothesis", "remark", "definition", "theorem", "lemma", "proposition", "corollary"];
+    envs.forEach(env => {
+        // v1.9.65: Algorithm has special handling - [H] is position, \caption{} is title
+        if (env === "algorithm") {
+            const algoRegex = /\\begin\{algorithm\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{algorithm\}/g;
+            content = content.replace(algoRegex, (match, body) => {
+                // Extract caption as title
+                let title = '';
+                const captionMatch = body.match(/\\caption\{([^}]*)\}/);
+                if (captionMatch) {
+                    title = captionMatch[1];
+                    body = body.replace(/\\caption\{[^}]*\}/g, ''); // Remove caption from body
+                }
+                const titleHtml = title ? `<strong>${title}</strong>` : '';
+                // Remove label too
+                body = body.replace(/\\label\{[^}]*\}/g, '');
+                return createPlaceholder(`<div class="algorithm"><strong>Algorithm.</strong> ${titleHtml}<div class="algorithm-body">${parseLatexFormatting(body)}</div></div>`);
+            });
+        } else {
+            const robustRegex = new RegExp(`\\\\begin\\{${env}\\}(?:\\[(.*?)\\])?([\\s\\S]*?)\\\\end\\{${env}\\}`, 'g');
+            content = content.replace(robustRegex, (match, title, body) => {
+                const titleHtml = title ? `<strong>(${title})</strong> ` : '';
+                return createPlaceholder(`<div class="${env}"><strong>${env.charAt(0).toUpperCase() + env.slice(1)}.</strong> ${titleHtml}${parseLatexFormatting(body)}</div>`);
+            });
+        }
+    });
+
     // --- ABSTRACT & CENTER (Moved from LatexPreview) ---
     content = content.replace(/\\begin\{abstract\}([\s\S]*?)\\end\{abstract\}/g, (m, body) => {
         // Strip duplicate "ABSTRACT" word that AI sometimes outputs at the start
@@ -543,11 +516,7 @@ export function processLatex(latex: string): SanitizeResult {
     );
 
     // --- FIGURE/TABLE/ALGORITHM FLATTENING ---
-    console.log('[DEBUG Flattening] Content includes algorithm:', content.includes('\\begin{algorithm}'));
-    const flattenRegex = /\\begin\{(figure|table|algorithm)\}(\[[^\]]*\])?([\\s\\S]*?)\\end\{\1\}/g;
-    const flattenMatches = content.match(flattenRegex);
-    console.log('[DEBUG Flattening] Regex matches:', flattenMatches ? flattenMatches.length : 0);
-    content = content.replace(/Built-in\s+&\s+Comprehensive/g, 'Built-in \\&amp; Comprehensive');
+    content = content.replace(/Built-in\s+&\s+Comprehensive/g, 'Built-in \\& Comprehensive');
     content = content.replace(/\\begin\{(figure|table|algorithm)\}(\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, env, opt, body) => {
         let cleaned = body
             .replace(/\\centering/g, '')
