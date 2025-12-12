@@ -140,6 +140,14 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
         }
         resolveCount++;
       }
+      console.log('[DEBUG LatexPreview] Total blocks after resolution:', Object.keys(blocks).length);
+      console.log('[DEBUG LatexPreview] Sample block keys:', Object.keys(blocks).slice(0, 5));
+      // Check if any algorithm blocks contain unresolved placeholders
+      for (const key in blocks) {
+        if (key.includes('BLOCK') && blocks[key].includes('LATEXPREVIEW')) {
+          console.log(`[DEBUG LatexPreview] Block ${key} contains unresolved placeholder:`, blocks[key].substring(0, 200));
+        }
+      }
 
       // Then resolve top-level placeholders in sanitized HTML
       html = html.replace(/(LATEXPREVIEW[A-Z]+[0-9]+)/g, (match) => {
