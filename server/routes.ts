@@ -332,8 +332,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : `paper_${job.id}.tex`;
 
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Type', 'application/x-tex');
-      res.send(exportSafeLatex);
+      res.setHeader('Content-Type', 'application/x-tex; charset=utf-8');
+      // Use Buffer to prevent BOM from being added
+      res.send(Buffer.from(exportSafeLatex, 'utf-8'));
 
     } catch (error) {
       console.error("Error exporting job:", error);

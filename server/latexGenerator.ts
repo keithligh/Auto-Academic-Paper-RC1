@@ -192,6 +192,10 @@ ${cjkPreamble}
 \\newtheorem{remark}{Remark}
 \\newtheorem{constraint}{Constraint}
 
+% Paragraph formatting - no indentation, line breaks between paragraphs
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{1em}
+
 ${symbolDefs ? `% Symbol definitions\n${symbolDefs}` : ""}% Title and author
 \\title{${title}}
 \\author{${formatAuthorInfo(authorName, authorAffiliation)}}

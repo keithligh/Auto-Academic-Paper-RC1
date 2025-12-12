@@ -281,6 +281,9 @@ Create a detailed Execution Plan.
 2. Structure a novel ${ctx.paperType} based on this.
 3. Generate specific search queries (${queryInstruction}) to support your plan.
 
+CRITICAL CONSTRAINT:
+Do NOT plan "Empirical Validation" or "Case Studies" unless the Input Text explicitly contains raw data/metrics. If the input is theoretical, your plan MUST be theoretical.
+
 OUTPUT FORMAT (JSON):
 {
     "title_idea": "Proposed Title",

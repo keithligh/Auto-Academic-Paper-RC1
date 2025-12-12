@@ -5,6 +5,86 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.77] - 2025-12-13 (Paragraph Formatting Fix)
+### Changed
+- **Paragraph Spacing Instead of Indentation**:
+  - **Problem**: LaTeX export used traditional first-line indentation instead of line breaks between paragraphs.
+  - **User Request**: Wanted paragraphs separated by line breaks, no indentation.
+  - **Solution**: Added `\setlength{\parindent}{0pt}` and `\setlength{\parskip}{1em}` to LaTeX preamble in `latexGenerator.ts`.
+  - **Preview Compatibility**: Already compatible - CSS uses `text-indent: 0` and `margin-bottom: 1em`.
+
+## [1.9.76] - 2025-12-13 (BOM Prevention in LaTeX Export)
+### Fixed
+- **"Undefined control sequence \documentclass" Error**:
+  - **Symptom**: pdflatex failed on line 1 with "Undefined control sequence" on `\documentclass`.
+  - **Root Cause**: Express `res.send(string)` was adding UTF-8 BOM (Byte Order Mark: `EF BB BF`) to the file.
+  - **Why BOM Breaks LaTeX**: LaTeX parsers expect the file to start with `\` (backslash), not `EF BB BF`.
+  - **Solution**: Changed `server/routes.ts` export endpoint from `res.send(exportSafeLatex)` to `res.send(Buffer.from(exportSafeLatex, 'utf-8'))`.
+  - **Result**: Binary-safe output without BOM, LaTeX compiles successfully.
+
+## [1.9.75] - 2025-12-13 (Text Mode Algorithm Fix)
+### Fixed
+- **"Missing $ inserted" in Algorithm Blocks**:
+  - **Symptom**: Line 790: `\text{Integrity}(A, C) \geq $\theta$` → "Missing $ inserted" error.
+  - **Root Cause**: AI was wrapping algorithm keywords in `\text{}` (a math-mode command), but algorithm environments are already in text mode.
+  - **Why It Fails**: `\text{}` requires math mode (`$...$`), creating a mode conflict.
+  - **Solution**: Added regex replacements to `sanitizeLatexForExport` in `server/ai/utils.ts`:
+    - Remove `\text{if}`, `\text{then}`, `\text{else}`, etc.
+    - Strip `\text{}` from identifiers: `\text{Integrity}` → `Integrity`
+  - **Reasoning**: Algorithm blocks are prose-like, so text doesn't need special wrapping.
+
+## [1.9.74] - 2025-12-13 (Algorithm Command Normalization)
+### Fixed
+- **"Undefined control sequence \REQUIRE" Error**:
+  - **Symptom**: Line 616: `\REQUIRE` → "Undefined control sequence" error.
+  - **Root Cause**: AI was outputting uppercase algorithm commands (`\REQUIRE`, `\STATE`) but the `algpseudocode` package uses mixed-case (`\Require`, `\State`).
+  - **Why Mixed-Case**: `algpseudocode` is the modern standard; `algorithmic` (uppercase) is legacy.
+  - **Solution**: Added automatic normalization to `sanitizeLatexForExport` in `server/ai/utils.ts`:
+    - `\REQUIRE` → `\Require`, `\ENSURE` → `\Ensure`, `\STATE` → `\State`
+    - Plus all other uppercase variants (`\IF`, `\FOR`, `\WHILE`, etc.)
+  - **Design Decision**: Normalize at export time (not generation) to preserve preview compatibility.
+
+## [1.9.73] - 2025-12-13 (Strategist Anti-Fabrication Hardening)
+### Changed
+- **User Prompt Constraint Against Fabrication**:
+  - **Problem**: "Empirical Validation: Hong Kong Deployments" section appeared despite system prompt forbidding fabrication.
+  - **Root Cause**: System prompts are often deprioritized by LLMs; User prompts have higher attention.
+  - **Solution**: Added `CRITICAL CONSTRAINT` to Phase 1 Strategist **User Prompt** in `server/ai/service.ts`:
+    > "Do NOT plan 'Empirical Validation' or 'Case Studies' unless the Input Text explicitly contains raw data/metrics. If the input is theoretical, your plan MUST be theoretical."
+  - **Reasoning - Dual Defense**: System prompt sets the rules, User prompt enforces them at "instruction level".
+  - **LLM Behavior**: User prompts are interpreted as "current task requirements" and override general tendencies.
+
+## [1.9.72] - 2025-12-13 (Error Logging Improvement)
+### Fixed
+- **Generic "AI response was not valid JSON" Error**:
+  - **Problem**: User saw generic error but couldn't debug root cause.
+  - **Root Cause**: OpenRouter adapter caught `extractJson` errors and swallowed the details:
+    ```typescript
+    catch (e: any) {
+        throw new Error("AI response was not valid JSON"); // Lost e.message!
+    }
+    ```
+  - **Solution**: Changed to `throw new Error(\`AI response was not valid JSON: ${e.message || String(e)}\`);`
+  - **Result**: Revealed actual error (e.g., "402 Payment Required - insufficient credits") enabling faster diagnosis.
+  - **Dev Principle**: Always propagate inner exceptions; generic errors hide debugging information.
+
+## [1.9.71] - 2025-12-13 (JSON Parser Hardening)
+### Fixed
+- **"Unexpected non-whitespace character after JSON" Errors**:
+  - **Symptom**: Phase 2 (Librarian) failing with `Failed to parse JSON: Unexpected non-whitespace character after JSON at position 7`.
+  - **Root Cause**: `extractJson` in `server/ai/utils.ts` was accepting **JSON primitives** (e.g., `0`, `"Error"`, `true`) when AI output text like:
+    - `0 papers found` → Parsed `0` (valid JSON number), then crashed on "papers".
+    - `"Error": The model failed...` → Parsed `"Error"` (valid JSON string), then crashed on `:`.
+  - **Why Primitives Are Dangerous**: All pipeline phases expect structured Object/Array responses. Accepting primitives allowed text responses to be misidentified as "valid JSON".
+  - **Solution**: Added strict enforcement in `extractJson`:
+    ```typescript
+    if (start === -1) {
+        throw new Error(`No JSON object or array found (expected { or [). First 50 chars: "${clean.substring(0, 50)}..."`);
+    }
+    ```
+  - **Impact**: Now rejects responses without `{` or `[`, surfaces actual AI failures with context.
+  - **Design Decision**: All AI agents MUST return Objects/Arrays per schema; primitives indicate hallucination or formatting failure.
+
 ## [1.9.70] - 2025-12-12 (Absolute Anti-Fabrication Rule)
 ### Changed
 - **Phase 1 & 3 Anti-Fabrication Rules Strengthened**:

@@ -157,7 +157,7 @@ export class OpenRouterProvider implements AIProvider {
 
         } catch (e: any) {
             console.error("OpenRouter JSON Error:", e);
-            throw new Error("AI response was not valid JSON");
+            throw new Error(`AI response was not valid JSON: ${e.message || String(e)}`);
         }
     }
 

@@ -118,7 +118,35 @@ export function sanitizeLatexForExport(latex: string): string {
     // This prevents "Missing $ inserted" errors without breaking math (x_1).
     clean = clean.replace(/\(ref_(\d+)\)/g, "(ref\\_$1)");
 
-    // 2. Ensure inputenc is present for UTF8 compatibility
+    // 2. ALGORITHM PACKAGE FIX: Normalize uppercase commands to algpseudocode (mixed-case)
+    // Fixes "Undefined control sequence \REQUIRE" errors
+    clean = clean.replace(/\\REQUIRE/g, '\\Require');
+    clean = clean.replace(/\\ENSURE/g, '\\Ensure');
+    clean = clean.replace(/\\STATE/g, '\\State');
+    clean = clean.replace(/\\IF/g, '\\If');
+    clean = clean.replace(/\\ENDIF/g, '\\EndIf');
+    clean = clean.replace(/\\ELSE/g, '\\Else');
+    clean = clean.replace(/\\ELSIF/g, '\\ElsIf');
+    clean = clean.replace(/\\FOR/g, '\\For');
+    clean = clean.replace(/\\ENDFOR/g, '\\EndFor');
+    clean = clean.replace(/\\WHILE/g, '\\While');
+    clean = clean.replace(/\\ENDWHILE/g, '\\EndWhile');
+    clean = clean.replace(/\\RETURN/g, '\\Return');
+    clean = clean.replace(/\\COMMENT/g, '\\Comment');
+
+    // 3. ALGORITHM TEXT MODE FIX: Remove \text{} wrappers that cause math mode conflicts
+    // In algorithm environments, we're already in text mode, so \text{} causes "Missing $ inserted" errors
+    clean = clean.replace(/\\text\{if\s*\}/g, 'if ');
+    clean = clean.replace(/\\text\{then\s*\}/g, 'then ');
+    clean = clean.replace(/\\text\{else\s*\}/g, 'else ');
+    clean = clean.replace(/\\text\{end\s*\}/g, 'end ');
+    clean = clean.replace(/\\text\{for\s*\}/g, 'for ');
+    clean = clean.replace(/\\text\{while\s*\}/g, 'while ');
+    clean = clean.replace(/\\text\{do\s*\}/g, 'do ');
+    clean = clean.replace(/\\text\{return\s*\}/g, 'return ');
+    clean = clean.replace(/\\text\{([A-Z][a-zA-Z]*)\}/g, '$1'); // Remove \text{} from identifiers like \text{Integrity}
+
+    // 4. Ensure inputenc is present for UTF8 compatibility
     if (!clean.includes("\\usepackage[utf8]{inputenc}")) {
         clean = clean.replace(
             /\\documentclass(\[[^\]]*\])?\{[^}]+\}/,
@@ -155,9 +183,14 @@ export function extractJson(content: string): any {
         end = findBalancedJsonEnd(clean, start, '[', ']');
     }
 
-    if (start !== -1 && end !== -1) {
+    // AUTO-ACADEMIC-PAPER-RC1 FIX: Enforce Object/Array to prevent primitive parsing bugs
+    if (start === -1) {
+        throw new Error(`No JSON object or array found (expected { or [). First 50 chars: "${clean.substring(0, 50)}..."`);
+    }
+
+    if (end !== -1) {
         clean = clean.substring(start, end + 1);
-    } else if (start !== -1) {
+    } else {
         // Truncated or malformed (no closing found) - take everything from start
         clean = clean.substring(start);
     }
