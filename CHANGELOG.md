@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.82] - 2025-12-13 (TikZ Local Clip)
+### Fixed
+- **TikZ Auto-Clip Refined**: The previous "Global Clip" (v1.9.81) occasionally cut off axis labels that extended beyond the grid. The new **Local Scope Clip** surgically wraps only the `\draw ... plot ...` command in a clipping scope. This trims asymptotic curves to the axis bounding box while guaranteeing that labels and arrows remain fully visible.
+
+## [1.9.81] - 2025-12-13 (TikZ Auto-Clip)
+### Fixed
+- **TikZ Unbounded Plots**: Implemented **Auto-Clipping** for diagrams with plots. Mathematical functions (like $1/x$) often shoot to infinity outside the drawn axes. The Engine now calculates the "Explicit Bounding Box" of the axes/nodes and injects a `\clip` command (+1 unit padding) to physically cut off these "Off the Chart" lines, preserving the visual layout.
+- **TikZ Plot Distortion**: Enforced strictly square scaling (`x=1, y=1`) prevents ellipses and distortion.
+
+## [1.9.80] - 2025-12-13 (TikZ Scope & Plot Fix)
+### Fixed
+- **TikZ Scope Shifts**: The Intent Engine now accounts for `xshift` and `yshift` in `scope` environments. Previously, shifted scopes were treated as overlapping, causing wide diagrams to be misclassified as small/compact.
+- **TikZ Plot Safety**: Implemented a strict **1:1 Aspect Ratio Enforcement** (`x=1, y=1`) when `plot` commands are detected. This prevents "Vertical Blowout" on asymptotic functions (like $1/x$) and eliminates geometric distortion (squashed circles) caused by mismatched X/Y scaling.
+
+## [1.9.79] - 2025-12-13 (Quote Environment Support)
+### Added
+- **Quote Environment**:
+  - **Feature**: Added support for `\begin{quote} ... \end{quote}`.
+  - **Visuals**: Renders as an indented <blockquote> with italic styling and inner formatting (bold, etc.) support.
+  - **Bug Fix**: Removed a duplicate index increment in `enumerate` logic that was swallowing content after lists.
+
 ## [1.9.78] - 2025-12-13 (Nested List & Algorithm Fix)
 ### Fixed
 - **Nested Lists in Algorithms (The "Empty List" Bug)**:

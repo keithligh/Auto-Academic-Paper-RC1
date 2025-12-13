@@ -320,6 +320,21 @@ The TikZ engine was prone to "Blank" renders due to browser limitations. We impl
 5.  **Small Minimum Height (v1.9.16)**: Reduced `min-height` to `100px`.
     *   **Why**: 200px was too tall for horizontal timeline diagrams, creating massive whitespace gaps.
 
+#### B. Plot Safety Protocol (The "Asymptote" Fix)
+> **Problem**: The "Goldilocks" Vertical Scaling (trying to stretch small diagrams to ~8cm height) is catastrophic for Mathematical Plots.
+> **Scenario**: A user plots `y = 3/x` from `domain=0.3:3`. At x=0.3, y=10. This point is often outside the drawn axes (clipped visually by the author, but present in the bbox).
+> **The Failure**: The Engine sees a small axis (3.5cm) and applies a boost `y=1.8cm` to hit the 8cm target. This boosts the invisible asymptote (y=10) to `18cm`, creating a massive tower of whitespace.
+> **The Distortion**: If we only fixed Y (e.g. `y=1`), but left X expanding (e.g. `x=1.8` for LARGE intent), the plot becomes severely flattened (1.8:1 ratio), turning circles into ellipses and distorting the function shape.
+> **The Fix (v1.9.81 / v1.9.82)**:
+> 1.  **Square Scaling**: We enforce `xUnit = 1.0` and `yUnit = 1.0` to preserve geometric truth (circles stay circular).
+> 2.  **Safety Clip (Local Scope)**: Instead of a global clip (which might cut off axis labels like "Speed S" extending beyond the grid), we wrap **only the plot command** in a local scope with a clip.
+>      ```latex
+>      \begin{scope}
+>      \clip (minX-0.5, minY-0.5) rectangle (maxX+0.5, maxY+0.5);
+>      \draw ... plot ...;
+>      \end{scope}
+>      ```
+>      This surgically trims the asymptotic curve to the visible axes (plus line-width padding) while leaving all labels, arrows, and other diagram elements strictly untouched.
 ### 16. The Double Bracket Protocol (v1.9.16)
 > **Problem**: The TikZ Option Extractor strips outer brackets (`[x=1cm]` -> `x=1cm`). The Merger then adds new options (`x=1.5cm`).
 > **The Bug**: We were injecting the result as `x=1.5cm, x=1cm`. This is **invalid TikZ syntax**. TikZ expects options to be wrapped in square brackets `[...]` or passed as a command argument. Loose text inside the environment is treated as... text? Or just ignored as garbage.

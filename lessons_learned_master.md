@@ -670,7 +670,10 @@
 -   **Root Cause**: The manually written `processLists` function extracted `\item` content using a loop that stopped at *any* `\item` or `\end` tag, ignoring nesting depth.
 -   **The Failure**: When it encountered a nested `\begin{enumerate} \item ...`, it saw the nested `\item` and stopped capturing the parent item's content, truncating the nested list entirely.
 -   **Fix**: Rewrote the extraction loop to track `nestedListDepth`. It now consumes nested `\begin/end` blocks atomically and only stops at a top-level `\item`.
--   **Lesson**: **Manual Parsers must be Recursion-Aware.** If you write a `while` loop to parse a tree structure, you effectively need a stack (or a depth counter). "Flat" scanning always fails on nested structures.
+-   **Lesson**:
+    1. **Manual Parsers must be Recursion-Aware.** If you write a `while` loop to parse a tree structure, you effectively need a stack (or a depth counter). "Flat" scanning always fails on nested structures.
+    2. **Mathematical Plot Safety (v1.9.80)**: Layout algorithms (like "Fill Width") often destroy Mathematical Truth. Applying `x=1.8` non-proportional scaling to a plot `y=1/x` turned circles into ellipses and distorted functions. **Mathematical plots require Aspect Ratio Locking (Square Scaling)**.
+    3. **The Global Clip Trap (v1.9.82)**: When fixing unbounded plots (asymptotes), a "Global Clip" (`\clip (min,min) rectangle (max,max)`) is dangerous because it cuts off explicit labels (like "Axis Title") that float outside the grid. **Clipping must be Local (Scoped)** to the specific element causing the overflow.
 
 ## 97. The "Magic Number" Shadow Bug (v1.9.79)
 -   **Symptom**: An extra `}` appeared after algorithms, and sometimes content following a list was swallowed.

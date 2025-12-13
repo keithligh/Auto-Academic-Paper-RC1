@@ -204,6 +204,27 @@ export function processTikz(latex: string): TikzResult {
                 }
             }
         });
+        // NEW (v1.9.80): Scope Shift Heuristic
+        // Regex misses "xshift=6cm" and treats scopes as overlapping (0,0).
+        // We accumulate max shifts to adjust the bounding box estimation.
+        const xShifts = (safeTikz.match(/xshift\s*=\s*(-?[\d.]+)\s*(?:cm)?/g) || [])
+            .map(s => parseFloat(s.match(/xshift\s*=\s*(-?[\d.]+)/)![1]));
+        const yShifts = (safeTikz.match(/yshift\s*=\s*(-?[\d.]+)\s*(?:cm)?/g) || [])
+            .map(s => parseFloat(s.match(/yshift\s*=\s*(-?[\d.]+)/)![1]));
+
+        if (xShifts.length > 0) {
+            const maxShift = Math.max(0, ...xShifts);
+            const minShift = Math.min(0, ...xShifts);
+            if (isFinite(maxX)) maxX += maxShift;
+            if (isFinite(minX)) minX += minShift;
+        }
+        if (yShifts.length > 0) {
+            const maxShift = Math.max(0, ...yShifts);
+            const minShift = Math.min(0, ...yShifts);
+            if (isFinite(maxY)) maxY += maxShift;
+            if (isFinite(minY)) minY += minShift;
+        }
+
         const horizontalSpan = (maxX !== -Infinity && minX !== Infinity) ? (maxX - minX) : 0;
         const verticalSpan = (maxY !== -Infinity && minY !== Infinity) ? (maxY - minY) : 0;
         const isWideHorizontal = horizontalSpan > 14; // > 14cm exceeds A4 safe width
@@ -247,12 +268,12 @@ export function processTikz(latex: string): TikzResult {
             // We force a friendlier aspect ratio (approx 2:1) to fill the visual slot.
             if (isFlat) intent = 'FLAT'; // Timeline-style (Extreme aspect ratio)
             else intent = 'LARGE';       // Absolute Layout (includes WIDE) -> Uses Adaptive Density + Vertical Boost
-
             console.log(`[IntentEngine] Span: (${horizontalSpan}x${verticalSpan}), Ratio: ${aspectRatio.toFixed(2)}, isFlat: ${isFlat}, Intent: ${intent}`);
         } else if (distMatch) {
             // Explicit intent wins (Relative Layouts)
             if (nodeDist < 2.0) intent = 'COMPACT';
             else if (nodeDist >= 2.5) intent = 'LARGE';
+
         } else {
             // Implicit intent (Inference for Relative Layouts)
             if (isTextHeavy) intent = 'LARGE'; // Text-heavy = Cycle = Large
@@ -300,7 +321,38 @@ export function processTikz(latex: string): TikzResult {
             // Note: If rawY is exactly 0.5 or 1.0 from our branching above, we preserve it.
             let yUnit = (rawY <= 1.0 && verticalSpan === 0) ? rawY : Math.min(1.8, Math.max(1.0, rawY));
 
-            const xUnit = Math.min(dynamicClamp, optimalUnit); // Keeps width constraint
+            // FIX (v1.9.80): Plot Safety Protocol
+            // If the diagram contains a `plot` command, the "Goldilocks" vertical scaling is DANGEROUS.
+            // Additionally, mixing x=1.8 (fill width) with y=1.0 (safety) distorts the geometry (elliptical circles).
+            // Mathematical plots require Square Scaling (Aspect Ratio 1:1).
+            const hasPlot = safeTikz.includes('\\plot') || safeTikz.includes('plot ') || safeTikz.includes('plot(');
+
+            let xUnit = Math.min(dynamicClamp, optimalUnit); // Default width expansion
+
+            if (hasPlot) {
+                console.log('[IntentEngine] Plot Detected: Enforcing 1:1 Scale (x=1, y=1) to prevent blowout & distortion.');
+                yUnit = 1.0;
+                xUnit = 1.0;
+
+
+                // FIX (v1.9.81 - v1.9.82): Auto-Clip Unbounded Plots (THE LOCAL FIX)
+                // Global clipping cuts off axis labels (e.g. "Speed S") that extend beyond explicit coords.
+                // We must ONLY clip the `plot` command itself, leaving other nodes/axes untouched.
+                if (minX !== Infinity && maxX !== -Infinity && minY !== Infinity && maxY !== -Infinity) {
+                    const pad = 0.5; // Small padding just for line thickness
+                    const clipCmd = `\\clip (${minX - pad},${minY - pad}) rectangle (${maxX + pad},${maxY + pad});`;
+
+                    console.log(`[IntentEngine] Injecting Local Safety Clip around plots.`);
+
+                    // Regex to find \draw ... plot ... ; commands
+                    // Note: We use [\s\S] to match across newlines
+                    // We wrap the matches in a scope with the clip
+                    safeTikz = safeTikz.replace(
+                        /(\\draw[^;]+plot[\s\S]+?;)/g,
+                        (match) => `\\begin{scope}\n${clipCmd}\n${match}\n\\end{scope}`
+                    );
+                }
+            }
 
             // FIX (v1.6.39): RESTORED - This line was accidentally removed in v1.6.38!
             extraOpts += `, x=${xUnit.toFixed(2)}cm, y=${yUnit.toFixed(2)}cm`;

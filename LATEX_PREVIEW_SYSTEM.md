@@ -595,7 +595,17 @@ The `parseLatexFormatting` function used for Tables and Parboxes uses **non-recu
   - `\textbf{Bold}` -> **Bold** (Works)
   - `\textbf{Bold \textit{Italic}}` -> Fails (breaks on the inner brace). The user sees the raw LaTeX commands.
 
-### 4. Silent Markdown Stripping
+### 6. Plot Safety Protocol (v1.9.82)
+
+Mathematical plots are uniquely fragile.
+- **The Problem**: A function like `y=1/x` has asymptotes that shoot to infinity. The TikZ engine's layout algorithms (Fill Width, Adaptive Y) would stretch these invisible lines to fill the screen, creating massive whitespace.
+- **The Protocol**:
+  1.  **Detection**: If `\plot` is found.
+  2.  **Square Scaling**: We enforce `x=1, y=1` to prevent geometric distortion (ellipses).
+  3.  **Local Clipping**: We calculate the bounding box of the axes and wrap the `plot` command in a `\begin{scope}` with a precision `\clip`. This trims the asymptote without cutting off labels.
+  
+### 7. Silent Markdown Stripping
+
 
 Users often paste AI output that includes markdown code fences.
 
