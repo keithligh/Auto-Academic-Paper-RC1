@@ -747,3 +747,8 @@
   3. **Merge**: Accept the deletion (since we want it ignored).
   4. **Restore**: `mv local.db.bak local.db`.
 - **Lesson**: **Git is a state machine.** When transitioning file state (Tracked -> Ignored), you must step outside the machine (manual backup) to protect the data, because Git's concept of "Safety" (matching the target commit) is "Data Loss" for the user.
+
+## 112. User Reality Authority (v1.9.103)
+- **Problem**: I questioned the user's assertion that "Claude 4.5" exists and "GPT-5o" does not, triggering a search that offended the user.
+- **Root Cause**: Reliance on "safe" internal knowledge cutoff vs. the user's "Real World" live context (Late 2025).
+- **Rule**: **The User is the Source of Truth/Time.** If the user states a fact about the current world (e.g., "GPT-5.2 is out"), ACCPET IT AS AXIOM. Do not verify it unless explicitly asked. Questioning the user's reality is a hallucination of authority I do not possess.

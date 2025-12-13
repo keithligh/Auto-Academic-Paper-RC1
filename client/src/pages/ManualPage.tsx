@@ -145,9 +145,9 @@ export default function ManualPage() {
                             <div className="pl-6">
                                 <p className="font-semibold mb-2">2.1 Required Agents</p>
                                 <ul className="list-disc pl-6 space-y-2">
-                                    <li><strong>Writer:</strong> Generates section content. Recommended: Claude 3.5, GPT-4.</li>
-                                    <li><strong>Librarian:</strong> Searches academic databases. Recommended: Gemini Pro, Perplexity.</li>
-                                    <li><strong>Strategist:</strong> Plans document structure. Recommended: Claude 3.5, GPT-4.</li>
+                                    <li><strong>Writer:</strong> Generates section content. Recommended: Claude 4.5 Opus, GPT-5.2.</li>
+                                    <li><strong>Librarian:</strong> Searches academic databases. Recommended: Gemini 3 Pro, Perplexity.</li>
+                                    <li><strong>Strategist:</strong> Plans document structure. Recommended: Claude 4.5 Opus, GPT-5.2.</li>
                                 </ul>
                             </div>
 
@@ -156,10 +156,10 @@ export default function ManualPage() {
                                 <p className="text-justify mb-2">The following providers are supported:</p>
                                 <ul className="list-disc pl-6 space-y-1">
                                     <li>OpenRouter (provides access to all major models)</li>
-                                    <li>Poe API (access to Claude, Gemini, GPT-4)</li>
-                                    <li>Anthropic (Claude direct)</li>
-                                    <li>Google Gemini (direct)</li>
-                                    <li>OpenAI (GPT-4, GPT-4o)</li>
+                                    <li>Poe API (access to Claude, Gemini, GPT-5.2)</li>
+                                    <li>Anthropic (Claude 4/4.5 direct)</li>
+                                    <li>Google Gemini (Gemini 3 direct)</li>
+                                    <li>OpenAI (GPT-5, GPT-5.2)</li>
                                     <li>xAI Grok (direct)</li>
                                     <li>Ollama (local deployment)</li>
                                 </ul>
