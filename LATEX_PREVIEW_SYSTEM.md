@@ -372,9 +372,12 @@ To handle arbitrarily nested lists (e.g., `itemize` inside `enumerate`) and opti
 1. **Manual Parsing**: We do **not** use regex to find list boundaries. We iterate through the string character-by-character, using a **Balanced Brace Counter** to correctly parse complex optional arguments (e.g., `\begin{enumerate}[label=\textbf{\arabic*.}]`).
 2. **Leaf-First Recursion**: The parser identifies the "innermost" list (a leaf node that contains no other list start tags) and processes it first. It replaces the list with a safe placeholder (`__LIST_BLOCK_N__`) before processing parent lists. This guarantees infinite nesting support without regex stack overflow or "greedy match" errors.
 3. **Pipeline Ordering**: To prevent incorrect parsing, **Verbatim/Code extraction happens BEFORE List parsing**. This ensures `\item` commands inside code blocks are ignored by the list parser.
-4. **Math Safety**: Content is passed through `resolvePlaceholders()` to restore math *before* HTML generation.
-5. **Manual Formatting**: We manually parse formatting macros (`\emph`, `\textbf`, `\textsc`) within list items, including support for nested braces (e.g., `\textbf{\textit{text}}`).
-6.  Final HTML lists are wrapped in `createPlaceholder()` 
+4. **Recursion-Aware Item Extraction (v1.9.78)**: The `listContent` loop tracks `nestedListDepth` to ensure that nested `\begin...\end` blocks are captured entirely within the parent item. This prevents premature truncation of nested lists.
+5. **Inline Recursion (Depth > 0)**:
+   - **Top Level (Depth 0)**: List is wrapped in `createPlaceholder` to protect it from downstream regex (like Math).
+   - **Nested Levels (Depth > 0)**: Lists are returned as **Raw HTML** (`<ol>...</ol>`) without placeholders. This allows the parent list to wrap the entire nested structure in its own placeholder, maintaining atomic integrity.
+6. **Math Safety**: Content is passed through `resolvePlaceholders()` to restore math *before* HTML generation.
+7. **Manual Formatting**: We manually parse formatting macros (`\emph`, `\textbf`, `\textsc`) within list items. 
 
 ---
 

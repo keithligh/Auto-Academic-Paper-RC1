@@ -664,3 +664,10 @@
     ```
 -   **Preview Compatibility**: CSS already had `text-indent: 0` and `margin-bottom: 1em`, so change was seamless.
 -   **Lesson**: **Typography preferences vary.** LaTeX defaults are academic/print-style, but users often prefer web-style spacing. Make it configurable or default to modern conventions.
+
+## 96. The "Nested Iterator" Bug (v1.9.78)
+-   **Symptom**: Nested lists (e.g., `enumerate` inside `algorithm`) appeared empty, and `\end{enumerate}` appeared as literal text.
+-   **Root Cause**: The manually written `processLists` function extracted `\item` content using a loop that stopped at *any* `\item` or `\end` tag, ignoring nesting depth.
+-   **The Failure**: When it encountered a nested `\begin{enumerate} \item ...`, it saw the nested `\item` and stopped capturing the parent item's content, truncating the nested list entirely.
+-   **Fix**: Rewrote the extraction loop to track `nestedListDepth`. It now consumes nested `\begin/end` blocks atomically and only stops at a top-level `\item`.
+-   **Lesson**: **Manual Parsers must be Recursion-Aware.** If you write a `while` loop to parse a tree structure, you effectively need a stack (or a depth counter). "Flat" scanning always fails on nested structures.

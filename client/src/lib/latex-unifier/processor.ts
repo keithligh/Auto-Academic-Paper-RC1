@@ -288,7 +288,16 @@ export function processLatex(latex: string): SanitizeResult {
                     i++;
                 }
                 i += 15;
-                output += createPlaceholder(`<ol class="latex-enumerate">\n${processLists(listContent, depth + 1)} \n</ol> `);
+                i += 15;
+                const processedList = processLists(listContent, depth + 1);
+
+                // CRITICAL FIX: Only create placeholder at depth 0
+                // At depth > 0, include HTML directly without placeholder to handle recursive nesting cleanly
+                if (depth === 0) {
+                    output += createPlaceholder(`<ol class="latex-enumerate">\n${processedList} \n</ol> `);
+                } else {
+                    output += `<ol class="latex-enumerate">\n${processedList} \n</ol> `;
+                }
             } else if (txt.startsWith('\\begin{itemize}', i)) {
                 i += 15;
                 // Handle options [noitemsep]
@@ -311,7 +320,12 @@ export function processLatex(latex: string): SanitizeResult {
                     i++;
                 }
                 i += 13;
-                output += createPlaceholder(`<ul class="latex-itemize">\n${processLists(listContent, depth + 1)} \n</ul> `);
+                const processedList = processLists(listContent, depth + 1);
+                if (depth === 0) {
+                    output += createPlaceholder(`<ul class="latex-itemize">\n${processedList} \n</ul> `);
+                } else {
+                    output += `<ul class="latex-itemize">\n${processedList} \n</ul> `;
+                }
             } else if (txt.startsWith('\\begin{description}', i)) {
                 i += 19;
                 // Handle options [style=...]
@@ -334,7 +348,12 @@ export function processLatex(latex: string): SanitizeResult {
                     i++;
                 }
                 i += 17;
-                output += createPlaceholder(`<ul class="latex-description" style="list-style: none; padding-left: 1em;">\n${processLists(listContent, depth + 1)} \n</ul> `);
+                const processedList = processLists(listContent, depth + 1);
+                if (depth === 0) {
+                    output += createPlaceholder(`<ul class="latex-description" style="list-style: none; padding-left: 1em;">\n${processedList} \n</ul> `);
+                } else {
+                    output += `<ul class="latex-description" style="list-style: none; padding-left: 1em;">\n${processedList} \n</ul> `;
+                }
             } else if (txt.startsWith('\\item', i)) {
                 i += 5;
                 // Handle \item[x]
@@ -354,7 +373,24 @@ export function processLatex(latex: string): SanitizeResult {
                     i++; // skip closing ]
                 }
                 let itemContent = '';
-                while (i < txt.length && !txt.startsWith('\\item', i)) {
+                let nestedListDepth = 0;
+                while (i < txt.length) {
+                    // Stop if we hit a new \item at the current level
+                    if (nestedListDepth === 0 && txt.startsWith('\\item', i)) {
+                        break;
+                    }
+
+                    // Track nesting of lists to capture nested items within this item
+                    if (txt.startsWith('\\begin{enumerate}', i) ||
+                        txt.startsWith('\\begin{itemize}', i) ||
+                        txt.startsWith('\\begin{description}', i)) {
+                        nestedListDepth++;
+                    } else if (txt.startsWith('\\end{enumerate}', i) ||
+                        txt.startsWith('\\end{itemize}', i) ||
+                        txt.startsWith('\\end{description}', i)) {
+                        if (nestedListDepth > 0) nestedListDepth--;
+                    }
+
                     itemContent += txt[i];
                     i++;
                 }

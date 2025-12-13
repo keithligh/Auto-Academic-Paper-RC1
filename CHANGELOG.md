@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.78] - 2025-12-13 (Nested List & Algorithm Fix)
+### Fixed
+- **Nested Lists in Algorithms (The "Empty List" Bug)**:
+  - **Symptom**: `\begin{enumerate}` nested inside `\begin{algorithm}` (or invalidly inside `\item`) resulted in empty list items and literal `\end{enumerate}` text.
+  - **Root Cause**: The manual `processLists` parser had a "flat" extraction loop. When it encountered a nested `\item`, it thought the parent item had ended, truncating the content passed to the recursive parser.
+  - **Fix 1 (Extraction)**: Rewrote the `itemContent` loop to track `nestedListDepth`. It now ignores `\item` tags inside nested environments (`enumerate`, `itemize`, `description`), ensuring the full parent item is captured.
+  - **Fix 2 (Recursion)**: Changed `processLists` to output **Inline HTML** instead of placeholders when `depth > 0`. This prevents nested placeholders, which simplified the resolution logic and avoided race conditions.
+  - **Impact**: Complex nested algorithms (e.g., SGCV) now render perfectly with full indentation and numbering.
+
 ## [1.9.77] - 2025-12-13 (Paragraph Formatting Fix)
 ### Changed
 - **Paragraph Spacing Instead of Indentation**:
