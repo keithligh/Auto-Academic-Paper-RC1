@@ -671,3 +671,9 @@
 -   **The Failure**: When it encountered a nested `\begin{enumerate} \item ...`, it saw the nested `\item` and stopped capturing the parent item's content, truncating the nested list entirely.
 -   **Fix**: Rewrote the extraction loop to track `nestedListDepth`. It now consumes nested `\begin/end` blocks atomically and only stops at a top-level `\item`.
 -   **Lesson**: **Manual Parsers must be Recursion-Aware.** If you write a `while` loop to parse a tree structure, you effectively need a stack (or a depth counter). "Flat" scanning always fails on nested structures.
+
+## 97. The "Magic Number" Shadow Bug (v1.9.79)
+-   **Symptom**: An extra `}` appeared after algorithms, and sometimes content following a list was swallowed.
+-   **Root Cause**: In the manual `processLists` parser, the line `i += 15;` (handling `\end{enumerate}`) was accidentally duplicated during a copy-paste refactor.
+-   **The Failure**: The first `i += 15` correctly skipped the `\end{enumerate}` tag. The *second* `i += 15` blindly skipped the *next* 15 characters of the document (often `\end{algorithm}` or valuable text), leaving behind corrupted artifacts like orphaned braces.
+-   **Lesson**: **Avoid "Magic Number" skips in parsers.** Instead of `i += 15`, use `i += tag.length` or functions like `consume(tag)`. If you must use offsets, unit test the *exact* transition points. Visual code inspection of manual parsers is prone to missing "double lines".

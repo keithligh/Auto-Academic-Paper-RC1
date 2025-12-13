@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Fix 2 (Recursion)**: Changed `processLists` to output **Inline HTML** instead of placeholders when `depth > 0`. This prevents nested placeholders, which simplified the resolution logic and avoided race conditions.
   - **Impact**: Complex nested algorithms (e.g., SGCV) now render perfectly with full indentation and numbering.
 
+## [1.9.79] - 2025-12-13 (Quote Environment Support)
+### Added
+- **Quote Environment**:
+  - **Feature**: Added support for `\begin{quote} ... \end{quote}`.
+  - **Visuals**: Renders as an indented <blockquote> with italic styling and inner formatting (bold, etc.) support.
+  - **Bug Fix**: Removed a duplicate index increment in `enumerate` logic that was swallowing content after lists.
+
 ## [1.9.77] - 2025-12-13 (Paragraph Formatting Fix)
 ### Changed
 - **Paragraph Spacing Instead of Indentation**:

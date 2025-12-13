@@ -377,7 +377,8 @@ To handle arbitrarily nested lists (e.g., `itemize` inside `enumerate`) and opti
    - **Top Level (Depth 0)**: List is wrapped in `createPlaceholder` to protect it from downstream regex (like Math).
    - **Nested Levels (Depth > 0)**: Lists are returned as **Raw HTML** (`<ol>...</ol>`) without placeholders. This allows the parent list to wrap the entire nested structure in its own placeholder, maintaining atomic integrity.
 6. **Math Safety**: Content is passed through `resolvePlaceholders()` to restore math *before* HTML generation.
-7. **Manual Formatting**: We manually parse formatting macros (`\emph`, `\textbf`, `\textsc`) within list items. 
+7. **Manual Formatting**: We manually parse formatting macros (`\emph`, `\textbf`, `\textsc`) within list items.
+8. **Manual Parsing Risks (v1.9.79)**: Manual parsers are fragile. Hardcoded skips (e.g., `i += 15`) led to bugs where valid content was swallowed. Future implementations should use dynamic length checks (e.g., `i += tag.length`). 
 
 ---
 

@@ -288,7 +288,7 @@ export function processLatex(latex: string): SanitizeResult {
                     i++;
                 }
                 i += 15;
-                i += 15;
+
                 const processedList = processLists(listContent, depth + 1);
 
                 // CRITICAL FIX: Only create placeholder at depth 0
@@ -546,6 +546,13 @@ export function processLatex(latex: string): SanitizeResult {
         // Strip duplicate "ABSTRACT" word that AI sometimes outputs at the start
         const cleanBody = body.replace(/^\s*ABSTRACT\s*/i, '');
         return createPlaceholder(`<div class="abstract"><h3>Abstract</h3><p>${parseLatexFormatting(cleanBody)}</p></div>`);
+    });
+
+    // --- QUOTE (New v1.9.79) ---
+    content = content.replace(/\\begin\{quote\}([\s\S]*?)\\end\{quote\}/g, (m, body) => {
+        // quotes can have paragraphs, so we handle newlines manually or wrap in formatting
+        const cleanBody = parseLatexFormatting(body).replace(/\n\s*\n+/g, '<br/><br/>');
+        return createPlaceholder(`<blockquote class="latex-quote" style="margin: 1em 2.5em; font-style: italic; color: #333;">${cleanBody}</blockquote>`);
     });
     content = content.replace(/\\begin\{center\}([\s\S]*?)\\end\{center\}/g, (m, body) =>
         `<div style="text-align: center;">${parseLatexFormatting(body)}</div>`
