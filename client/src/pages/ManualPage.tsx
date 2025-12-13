@@ -7,33 +7,33 @@ export default function ManualPage() {
         <div className="min-h-screen bg-white">
             {/* Header */}
             <header className="border-b border-slate-300 bg-white sticky top-0 z-50 shadow-sm">
-                <div className="container mx-auto px-6 py-3 flex items-center justify-between max-w-4xl">
+                <div className="container mx-auto px-6 py-3 flex items-center justify-between max-w-7xl">
                     <Link href="/">
                         <Button variant="ghost" size="sm" className="gap-2 text-slate-700">
                             <ArrowLeft className="h-4 w-4" />
                             Back
                         </Button>
                     </Link>
-                    <h1 className="text-xl font-serif text-slate-900">User Manual</h1>
+                    <h1 className="text-xl font-bold text-slate-900">User Manual</h1>
                     <div className="w-16" />
                 </div>
             </header>
 
-            {/* Main Content - LaTeX Article Style */}
-            <main className="container mx-auto px-6 py-12 max-w-4xl text-xl">
+            {/* Main Content */}
+            <main className="container mx-auto px-6 py-12 max-w-6xl text-lg">
                 {/* Title Page Style */}
                 <div className="text-center mb-16 pb-8 border-b border-slate-200">
-                    <h1 className="text-4xl font-serif mb-4 text-slate-900">
+                    <h1 className="text-5xl font-bold mb-4 text-slate-900">
                         Auto Academic Paper
                     </h1>
-                    <p className="text-2xl font-serif text-slate-700 mb-2">User Manual</p>
-                    <p className="text-sm text-slate-600 font-serif italic mt-6">Version 1.9</p>
+                    <p className="text-3xl font-medium text-slate-700 mb-2">User Manual</p>
+                    <p className="text-sm text-slate-600 italic mt-6">Version 1.9</p>
                 </div>
 
                 {/* Abstract */}
-                <div className="mb-12 px-12">
-                    <p className="text-center font-serif font-semibold mb-3 text-sm uppercase tracking-wide">Abstract</p>
-                    <p className="text-justify leading-relaxed font-serif text-slate-800">
+                <div className="mb-12 px-4 md:px-12 max-w-4xl mx-auto">
+                    <p className="text-center font-bold mb-3 text-sm uppercase tracking-wide">Abstract</p>
+                    <p className="text-justify leading-relaxed text-slate-800">
                         This document describes the operation and configuration of the Auto Academic Paper system,
                         a tool for transforming draft documents into publication-ready academic papers using AI-powered
                         research pipelines, citation verification, and professional LaTeX formatting. The system implements
@@ -42,10 +42,10 @@ export default function ManualPage() {
                 </div>
 
                 {/* Table of Contents */}
-                <div className="mb-12">
-                    <h2 className="text-xl font-serif font-bold mb-4 text-slate-900">Contents</h2>
+                <div className="mb-12 max-w-4xl mx-auto">
+                    <h2 className="text-2xl font-bold mb-4 text-slate-900">Contents</h2>
                     <nav className="pl-6">
-                        <ol className="space-y-2 font-serif">
+                        <ol className="space-y-2">
                             {[
                                 { num: "1", title: "Quick Start Guide", href: "#quick-start" },
                                 { num: "2", title: "AI Provider Configuration", href: "#ai-config" },
@@ -60,7 +60,7 @@ export default function ManualPage() {
                                         href={item.href}
                                         className="text-slate-700 hover:text-blue-800 hover:underline transition-colors"
                                     >
-                                        <span className="inline-block w-8">{item.num}.</span>
+                                        <span className="inline-block w-8 font-medium">{item.num}.</span>
                                         {item.title}
                                     </a>
                                 </li>
@@ -70,60 +70,60 @@ export default function ManualPage() {
                 </div>
 
                 {/* Sections */}
-                <div className="space-y-12 font-serif text-slate-800 leading-relaxed">
+                <div className="space-y-16 text-slate-800 leading-relaxed max-w-4xl mx-auto">
                     {/* Section 1 */}
-                    <section id="quick-start" className="scroll-mt-20">
-                        <h2 className="text-2xl font-bold mb-6 pb-2 border-b-2 border-slate-800">
+                    <section id="quick-start" className="scroll-mt-24">
+                        <h2 className="text-3xl font-bold mb-6 pb-2 border-b border-slate-200">
                             1. Quick Start Guide
                         </h2>
 
                         <div className="space-y-4">
-                            <p className="text-justify">
+                            <p className="text-lg">
                                 The following procedure describes the minimal steps required to process a document.
                                 New users should complete these steps in order.
                             </p>
 
-                            <div className="pl-6 space-y-4">
+                            <div className="bg-slate-50 p-6 rounded-xl border border-slate-100 space-y-6">
                                 <div>
-                                    <p className="font-semibold mb-1">1.1 Configure AI Providers</p>
-                                    <p className="text-justify pl-6">
-                                        Navigate to <em>Settings</em> and configure API keys for at least three providers
+                                    <h3 className="text-xl font-semibold mb-2 text-slate-900">1.1 Configure AI Providers</h3>
+                                    <p className="pl-1">
+                                        Navigate to <span className="font-semibold">Settings</span> and configure API keys for at least three providers
                                         (Writer, Librarian, Strategist). The system supports OpenRouter, Poe, Anthropic,
                                         Gemini, Grok, OpenAI, and Ollama. This configuration is required once per installation.
                                     </p>
                                 </div>
 
                                 <div>
-                                    <p className="font-semibold mb-1">1.2 Upload Document</p>
-                                    <p className="text-justify pl-6">
-                                        Upload a source document in <code className="px-1 bg-slate-100 font-mono text-sm">.txt</code>, {' '}
-                                        <code className="px-1 bg-slate-100 font-mono text-sm">.pdf</code>, or {' '}
-                                        <code className="px-1 bg-slate-100 font-mono text-sm">.md</code> format.
+                                    <h3 className="text-xl font-semibold mb-2 text-slate-900">1.2 Upload Document</h3>
+                                    <p className="pl-1">
+                                        Upload a source document in <code className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-sm font-mono text-slate-600">.txt</code>, {' '}
+                                        <code className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-sm font-mono text-slate-600">.pdf</code>, or {' '}
+                                        <code className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-sm font-mono text-slate-600">.md</code> format.
                                         Recommended length: 1,000–20,000 words.
                                     </p>
                                 </div>
 
                                 <div>
-                                    <p className="font-semibold mb-1">1.3 Select Parameters</p>
-                                    <p className="text-justify pl-6">
+                                    <h3 className="text-xl font-semibold mb-2 text-slate-900">1.3 Select Parameters</h3>
+                                    <p className="pl-1">
                                         Choose paper type (Research Paper, Essay, or Thesis), enhancement level (Standard recommended),
                                         and optionally provide author information.
                                     </p>
                                 </div>
 
                                 <div>
-                                    <p className="font-semibold mb-1">1.4 Submit Job</p>
-                                    <p className="text-justify pl-6">
-                                        Click <em>Submit Job</em>. Processing duration: 10–18 minutes.
+                                    <h3 className="text-xl font-semibold mb-2 text-slate-900">1.4 Submit Job</h3>
+                                    <p className="pl-1">
+                                        Click <span className="font-semibold">Submit Job</span>. Processing duration: 10–18 minutes.
                                         Progress is displayed in real time through six phases.
                                     </p>
                                 </div>
 
                                 <div>
-                                    <p className="font-semibold mb-1">1.5 Review and Export</p>
-                                    <p className="text-justify pl-6">
-                                        Review the generated preview and download the <code className="px-1 bg-slate-100 font-mono text-sm">.tex</code> file.
-                                        Compile locally using <code className="px-1 bg-slate-100 font-mono text-sm">pdflatex</code>.
+                                    <h3 className="text-xl font-semibold mb-2 text-slate-900">1.5 Review and Export</h3>
+                                    <p className="pl-1">
+                                        Review the generated preview and download the <code className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-sm font-mono text-slate-600">.tex</code> file.
+                                        Compile locally using <code className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-sm font-mono text-slate-600">pdflatex</code>.
                                     </p>
                                 </div>
                             </div>
@@ -420,9 +420,9 @@ pdflatex paper.tex`}
 
                 {/* Footer */}
                 <div className="mt-16 pt-8 border-t border-slate-200 text-center text-sm text-slate-600">
-                    <p className="font-serif">Auto Academic Paper • Version 1.9 • 2025</p>
+                    <p className="font-medium">Auto Academic Paper • Version 1.9 • 2025</p>
                     <Link href="/">
-                        <Button variant="ghost" size="sm" className="mt-4 font-serif">
+                        <Button variant="ghost" size="sm" className="mt-4 font-medium">
                             Return to Home
                         </Button>
                     </Link>
