@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.102] - 2025-12-13 (xAI Grok Integration)
+### Added
+- **xAI Grok Support**: Whitelisted `grok-4-1-fast` and `grok-4-1-fast-non-reasoning` for the Librarian role.
+- **Agentic Search Integration**:
+  - **Feature**: Connected Librarian to xAI's `/responses` endpoint (Agentic Tool Calling).
+  - **Logic**: Implemented strict non-streaming REST calls (streaming search is unstable) to enable Grok to perform autonomous iterative research and return compiled answers with citations.
+  - **UI**: Added conditional Dropdown in `ConfigPage.tsx` for Grok models (mirroring Poe UI).
+  - **Verification**: Added `server/test_xai_connection.ts` for automated connectivity checks.
+
+## [1.9.101] - 2025-12-13 (Git Merge Strategy: Development -> Main)
+### Changed
+- **Git Workflow (Local DB Safety)**:
+  - **Problem**: Merging `Development` branch (where `local.db` was tracked) into `main` (where `local.db` is ignored/untracked) creates a "Modify/Delete" conflict that risks data loss.
+  - **Resolution Strategy**:
+    1. **Pre-Merge**: `git rm --cached local.db` on source branch to align tracking status.
+    2. **Conflict**: Accept "Delete" on merge (since we want it untracked).
+    3. **Protection**: Manually backup `local.db` -> `local.db.bak` before checkout to prevent Git from overwriting the working file during state transitions.
+  - **Result**: `local.db` successfully migrated to "Ignored" status without data loss.
+
 ## [1.9.100] - 2025-12-13 (Configuration Fixes)
 ### Fixed
 - **Librarian Bot Name Mismatch**: Fixed a typo in `ConfigPage.tsx` and `poe.ts` where the custom bot was defined as `Gemini25Flash-APP` (Client) but rejected by the whitelist or server as invalid. Corrected to `Gemini25Flash-AAP` across the stack.

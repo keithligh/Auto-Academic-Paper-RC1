@@ -130,7 +130,11 @@ function ProviderSection({ title, description, role, isExpanded, onToggle, showW
                                             if (role === 'librarian') {
                                                 // Reset model when switching providers if switching FROM/TO Poe for Librarian
                                                 const isPoe = val === "poe";
-                                                const defaultModel = isPoe ? "Gemini25Pro-AAP" : "";
+                                                const isGrok = val === "grok";
+                                                let defaultModel = "";
+                                                if (isPoe) defaultModel = "Gemini25Pro-AAP";
+                                                if (isGrok) defaultModel = "grok-4-1-fast";
+
                                                 updateProviderConfig(role, { provider: val, model: defaultModel });
                                             } else {
                                                 updateProviderConfig(role, { provider: val });
@@ -162,6 +166,19 @@ function ProviderSection({ title, description, role, isExpanded, onToggle, showW
                                             <SelectContent>
                                                 <SelectItem value="Gemini25Pro-AAP" className="text-lg py-3">Gemini 2.5 Pro (Custom Bot)</SelectItem>
                                                 <SelectItem value="Gemini25Flash-AAP" className="text-lg py-3">Gemini 2.5 Flash (Custom Bot)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    ) : role === 'librarian' && providerConfig.provider === 'grok' ? (
+                                        <Select
+                                            value={providerConfig.model}
+                                            onValueChange={(val) => updateProviderConfig(role, { model: val })}
+                                        >
+                                            <SelectTrigger className="h-12 text-lg px-4">
+                                                <SelectValue placeholder="Select Grok Model" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="grok-4-1-fast" className="text-lg py-3">grok-4-1-fast</SelectItem>
+                                                <SelectItem value="grok-4-1-fast-non-reasoning" className="text-lg py-3">grok-4-1-fast-non-reasoning</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     ) : (

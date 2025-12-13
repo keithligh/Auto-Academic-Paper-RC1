@@ -1,70 +1,44 @@
-# Grok API Integration Guide
+# xAI (Grok) Provider Setup
 
-## Overview
-Grok (xAI) provides an OpenAI-compatible API for standard chat, but uses a **specialized endpoint** for its Agentic Search capabilities (server-side tool use).
+The Auto Academic Paper Generator supports xAI's Grok models, including the high-speed `grok-4-1-fast` and its reasoning variants. This provider is fully compatible with the **Librarian's Agentic Search** capabilities.
 
-## Connection Details
-- **Base URL**: `https://api.x.ai/v1`
-- **Authentication**: Bearer Token (`XAI_API_KEY`)
-- **Standard Chat**: `/chat/completions` (OpenAI compatible)
-- **Agentic Search**: `/responses` (Custom endpoint)
+## 1. Get your API Key
+1.  Sign up at [console.x.ai](https://console.x.ai/).
+2.  Generate a new API Key.
+3.  Add it to your `.env` file:
+    ```env
+    XAI_API_KEY=xai-................................
+    ```
 
-## Recommended Models (Dec 2025)
-*   **Grok-4.1**: Latest flagship.
-*   **Grok-4.1-Fast**: High-performance with 2M context.
+## 2. Supported Models
 
-## Agentic Search (Research Agent)
-To use Grok as a Research Agent, we must use the `/responses` endpoint with the `grok-4.1-fast` model and server-side tools.
+| Model | Use Case | Search Capable? |
+| :--- | :--- | :--- |
+| `grok-4-1-fast` | **Recommended**. Extremely fast, balanced reasoning. | ✅ Yes (Agentic) |
+| `grok-4-1-fast-non-reasoning` | Pure speed, less internal monologue. Good for simple queries. | ✅ Yes (Agentic) |
+| `grok-beta` | Legacy beta model. | ❌ Chat Only |
 
-### Endpoint
-`POST https://api.x.ai/v1/responses`
+## 3. Configuration in App
 
-### Payload Structure
-Unlike the standard OpenAI `messages` array, this endpoint uses `input`.
+### For General Roles (Writer, Strategist)
+1.  Go to **AI Configuration**.
+2.  Select **xAI (Grok)** as the provider.
+3.  Enter your model ID manualy if needed, or use the defaults.
 
-```json
-{
-  "model": "grok-4.1-fast",
-  "input": [
-    {
-      "role": "user",
-      "content": "Search query here"
-    }
-  ],
-  "tools": [
-    {
-      "type": "web_search",
-      "filters": {
-         "allowed_domains": ["..."] // Optional
-      }
-    }
-  ]
-}
-```
+### For The Librarian (Research)
+**Grok is a top-tier choice for the Librarian due to its native web search integration.**
 
-### Key Differences from OpenAI
-1.  **Endpoint**: `/responses` instead of `/chat/completions`.
-2.  **Parameter**: `input` instead of `messages`.
-3.  **Tools**: Server-side execution is automatic. The response contains the final answer.
+1.  Go to **AI Configuration** -> **The Librarian**.
+2.  Select **xAI (Grok)**.
+3.  Use the **Dropdown Menu** to select `grok-4-1-fast` (Recommended).
+4.  The system will automatically use xAI's "Agentic Search" endpoint (`/responses`) to perform live research.
 
-## Code Example (Raw HTTP)
+## 4. Agentic Search Capabilities
+When used by the Librarian, Grok does not just autocomplete text. It acts as an agent:
+1.  **Iterative Research**: It creates its own search queries.
+2.  **Web Browsing**: It reads pages to find specific evidence.
+3.  **Citation**: It returns verified sources which the system adds to your "Card Catalog".
 
-```typescript
-const response = await fetch("https://api.x.ai/v1/responses", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${apiKey}`
-  },
-  body: JSON.stringify({
-    model: "grok-4.1-fast",
-    input: [{ role: "user", content: "Latest fusion energy breakthroughs" }],
-    tools: [{ type: "web_search" }]
-  })
-});
-```
-
-## Important Notes
-- **Model**: Use `grok-4.1-fast` for best search performance.
-- **Citations**: Returned in the response object (if needed, though we primarily want the text).
-- **Rate Limits**: Check headers or console.
+## Troubleshooting
+-   **404 Not Found**: Ensure you are using a model that supports the Research endpoint (`grok-4-1-fast`). Older models may fail if "Web Search" is enabled.
+-   **API Key Error**: Verify `XAI_API_KEY` is loaded in `.env`.

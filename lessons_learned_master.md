@@ -729,4 +729,21 @@
 - **Problem**: TikZ diagrams were disappearing purely because they were wrapped in `\begin{figure}`.
 - **Mechanism**: The "Flattening" logic (intended to inline floating figures) was **Destructive**: `text.replace(/\\begin\{figure\}.*?$/gm, '')`. It deleted the wrapper AND the caption, often corrupting the content inside.
 - **Fix**: Switched to **Non-Destructive Flattening**. Replaced `\begin{figure}` with `<div class="latex-figure-wrapper">`.
-- **Lesson**: **Never Delete Wrappers.** Convert them to semantic HTML (divs), but keep the structure. Deleting wrappers often deletes the context (captions, labels) that gives the content meaning.
+
+## 110. The xAI "Response" Endpoint (v1.9.102)
+- **Problem**: xAI's standard chat completion endpoint (`/chat/completions`) provides generic responses, but for **Agentic Search**, the documentation requires a specific `/responses` endpoint with a different schema.
+- **Incident**: Using `grok-beta` or standard models on the chat endpoint resulted in "404 Not Found" or simple text generation without search.
+- **Fix**: Implemented strict **Non-Streaming REST** calls to `https://api.x.ai/v1/responses`.
+  - **Schema**: `input: [{ role: "user", content: ... }]` (different from `messages`).
+  - **Streaming**: Disabled (`stream: false`) because the streaming chunks for Agentic Search are complex/unstable compared to the reliable JSON final response.
+- **Lesson**: **Read the specific guide for "Agentic" tools.** General "OpenAI Compatibility" usually ends where advanced proprietary features (like autonomous research) begin.
+
+## 111. The "Tracked to Ignored" Git Conflict (v1.9.101)
+- **Problem**: Merging a branch where `local.db` is **tracked** into a branch where it is **ignored** (`.gitignore`) causes a "Modify/Delete" conflict. Git tries to delete it (because it's untracked in target) but also sees modifications from the source.
+- **Risk**: Accepting the merge blindly can delete the user's local database.
+- **Solution - The "Backup & Untrack" Protocol**:
+  1. **Backup**: `mv local.db local.db.bak` (Physical safety).
+  2. **Untrack Source**: `git rm --cached local.db` (Git logic safety).
+  3. **Merge**: Accept the deletion (since we want it ignored).
+  4. **Restore**: `mv local.db.bak local.db`.
+- **Lesson**: **Git is a state machine.** When transitioning file state (Tracked -> Ignored), you must step outside the machine (manual backup) to protect the data, because Git's concept of "Safety" (matching the target commit) is "Data Loss" for the user.

@@ -22,6 +22,8 @@ export class GrokProvider implements AIProvider {
 
         // --- Agentic Search (Web Search) ---
         if (enableWebSearch) {
+            // Reference: https://docs.x.ai/docs/guides/tools/search-tools
+            // Using non-streaming request for reliability as per cURL example
             const response = await fetch("https://api.x.ai/v1/responses", {
                 method: "POST",
                 headers: {
@@ -29,80 +31,36 @@ export class GrokProvider implements AIProvider {
                     "Authorization": `Bearer ${this.config.apiKey}`
                 },
                 body: JSON.stringify({
-                    model: "grok-beta", // Use generic beta or config model if compatible
+                    model: this.config.model,
                     input: [
-                        { role: "system", content: systemPrompt }, // Grok might ignore system here, but safe to include if format allows, else prepend to user
-                        { role: "user", content: prompt }
+                        { role: "user", content: systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt }
                     ],
                     tools: [
                         { type: "web_search" }
                     ],
-                    stream: true // Enable streaming if supported by this endpoint
+                    stream: false
                 })
             });
 
-            if (!response.ok || !response.body) {
-                try {
-                    const errText = await response.text();
-                    console.error("Grok Search Error:", errText);
-                } catch { }
-                throw new Error(`Grok API error: ${response.statusText}`);
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Grok API error: ${response.status} ${response.statusText} - ${errText}`);
             }
 
-            // Streaming Parser for Grok /responses
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let fullText = "";
+            const data = await response.json();
+            // The response structure from docs is the full response object
+            // The content is likely in choices[0].message.content or similar standard OpenAI format
+            // OR strictly per docs print(response.json()) -> we need to inspect the payload.
+            // Based on standard xAI/OpenAI compat, let's try standard access AND generic access.
+            // Docs say: "As mentioned in the overview page... the citations array contains..."
+            // The user provided python output example shows: chunk.content.
 
-            try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    // Parse NDJSON lines common in streaming
-                    const lines = chunk.split('\n').filter(line => line.trim() !== '');
-
-                    for (const line of lines) {
-                        try {
-                            const data = JSON.parse(line);
-                            // Grok streaming /responses structure varies. 
-                            // Often just returns final response or partial diffs.
-                            // Assuming standard delta or full update.
-                            // Fallback to simple accumulation if structure is unclear.
-                            // Checking docs: "The response contains the final answer."
-                            // We might not get proper streaming tokens here. 
-                            // If it's a non-streaming response, we just read the whole body.
-                            // Let's assume non-streaming for safety first as per docs example.
-                        } catch (e) { }
-                    }
-                    // Actually, the docs example was non-streaming. Let's revert to non-streaming fetch for reliability.
-                }
-            } catch (e) {
-                // Ignore stream errors
-            }
-
-            // Re-fetch non-streaming for reliability as verified in docs
-            const responseSync = await fetch("https://api.x.ai/v1/responses", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${this.config.apiKey}`
-                },
-                body: JSON.stringify({
-                    model: "grok-beta",
-                    input: [
-                        { role: "user", content: `${systemPrompt}\n\n${prompt}` }
-                    ],
-                    tools: [
-                        { type: "web_search" }
-                    ]
-                })
-            });
-            if (!responseSync.ok) throw new Error(`Grok Search Failed: ${responseSync.statusText}`);
-            const data = await responseSync.json();
-            const result = data.response || data.output?.[0]?.content?.[0]?.text || "";
-            if (onProgress) onProgress(result); // Instant finish update
+            // Let's assume standard OpenAI-like response or the specific /responses schema
+            // If strictly /responses:
+            // The output is usually in `response` field or standard chat completion structure.
+            // Let's handle generic object.
+            const result = data.response || data.choices?.[0]?.message?.content || "";
+            if (onProgress) onProgress(result);
             return result;
         }
 
@@ -177,7 +135,7 @@ export class GrokProvider implements AIProvider {
                     "Authorization": `Bearer ${this.config.apiKey}`
                 },
                 body: JSON.stringify({
-                    model: "grok-4-fast", // Enforce research model
+                    model: this.config.model, // Enforce configured model
                     input: [
                         { role: "user", content: prompt }
                     ],
