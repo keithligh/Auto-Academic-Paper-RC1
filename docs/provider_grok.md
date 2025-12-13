@@ -41,4 +41,5 @@ When used by the Librarian, Grok does not just autocomplete text. It acts as an 
 
 ## Troubleshooting
 -   **404 Not Found**: Ensure you are using a model that supports the Research endpoint (`grok-4-1-fast`). Older models may fail if "Web Search" is enabled.
+-   **"No JSON object or array found"**: This error occurs when the Agentic Search response (which uses `output_text`) fails to be parsed. This was fixed in v1.9.105. If you see this, ensure your `server/ai/adapters/grok.ts` is up to date (specifically checking for `c.type === 'output_text'`).
 -   **API Key Error**: Verify `XAI_API_KEY` is loaded in `.env`.

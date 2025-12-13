@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Serif (`font-serif`)**: Used strictly for Branding ("Auto Academic Paper"), Major Page Titles, and Academic Content.
   - **Sans-Serif (`font-sans`)**: Used for UI Controls, Metadata, Logs, and Body Text.
 
+## [1.9.105] - 2025-12-13 (Grok Agentic Search Fix)
+### Fixed
+- **"No JSON Object" Error (Grok-4-1-Fast)**:
+  - **Symptom**: Librarian Research failed with "No JSON object or array found" even when `grok-4-1-fast` was selected.
+  - **Root Cause**: The xAI Agentic Search endpoint (`/responses`) returns the final answer in a unique format: `content: [{ type: 'output_text', text: '...' }]`. The previous adapter logic only filtered for `type: 'text'`, silently discarding the actual answer.
+  - **Fix**: Updated `server/ai/adapters/grok.ts` to accept `output_text` content type.
+  - **Impact**: Full Agentic Research capabilities (Web Search + Synthesis) now strictly functional for Grok 4.1.
+
 ### Changed
 - **ConfigPage Redesign**:
   - **Header**: Upgraded to the standard "Sticky Blur" header with Serif Branding, matching `LandingPage` and `ResultPage`.

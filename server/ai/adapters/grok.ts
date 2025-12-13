@@ -59,7 +59,36 @@ export class GrokProvider implements AIProvider {
             // If strictly /responses:
             // The output is usually in `response` field or standard chat completion structure.
             // Let's handle generic object.
-            const result = data.response || data.choices?.[0]?.message?.content || "";
+            // Parse generic access for /responses endpoint
+            // Structure: { output: [ { type: 'tool_use', ... }, { type: 'message', role: 'assistant', content: [ { type: 'text', text: '...' } ] } ] }
+            let result = "";
+
+            if (data.output && Array.isArray(data.output)) {
+                // Find the last message from assistant
+                const lastMessage = data.output.slice().reverse().find((item: any) => item.role === 'assistant' || item.type === 'message');
+                if (lastMessage) {
+                    if (Array.isArray(lastMessage.content)) {
+                        result = lastMessage.content
+                            .filter((c: any) => c.type === 'text' || c.type === 'output_text')
+                            .map((c: any) => c.text)
+                            .join("\n");
+                    } else if (typeof lastMessage.content === 'string') {
+                        result = lastMessage.content;
+                    }
+                }
+            }
+
+            // Fallback to standard paths if strictly text/chat
+            if (!result) {
+                result = data.response || data.choices?.[0]?.message?.content || "";
+            }
+
+            // Fallback for debugging if still empty (so we don't crash on empty string)
+            if (!result && data) {
+                console.warn("[Grok] Warning: Could not extract text from response. returning JSON dump.");
+                result = JSON.stringify(data);
+            }
+
             if (onProgress) onProgress(result);
             return result;
         }
@@ -151,8 +180,26 @@ export class GrokProvider implements AIProvider {
 
             const data = await response.json();
             // Parse the specific Grok response structure
-            // Based on research, we look for the output text in the response object
-            const output = data.response || data.output?.[0]?.content?.[0]?.text || JSON.stringify(data);
+            // Parse the specific Grok response structure
+            let output = "";
+            if (data.output && Array.isArray(data.output)) {
+                const lastMessage = data.output.slice().reverse().find((item: any) => item.role === 'assistant' || item.type === 'message');
+                if (lastMessage) {
+                    if (Array.isArray(lastMessage.content)) {
+                        output = lastMessage.content
+                            .filter((c: any) => c.type === 'text' || c.type === 'output_text')
+                            .map((c: any) => c.text)
+                            .join("\n");
+                    } else if (typeof lastMessage.content === 'string') {
+                        output = lastMessage.content;
+                    }
+                }
+            }
+
+            // Fallback
+            if (!output) {
+                output = data.response || data.output?.[0]?.content?.[0]?.text || JSON.stringify(data);
+            }
             return output;
 
         } catch (e) {
