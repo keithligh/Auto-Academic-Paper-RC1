@@ -240,15 +240,18 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 > **The Fix**: Restored the critical `extraOpts += \`, x=\${xUnit}cm, y=\${yUnit}cm\`` line.
 > **Lesson**: Exercise extreme care when editing complex functions. Verify before committing.
 
-#### 13. Compact Layout Tuning (v1.6.40)
-> **Problem**: Diagrams with moderate vertical span (5-6 units) were being stretched excessively due to the 12cm height target.
-> **The Fix**: Reduced vertical scaling parameters:
-> - **Target Height**: 12cm → 8cm.
-> - **Y-Clamp Range**: [1.3, 2.2] → [1.0, 1.8].
-> **Reasoning**: A diagram with 5.6 vertical span was getting `y = 12/5.6 = 2.14cm`. Now it gets `y = 8/5.6 = 1.43cm`.
-> **Result**: ~30% reduction in vertical empty space while maintaining readability.
+#### 10. The Continuous Adaptive Scaling (v1.9.83)
+> **Problem**: The "Step Function" clamp (v1.6.25) created an artificial "Cliff".
+> - Span 6 -> `scale=1.3` (Width 7.8cm). Too Small.
+> - Span 8 -> `scale=1.8` (Width 14.4cm). Huge.
+> **The Fix**: We replaced the cliff with a **Continuous Function** targeting a "Sweet Spot" width of **12cm** (75% A4 Width).
+> **Formula**: `targetScale = 12 / Span`.
+> **Clamping**: Bounded between `[1.3, 2.5]` to ensure small diagrams get at least 30% boost, and we don't exceed the max safe scale (2.5x).
+> **Result**:
+> - Span 6 -> `scale=2.0` (Width 12cm). Perfect.
+> - Span 10 -> `scale=1.2` (Width 12cm). Consistent.
 
-#### 6.2 FLAT (Timeline) Layout
+#### 11. Title Gap Restoration (v1.6.38)
 - **Detection**: `aspectRatio >= 3.0` (Inclusive threshold v1.9.19).
 - **Logic**:
   - **Standard**: `xMultiplier = 1.6`, `yMultiplier` adaptive (1.5x - 3.0x). with many nodes had overlapping text labels even after x/y multiplier expansion.

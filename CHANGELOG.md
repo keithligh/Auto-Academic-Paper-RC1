@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.85] - 2025-12-13 (Tiered Librarian Limits)
+### Added
+- **Tiered Search Query Limits**:
+  - **Minimal Enhancement**: Capped at **5 queries** (Speed/Cost efficiency).
+  - **Standard Enhancement**: Capped at **10 queries** (Balanced research).
+  - **Advanced Enhancement**: Capped at **20 queries** (Deep dive, strictly enforced).
+  - **Why**: Prevents "analysis paralysis" and ensures resource usage scales proportionally with user intent. Previously, "Advanced" was effectively unlimited, leading to massive context usage without proportional quality gain.
+
+## [1.9.84] - 2025-12-13 (Unified Status Logging)
+### Changed
+- **SSOT Log Format**: Unified all backend service logs to a single, consistent format:
+  - **Format**: `[Phase] Content... (N chars)`
+  - **Optimization**: Truncated dynamic section names to 60 characters to fit standard terminal rows while preserving key information.
+  - **Scope**: Applied to Strategist, Thinker, Reviewer, Rewriter, and Editor phases.
+  - **Benefit**: "One Row Per Update" - Eliminates terminal wrapping and scroll fatigue while maintaining visibility into the "heartbeat" of the generation process.
+
+## [1.9.83] - 2025-12-13 (TikZ Continuous Scaling)
+### Fixed
+- **TikZ Scale Clamping**: Replaced the "Step Function" clamp (which created a sizing "Cliff" between span 6 and 8) with a **Continuous Adaptive Scaling** logic. Now targets a diagram width of ~12cm (75% A4), ensuring predictable and consistent sizing for diagrams of all intrinsic widths.
+
 ## [1.9.82] - 2025-12-13 (TikZ Local Clip)
 ### Fixed
 - **TikZ Auto-Clip Refined**: The previous "Global Clip" (v1.9.81) occasionally cut off axis labels that extended beyond the grid. The new **Local Scope Clip** surgically wraps only the `\draw ... plot ...` command in a clipping scope. This trims asymptotic curves to the axis bounding box while guaranteeing that labels and arrows remain fully visible.

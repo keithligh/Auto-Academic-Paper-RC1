@@ -674,9 +674,20 @@
     1. **Manual Parsers must be Recursion-Aware.** If you write a `while` loop to parse a tree structure, you effectively need a stack (or a depth counter). "Flat" scanning always fails on nested structures.
     2. **Mathematical Plot Safety (v1.9.80)**: Layout algorithms (like "Fill Width") often destroy Mathematical Truth. Applying `x=1.8` non-proportional scaling to a plot `y=1/x` turned circles into ellipses and distorted functions. **Mathematical plots require Aspect Ratio Locking (Square Scaling)**.
     3. **The Global Clip Trap (v1.9.82)**: When fixing unbounded plots (asymptotes), a "Global Clip" (`\clip (min,min) rectangle (max,max)`) is dangerous because it cuts off explicit labels (like "Axis Title") that float outside the grid. **Clipping must be Local (Scoped)** to the specific element causing the overflow.
+    4. **The Digital Cliff (v1.9.83)**: Using step functions for UI scaling (e.g., `if width > 7 then scale=1.8 else scale=1.3`) creates jarring user experiences. A small change in input (6.9 -> 7.1) causes a massive jump in output. **Use Continuous Math** (e.g., `scale = Target / Width`) to ensure smooth, predictable behavior.
 
 ## 97. The "Magic Number" Shadow Bug (v1.9.79)
 -   **Symptom**: An extra `}` appeared after algorithms, and sometimes content following a list was swallowed.
 -   **Root Cause**: In the manual `processLists` parser, the line `i += 15;` (handling `\end{enumerate}`) was accidentally duplicated during a copy-paste refactor.
 -   **The Failure**: The first `i += 15` correctly skipped the `\end{enumerate}` tag. The *second* `i += 15` blindly skipped the *next* 15 characters of the document (often `\end{algorithm}` or valuable text), leaving behind corrupted artifacts like orphaned braces.
 -   **Lesson**: **Avoid "Magic Number" skips in parsers.** Instead of `i += 15`, use `i += tag.length` or functions like `consume(tag)`. If you must use offsets, unit test the *exact* transition points. Visual code inspection of manual parsers is prone to missing "double lines".
+
+## 101. The Console Noise Floor (v1.9.84)
+- **Problem**: Verbose log messages (`[Drafting] Section 3: The geopolitical implications of... (15805 chars)...`) were wrapping to multiple lines, destroying the visual "heartbeat" of the terminal.
+- **Insight**: Users perceive system health via the *rhythm* of logs. Erratic wrapping looks like panic; steady single lines look like progress.
+- **Solution**: **Design for the Terminal Row**. Hard-truncate dynamic content (titles) to ~60 chars and push metrics (character counts) to the end.
+- **The Format**: `[Phase] Content... (N chars)`. This minimizes visual noise while maximizing information density per row.
+
+## 102. The Unlimited Resource Trap (v1.9.85)
+- **Problem**: "Advanced" mode was treated as "Unlimited Queries", leading the Strategist to generate 50+ queries. This didn't improve quality; it just diluted the context window with marginal results.
+- **Lesson**: **Luxury needs Boundaries.** Even "Advanced" users benefit from curation. A strict cap of 20 high-quality queries yields better synthesis than 50 mediocre ones. "More" is not essentially "Better" in RAG systems; "Relevant" is better.

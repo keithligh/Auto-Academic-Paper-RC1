@@ -300,7 +300,15 @@ export function processTikz(latex: string): TikzResult {
             const optimalUnit = Math.min(2.5, 25 / (horizontalSpan || 1));
 
             // FIX (v1.6.25): Adaptive Clamp
-            const dynamicClamp = horizontalSpan > 7 ? 1.8 : 1.3;
+            // OLD: const dynamicClamp = horizontalSpan > 7 ? 1.8 : 1.3;
+            // FIX (v1.9.83): Continuous Adaptive Scaling (The "Analog Slope")
+            // The step function created a "Cliff": Span 6 -> 1.3 (7.8cm), Span 8 -> 1.8 (14.4cm).
+            // We now target a "Sweet Spot" visual width (e.g., 12cm) to ensure consistent readability.
+            // Formula: scale = TargetWidth / Span.
+            // Clamp: [1.3, 2.2] to ensure small diagrams get boosted but we don't explode.
+            const targetWidth = 12; // cm
+            const continuousScale = horizontalSpan > 0 ? (targetWidth / horizontalSpan) : 1.8;
+            const dynamicClamp = Math.min(2.5, Math.max(1.3, continuousScale));
 
             // FIX (v1.6.31/v1.6.38): Adaptive Y-Axis Scaling (The "Goldilocks" Vertical)
             // Problem: "Universal Boost" (y=2.2) exploded tall diagrams. "Symmetry" squashed short ones.

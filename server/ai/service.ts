@@ -240,11 +240,12 @@ export class AIService {
         await this.log(`[Phase 1/6] The Strategist: Designing execution plan...`, { phase: "Phase 1: Strategy", step: "Designing Structure", progress: 8 });
 
         // Limit Logic (Optimization Sprint)
-        const isAdvanced = ctx.enhancementLevel === 'advanced';
-        const queryLimit = isAdvanced ? 50 : 15;
-        const queryInstruction = isAdvanced
-            ? "Generate as many search queries as needed to exhaustively cover the topic."
-            : `limit to a MAXIMUM of ${queryLimit} high-impact search queries.`;
+        // v1.9.5: Strict user-defined limits (5/10/20)
+        let queryLimit = 10; // Default (Standard)
+        if (ctx.enhancementLevel === 'advanced') queryLimit = 20;
+        if (ctx.enhancementLevel === 'minimal') queryLimit = 5;
+
+        const queryInstruction = `limit to a MAXIMUM of ${queryLimit} high-impact search queries.`;
 
         const systemPrompt = `You are a World-Class Academic Strategist.
 YOUR GOAL: Design a comprehensive execution plan for a top-tier ${ctx.paperType}.
@@ -327,9 +328,9 @@ Make the plan ROBUST. The "Thinker" (Writer) will follow this blindly.`;
             ctx.plan = result;
 
             // Enforce limit strictly if AI hallucinates more
-            if (!isAdvanced && ctx.plan && ctx.plan.search_queries.length > queryLimit) {
+            if (ctx.plan && ctx.plan.search_queries.length > queryLimit) {
                 ctx.plan.search_queries = ctx.plan.search_queries.slice(0, queryLimit);
-                await this.log(`[Strategist] Note: Truncated search queries to ${queryLimit} (Standard Limit).`);
+                await this.log(`[Strategist] Note: Truncated search queries to ${queryLimit}.`);
             }
 
             await this.log(`[Strategist] Plan designed: ${ctx.plan?.sections.length} sections, ${ctx.plan?.search_queries.length} queries.`, { phase: "Phase 1: Strategy", step: "Plan Complete", progress: 12 });
@@ -475,8 +476,9 @@ NO CITATIONS. NO MARKDOWN HEADERS.`;
         for (let i = 0; i < totalSections; i++) {
             const sectionPlan = ctx.plan.sections[i];
             const progress = 35 + Math.floor((i / totalSections) * 15); // 35-50%
+            const shortName = sectionPlan.name.length > 60 ? sectionPlan.name.substring(0, 57) + "..." : sectionPlan.name;
 
-            await this.log(`[Thinker] Drafting Section ${i + 1}/${totalSections}: "${sectionPlan.name}"...`, { phase: "Phase 3: Drafting", step: `Section: ${sectionPlan.name}`, progress: progress, details: `Target: ${sectionPlan.approximate_words} words` });
+            await this.log(`[Thinker] Drafting Section ${i + 1}/${totalSections}: "${shortName}"...`, { phase: "Phase 3: Drafting", step: `Section: ${shortName}`, progress: progress, details: `Target: ${sectionPlan.approximate_words} words` });
 
             // Context Construction
             const evidenceContext = ctx.references.length > 0
@@ -567,7 +569,8 @@ Return JSON Object.`;
                             const now = Date.now();
                             if (now - lastLogTime > 2000) { // Log every 2s, more responsive
                                 // SHORT STATUS as requested by User - STANDARDIZED TO CHARS
-                                await this.log(`[Drafting] ${sectionPlan.name} (${text.length} chars)...`, {
+                                const shortName = sectionPlan.name.length > 60 ? sectionPlan.name.substring(0, 57) + "..." : sectionPlan.name;
+                                await this.log(`[Drafting] ${shortName} (${text.length} chars)...`, {
                                     phase: "Phase 3: Drafting",
                                     step: `Drafting: ${sectionPlan.name}`,
                                     progress: progress,
@@ -1085,7 +1088,8 @@ ${referencesText} `;
         // Process Sections (Chunked)
         for (let i = 0; i < finalDraft.sections.length; i++) {
             const section = finalDraft.sections[i];
-            await this.log(`[Editor] Processing Section ${i + 1} /${finalDraft.sections.length}: "${section.name}"...`, {
+            const shortName = section.name.length > 60 ? section.name.substring(0, 57) + "..." : section.name;
+            await this.log(`[Editor] Processing Section ${i + 1} /${finalDraft.sections.length}: "${shortName}"...`, {
                 phase: "Phase 6: Editing", step: `Editing Section ${i + 1}`, progress: 80 + Math.floor((i / finalDraft.sections.length) * 10)
             });
 
@@ -1127,7 +1131,8 @@ TASK:
                 const result = await this.writer.completion(userPrompt, systemPrompt, async (text) => {
                     const now = Date.now();
                     if (now - lastLogTime > 2000) {
-                        await this.log(`[Editing] ${section.name} (${text.length} chars)...`, {
+                        const shortName = section.name.length > 60 ? section.name.substring(0, 57) + "..." : section.name;
+                        await this.log(`[Editing] ${shortName} (${text.length} chars)...`, {
                             phase: "Phase 6: Editing",
                             step: `Editing Section ${i + 1}`,
                             progress: 80 + Math.floor((i / finalDraft.sections.length) * 10), // Added ! for finalDraft

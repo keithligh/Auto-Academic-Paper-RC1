@@ -679,10 +679,12 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 
 | Intent      | Goal              | Action                                                               |
 | ----------- | ----------------- | -------------------------------------------------------------------- |
+| Intent      | Goal              | Action                                                               |
+| ----------- | ----------------- | -------------------------------------------------------------------- |
 | **WIDE**    | **Fit to A4**     | Dynamic `scale=(14/span × 0.9)`, `transform shape`                   |
 | **FLAT**    | **Balance Ratio** | Multiplier: `y × (ratio/2)`, `x × 1.5`, strip old x/y                |
 | **COMPACT** | **Fit to A4**     | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm`    |
-| **LARGE**   | **Readability**   | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
+| **LARGE**   | **Readability**   | **Continuous Scale**: `target=12/span` (12cm width). Clamped [1.3, 2.5] |
 | **MEDIUM**  | Balance           | **Smart Scale**: `1.0` (Fits A4) or `0.8/0.9` + Dist (2.5cm)         |
 
 - `node distance` (in cm) controls `below of=`, `right of=` positioning → independent of coordinate scaling
