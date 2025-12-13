@@ -20,7 +20,7 @@ export default function ManualPage() {
             </header>
 
             {/* Main Content - LaTeX Article Style */}
-            <main className="container mx-auto px-6 py-12 max-w-4xl text-lg">
+            <main className="container mx-auto px-6 py-12 max-w-4xl text-xl">
                 {/* Title Page Style */}
                 <div className="text-center mb-16 pb-8 border-b border-slate-200">
                     <h1 className="text-4xl font-serif mb-4 text-slate-900">

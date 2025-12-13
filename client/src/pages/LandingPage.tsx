@@ -279,13 +279,13 @@ export default function LandingPage() {
                             <FolderOpen className="w-7 h-7 text-gray-500" />
                         </Button>
                         <Button
-                            variant="ghost"
-                            size="icon"
+                            variant="outline"
+                            size="lg"
                             onClick={() => setLocation("/manual")}
-                            title="User Manual"
-                            className="h-12 w-12"
+                            className="gap-2 h-12 px-6"
                         >
-                            <BookOpen className="w-7 h-7 text-gray-500" />
+                            <BookOpen className="w-6 h-6" />
+                            <span className="text-lg font-medium">User Manual</span>
                         </Button>
                         <Button
                             variant="outline"
