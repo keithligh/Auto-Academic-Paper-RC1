@@ -6,6 +6,26 @@ Rendering TikZ in the browser is notoriously difficult because TikZ is a Turing-
 
 ---
 
+## Phase -1: The Prompt-Level Defense (v1.9.125 "Fix at Source")
+
+> **Philosophy**: Before TikZ code even reaches the browser, we harden the AI **System Prompt** to prevent invalid or browser-incompatible code from being generated.
+
+This aligns with the "Correctness" pivot: We do not try to heal broken TikZ in the renderer. We demand valid output from the generator.
+
+**Rules Enforced in System Prompt (`server/ai/service.ts`):**
+
+| Rule | Reason |
+| :--- | :--- |
+| Use `right=of X`, NOT `right of=X` | Deprecated syntax causes overlap. |
+| NO `\begin{axis}` or `\addplot` | pgfplots is too heavy for TikZJax. |
+| Only whitelisted libraries | TikZJax doesn't support all TikZ libraries. |
+| Use `node distance=2.5cm` default | Prevents cramped/exploded layouts. |
+| Wrap text with `text width=2.5cm` | Prevents node overflow. |
+
+**If the AI violates these rules, the TikZ will break.** This is intentional. It exposes broken generation for prompt tuning, rather than silently hiding it with resilient parsing.
+
+---
+
 ## 1. The Core Problem
 Client-side text parsers (like our Custom Parser or the now-defunct `latex.js`) **cannot** render TikZ. They lack the logic engine required to calculate coordinates, paths, and nodes.
 

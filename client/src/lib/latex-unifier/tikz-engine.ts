@@ -196,7 +196,9 @@ export function processTikz(latex: string): TikzResult {
         const arrowMatches = safeTikz.match(/->/g) || [];
 
         // HEURISTIC: Extract ACTUAL node label text (not TikZ options)
-        const nodeLabelMatches = safeTikz.match(/\\node[^;]*\{([^}]*)\}/g) || [];
+        // FIX (v1.9.108): Improved Regex to capture edge 'nodes' and nested braces
+        // Matches \node or ' node', allows attributes until brace, handles 1 level of nesting.
+        const nodeLabelMatches = safeTikz.match(/(?:\\node|\snode)[^;{]*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g) || [];
         let totalLabelText = 0;
         nodeLabelMatches.forEach(match => {
             const labelMatch = match.match(/\{([^}]*)\}$/);
@@ -211,7 +213,7 @@ export function processTikz(latex: string): TikzResult {
         // Legacy metrics for compatibility
         const rawText = safeTikz.replace(/\\[a-zA-Z]+/g, '').replace(/[{}()\[\]]/g, '');
         const textDensityScore = nodeMatches.length > 0 ? (rawText.length / nodeMatches.length) : 0;
-        const isTextHeavy = avgLabelTextPerNode > 30; // Use accurate label-based metric
+        const isTextHeavy = avgLabelTextPerNode > 20; // v1.9.107: Lowered from 30 to catch verbose labels
         const baseComplexity = nodeMatches.length + drawMatches.length + (arrowMatches.length / 2);
 
         // NEW (v1.5.6): Detect WIDE and FLAT diagrams using absolute positioning
@@ -302,7 +304,12 @@ export function processTikz(latex: string): TikzResult {
             console.log(`[IntentEngine] Span: (${horizontalSpan}x${verticalSpan}), Ratio: ${aspectRatio.toFixed(2)}, isFlat: ${isFlat}, Intent: ${intent}`);
         } else if (distMatch) {
             // Explicit intent wins (Relative Layouts)
-            if (nodeDist < 2.0) intent = 'COMPACT';
+            // FIX (v1.9.107): Text-Heavy Diagrams Must Breathe
+            // If explicit distance is provided but "text heavy" (avg len > 30),
+            // and the distance is suspiciously small (< 3.0), implicit upgrade to LARGE
+            // to activate the "Bifurcated Safety Net" override.
+            if (isTextHeavy && nodeDist < 3.0) intent = 'LARGE';
+            else if (nodeDist < 2.0) intent = 'COMPACT';
             else if (nodeDist >= 2.5) intent = 'LARGE';
 
         } else {

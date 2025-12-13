@@ -5,6 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.113] - 2025-12-13 (Standardized Table Styling)
+### Fixed
+### Fixed
+- **Table "Grid" Lines (Extra Borders)**:
+  - **Symptom**: Tables appeared with borders between every row ("black lines everywhere"), violating academic style.
+  - **Root Cause**: The AI generated `\hline` after every row, and the table engine faithfully rendered them as borders.
+  - **Fix (v1.9.116)**: Updated `table-engine.ts` to **IGNORE** `\hline` for border rendering. Now, only Semantic Rules (`\midrule`, `\bottomrule`) trigger a CSS border.
+  - **Refinement (v1.9.118 - Smart Borders)**: Users reported "No separators" when AI used `\hline` for headers. Added "Smart Logic": `\hline` is now ignored *unless* the row is a Header (contains `\textbf`) or the Last Row.
+  - **Final Adjust (v1.9.120 - Restored Grid)**: User clarified they *wanted* separators (Grid) but hated "short lines from nowhere" (`\cline`). Updated logic to **ALLOW** `\hline` everywhere (restoring Grid) but **IGNORE** `\cline` (killing short lines).
+  - **Refinement (v1.9.118 - Smart Borders)**: Users reported "No separators" when AI used `\hline` for headers. Added "Smart Logic": `\hline` is now ignored *unless* the row is a Header (contains `\textbf`) or the Last Row. This restores structure without grid clutter.
+  - **Refinement (v1.9.118 - Smart Borders)**: Users reported "No separators" when AI used `\hline` for headers. Added "Smart Logic": `\hline` is now ignored *unless* the row is a Header (contains `\textbf`) or the Last Row.
+  - **Correction (v1.9.121 - Parsing Correctness)**: User demanded explanation for "Short lines from nowhere". Investigation revealed they were **Ghost Rows** (1-col wide) caused by the "Stray Backslash" parsing bug. Since v1.9.119 fixed the Ghost Rows, the short lines are gone. `\cline` is currently ignored intentionally as the engine does not yet support partial border rendering.
+- **Grid Restoration (v1.9.122)**:
+  - **Symptom**: User reported "No Grid" (Missing lines) even after restoring `\hline`.
+  - **Root Cause**: The v1.9.119 "Stable" implicit splitter regex `([^\\])` incorrectly matched the space in `Text \\ \hline`, creating `Text \\ \\ \hline`. This Double Split created an empty "Ghost Row" which swallowed the border logic.
+  - **Fix**: Replaced regex with a **Capture Group** logic `(\\)?` that acts correctly: if `\\` is present, touch nothing; if missing, add `\\`. This definitively restores the grid for valid LaTeX.
+- **AI Malformed Tables (v1.9.123)**:
+  - **Symptom**: Tables appeared "smashed" with content overlapping or missing row breaks.
+  - **Root Cause**: The System Prompt instructed "NO horizontal lines", which inadvertently encouraged the AI to be lazy with row terminators (`\\`), resulting in invalid LaTeX.
+  - **Fix**: Updated System Prompt to remove styling bias and strictly enforce **VALIDITY**: "Every row MUST end with `\\`. Use `&` for columns. Escape special characters."
+- **Strict Mode Rendering (v1.9.124)**:
+  - **Philosophy**: User demanded removal of all "best effort" fixes that accommodated invalid LaTeX.
+  - **Change**: Disabled the **Implicit Row Splitter** (which guessed missing `\\`) and the **Cell Sanitizer** (which hid parsing artifacts).
+  - **Result**: The engine now strictly adheres to LaTeX rules. If the AI generates invalid tables (missing `\\`), they will break. This forces the solution to rely on valid Generation (v1.9.123) rather than patching Rendering.
+- **Partial Border Support (v1.9.125)**:
+  - **Feature**: Implemented full support for `\cline{start-end}`.
+  - **Mechanism**: The parser now extracts column ranges from `\cline` commands and applies `border-bottom` styles specifically to the overlapping cells (handling spans correctly).
+  - **Correctness**: Previously ignored due to "laziness", it is now supported because it is Valid LaTeX.
+
+## [1.9.112] - 2025-12-13 (Text Color Support)
+  - **Symptom**: Table headers were generated in "Navy" blue instead of standard bold black, confusing users.
+  - **Root Cause**: An explicit "Academic Color Palette" instruction in the System Prompt encouraged using Navy/Maroon.
+  - **Fix**: Removed the color palette instruction and replaced it with a strict rule: "Use `\textbf{}` for emphasis. AVOID colored text. Black text only."
+
+## [1.9.112] - 2025-12-13 (Text Color Support)
+### Fixed
+- **Table Header Colors**:
+  - **Symptom**: Table headers using `\textcolor{Navy}{...}` appeared as raw text commands in the preview.
+  - **Fix**: Added `\textcolor{color}{text}` parser to `processor.ts` with a built-in map for common LaTeX colors (e.g., Navy, OliveGreen, Maroon).
+  - **Validation**: Verified against standard XColor/Dvipsnames usage.
+
+## [1.9.111] - 2025-12-13 (Table Generation Strategy Update)
+### Fixed
+- **Dense Table Legibility**:
+  - **Symptom**: Tables with heavy text were generated with narrow fixed-width columns (`p{2.8cm}`), causing extreme wrapping.
+  - **Fix**: Updated System Prompt (Phase 3) to mandate `tabularx` with `X` columns for dense text.
+  - **Support**: Updated `table-engine.ts` to recognize `X` columns and render them as auto-width.
+  - **Philosophy**: Fix the *generation* (root cause) rather than just patching the rendering.
+
+## [1.9.110] - 2025-12-13 (Table Layout Relaxation)
+### Fixed
+- **Excessive Table Wrapping**:
+  - **Symptom**: Tables with narrow `p{...}` columns wrapped text aggressively, even when screen space was available.
+  - **Fix**: Modified `table-engine.ts` to translate `p{width}` to CSS `min-width` instead of strict `width`.
+  - **Result**: Browser can now expand columns to fit content (auto-layout) while respecting the LaTeX width as a minimum floor.
+
+## [1.9.109] - 2025-12-13 (Table Rendering Robustness)
+### Fixed
+- **Table Overflow & Clipping**:
+  - **Symptom**: Tables with fixed widths (e.g., `p{3.2cm}`) that exceeded the container width were being clipped on the left side due to `flex: center` alignment.
+  - **Fix**: Updated `latex-article.css` to use `display: block` with `margin: 0 auto` for centering, and removed `max-width: 100%` constraints.
+  - **Result**: Tables now scroll horizontally (`overflow-x: auto`) without data loss when they exceed the page width.
+
+## [1.9.108] - 2025-12-13 (Proof Environment Support)
+### Added
+- **Proof Environment (`\begin{proof}`)**:
+  - **Feature**: Added missing support for the `amsthm` Proof environment.
+  - **Visuals**: Renders as a semantic block: **"Proof."** (Bold) + Body + **QED Symbol** ($\square$) floated to the right.
+  - **Root Cause**: The environment loop handled `theorem`/`lemma` but `proof` was special (requires QED symbol) and was missing from the parser.
+
+## [1.9.107] - 2025-12-13 (Layout Command Cleanup)
+### Fixed
+- **Exposed Layout Commands (`\renewcommand`, `\setlength`)**:
+  - **Symptom**: Commands like `\renewcommand{\arraystretch}{1.15}` appeared as raw text in the preview.
+  - **Fix**: Added regex strippers in `processor.ts` to silently remove `\renewcommand{\arraystretch}{...}` and `\setlength{...}{...}`.
+  - **Reasoning**: These are visual layout instructions for PDF, not content. Stripping them prevents visual pollution in the HTML preview.
+
+## [1.9.106] - 2025-12-13 (TikZ Prompt Engineering Fix)
+### Fixed
+- **TikZ Prompt Under-Specification**:
+  - **Problem**: The AI was generating "bad TikZ" (deprecated syntax, massive text that overlaps, PGFPlots that crash) because the System Prompt only said "(Keep it simple)".
+  - **Root Cause**: Investigated `server/ai/service.ts` and found the prompt instruction was effectively nonexistent (7 words).
+  - **Fix**: Injected a **"TIKZ DIAGRAM RULES"** block into Phase 3 (Drafting) System Prompt:
+    1. **Syntax**: Enforce `\usetikzlibrary{positioning}` and `right=of` (edge-to-edge).
+    2. **Wrapping**: Force `text width=2.5cm` for long labels.
+    3. **Libraries**: Whitelist standard libraries only.
+    4. **Safety**: Explicitly ban `pgfplots` and `\addplot`.
+  - **Philosophy**: Fix the error at the source (Generation) rather than the sink (Rendering).
+
 ## [1.9.104] - 2025-12-13 (UI Standardization: "Academic Art")
 ### Added
 - **UI Design Master**: Created `UI_DESIGN_MASTER.md` as the SSOT for the "Hybrid Typography" system.

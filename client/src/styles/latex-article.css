@@ -295,18 +295,25 @@
 .latex-preview .table-wrapper {
     width: 100%;
     margin: 1.5em 0;
-    display: flex;
-    justify-content: center;
+    /* FIX (v1.9.109): Use block + text-align to center, NOT flex */
+    /* Flex + Center + Overflow causes the left side to be clipped off-screen */
+    display: block;
     overflow-x: auto;
+    text-align: center;
+    /* Center inline-table if smaller than container */
 }
 
 /* Standard Table */
 .latex-preview table {
     border-collapse: collapse;
-    width: 100%;
-    /* Force full width to reduce arbitrary wrapping */
-    max-width: 100%;
+    /* FIX (v1.9.109): Allow table to exceed container width for scrolling */
+    width: auto;
+    min-width: 100%;
+    /* Expand to fill if smaller */
+    max-width: none;
+    /* remove 100% constraint */
     margin: 0 auto;
+    /* Center within wrapper */
     font-size: 10pt;
     /* Tables often slightly smaller */
     border-top: 2px solid #000;
@@ -319,8 +326,13 @@
 .latex-preview td {
     padding: 0.5em 1em;
     text-align: left;
+    /* FIX (v1.9.114): Remove global grey border to fix "extra grey lines" */
+    border-bottom: none;
+}
+
+/* Specific border class for \hline / \midrule */
+.latex-preview tr.with-border-bottom td {
     border-bottom: 1px solid #ccc;
-    /* Midrule style (light) */
 }
 
 /* FIX (v1.9.48): Force left alignment for all elements inside tables (especially lists) */

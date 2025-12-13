@@ -49,6 +49,15 @@
 -   **Atomic Writes**: A file is a coherent unit. Do not corrupt it with partial patches.
 -   **Proper Architecture**: Logic belongs in the Brain (Server), not the View (Client).
 
+## 7. Correctness Over Preference (The "Strict Mode" Pivot)
+-   **The Sin**: I tried to "guess" what the user wanted (e.g., "No Grid") and twisted the code to hide bugs ("Ghost Rows", "Missing \\\\").
+-   **The Failure**: My "smart" regexes caused instability (`\ \hline` bug), and my "healers" hid the fact that the AI was generating invalid LaTeX.
+-   **The Correction**: **Strict Mode**.
+    -   **No Healing**: Deleted `healer.ts`. If the AI outputs `\n` literals, let it break.
+    -   **No Guessing**: Deleted "Implicit Row Splitter". If the AI misses `\\`, let the table break.
+    -   **Fix the Source**: Instead of patching the renderer, I fixed the **System Prompt** to enforce invalid LaTeX.
+-   **Rule**: **A broken output from valid code is better than a "fixed" output from broken code.** The former exposes the bug; the latter hides it forever.
+
 ## 7. State Management & Data Flow
 -   **The "Where Is My Data?" Bug**: Converting `ref.id` to the wrong field caused jobs to have blank enhancements.
     -   **Lesson**: When mapping object properties, **always verify the schema**. Map `serverField` -> `clientField` explicitly in a manifest, not mentally.
@@ -762,4 +771,11 @@
 - **Problem**: Agentic Search (Grok) failed to parse JSON answers.
 - **Root Cause**: I assumed the API response schema was consistent with standard chat. It wasn't. For "Agentic" tools, xAI uses a distinct `output_text` content type, whereas non-agentic responses use `text`.
 - **Diagnosis**: Standard debugging (checking string validity) failed because the string *was empty*—the extraction logic had filtered out the payload.
-- **Lesson**: **API Schemas are Fluid.** Especially with proprietary "Agentic" modes, standard OpenAI types (`text`) may be replaced by specialized types (`output_text`, `tool_use`). Always `console.log` the *raw structure* when integration fails, rather than assuming standard fields exist.
+-   **Lesson**: **API Schemas are Fluid.** Especially with proprietary "Agentic" modes, standard OpenAI types (`text`) may be replaced by specialized types (`output_text`, `tool_use`). Always `console.log` the *raw structure* when integration fails, rather than assuming standard fields exist.
+
+## 115. The "Over-Styling" Trap (v1.9.113)
+- **Problem**: Table headers appeared in "Navy Blue", violating standard academic conventions (Black & Bold).
+- **History**: Lesson 105 ("The Color of Rigor") introduced a "Prestige Palette" (Navy, Maroon) to replace amateurish primary colors in *Diagrams*.
+- **The Regression**: I over-generalized this rule and applied the "Prestige" requirement to *Text Tables*, causing the AI to use `\textcolor{Navy}` for headers.
+- **Resolution**: Removed the color requirement for tables and enforced `\textbf` (Bold Black) as the standard.
+- **Lesson**: **Context is King.** A rule that makes Diagrams look professional (Color) makes Tables look amateurish. Do not apply "Styling Rules" globally; scope them to the component type.

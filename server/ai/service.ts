@@ -524,6 +524,21 @@ MANDATORY TOOLKIT (Use at least 1-2 per section if possible):
 - **Code Listing**: \begin{algorithm} ... \end{algorithm}
 - **Algorithm**: Pseudocode logic.
 
+TIKZ DIAGRAM RULES (CRITICAL):
+1. SYNTAX: Use \\usetikzlibrary{positioning}. Use 'right=of X' (edge-to-edge), NEVER 'right of=X' (deprecated).
+2. WRAPPING: If node text > 5 words, force wrapping: 'text width=2.5cm, align=center'.
+3. NO PLOTS: Pure TikZ only. No \\begin{axis}, no \\addplot.
+4. LIBRARIES: Only use: arrows, shapes, calc, positioning, decorations.pathreplacing.
+5. STYLE: Start with \\begin{tikzpicture}[node distance=2.5cm, every node/.style={font=\\small}]
+
+TABLE RULES (CRITICAL):
+1. DENSE TEXT: If table contains sentences, use \\begin{tabularx}{\\textwidth}{...} with 'X' columns (e.g. {l X X}).
+2. NEVER use fixed 'p{...}' columns < 4cm for text. Use 'X' instead to fill page width.
+3. STRUCTURE: Use \\toprule, \\midrule, \\bottomrule.
+4. STYLING: Use \\textbf{...} for headers (Row 1).
+5. VALIDITY: Every row MUST end with \\\\ (double backslash). Use & to separate columns matches definition.
+6. CONTENT: Escape special LaTeX characters (%, $, _, {, }, &) in text coverage.
+
 CONSTRAINT: ${enhancementInstruction}
 
 CRITICAL RULES:
@@ -533,7 +548,8 @@ CRITICAL RULES:
 4. AGGRESSIVELY ENHANCE. If the source text is simple, ELEVATE IT using these tools.
 5. NO CITATION MARKERS like (ref_X).
 6. PURE LATEX ONLY. No Markdown (# Headers, **bold**).
-7. ACADEMIC COLOR PALETTE. Use color sparingly. Prefer explicit 'Navy', 'Maroon', 'ForestGreen' over primary colors. AVOID 'Yellow' (low contrast).
+6. PURE LATEX ONLY. No Markdown (# Headers, **bold**).
+7. STYLING STANDARD. Use \\textbf{} for emphasis. AVOID colored text (e.g. \\textcolor). Keep it classic Academic Black & White.
 8. ABSOLUTE NO FABRICATION. ZERO TOLERANCE. Never invent experiments, statistics, sample sizes, p-values, case studies, user quotes, anecdotes, or stories. If the source has data, use it EXACTLY AS-IS - no embellishment, no modification, no "improved" numbers. If you need empirical claims and source has no data, use theoretical arguments only. Violation of this rule makes the paper INVALID.
 9. VALID SECTIONING ONLY. Only use \\section{}, \\subsection{}, \\subsubsection{}, \\paragraph{}. NO deeper levels like \\subsubssubsection (not real LaTeX).
 

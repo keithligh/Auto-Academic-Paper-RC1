@@ -11,7 +11,7 @@
  */
 
 import katex from 'katex';
-import { healLatex } from './healer';
+// import { healLatex } from './healer'; // REMOVED (Strict Mode)
 import { processTikz } from './tikz-engine';
 import { processMath } from './math-engine';
 import { processCitations } from './citation-engine';
@@ -140,9 +140,32 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(new RegExp(`\\\\textsc\\{${nested}\\}`, 'g'), '<span style="font-variant: small-caps;">$1</span>')
             // Markdown Compatibility (v1.9.15) - Handle AI Hallucinations
             .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-            // Markdown Headers (v1.9.64) - Strip hallucinated Markdown headers
-            // AI sometimes outputs "# TITLE" or "## SECTION" inside LaTeX
-            .replace(/^#{1,6}\s+.*$/gm, '')
+            // Colors (v1.9.112)
+            .replace(/\\textcolor\{([^{}]+)\}\{([^{}]+)\}/g, (m, color, content) => {
+                const colorMap: Record<string, string> = {
+                    'Navy': '#000080',
+                    'Blue': '#0000FF',
+                    'Red': '#FF0000',
+                    'Green': '#008000',
+                    'OliveGreen': '#556B2F',
+                    'DarkGreen': '#006400',
+                    'Maroon': '#800000',
+                    'Purple': '#800080',
+                    'Orange': '#FFA500',
+                    'Black': '#000000',
+                    'White': '#FFFFFF',
+                    'Gray': '#808080',
+                    'BurntOrange': '#CC5500',
+                    'MidnightBlue': '#191970',
+                    'TealBlue': '#367588',
+                    'RoyalBlue': '#4169E1'
+                };
+                const cssColor = colorMap[color] || color; // Fallback to raw name if valid CSS
+                return `<span style="color: ${cssColor}">${content}</span>`;
+            })
+            // Markdown Headers (v1.9.64) - STRIPPED (Strict Mode)
+            // User Directive: Do not fix wrong LaTeX. If AI outputs Markdown, let it break.
+            // .replace(/^#{1,6}\s+.*$/gm, '')
             .replace(/\\bullet/g, '&#8226;')
             .replace(/~/g, '&nbsp;')
             .replace(/\\times/g, '&times;')
@@ -217,6 +240,8 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(/\\raggedright(?![a-zA-Z])/g, '')
             .replace(/\\raggedleft(?![a-zA-Z])/g, '')
             .replace(/\\par(?![a-zA-Z])/g, '\n\n')
+            .replace(/\\renewcommand\s*\{\\arraystretch\}\s*\{[0-9.]+\}/g, '') // Strip arraystretch
+            .replace(/\\setlength\s*\{[^}]+\}\s*\{[^}]+\}/g, '') // Strip setlength
             // Punctuation and special
             .replace(/\{:\}/g, ':')
             .replace(/\{,\}/g, ',')
@@ -234,7 +259,10 @@ export function processLatex(latex: string): SanitizeResult {
     };
 
     // --- CONTENT PREPARATION ---
-    let content = healLatex(latex);
+    // --- CONTENT PREPARATION ---
+    // REMOVED Healer (v1.9.124 Strict Mode).
+    // let content = healLatex(latex); 
+    let content = latex;
 
     // --- CITATION ENGINE REFACTORING (Phase 4) ---
     const { sanitized: citationSanitized, bibliographyHtml: generatedBib } = processCitations(content);
@@ -586,6 +614,13 @@ export function processLatex(latex: string): SanitizeResult {
         const cleanBody = parseLatexFormatting(body).replace(/\n\s*\n+/g, '<br/><br/>');
         return createPlaceholder(`<blockquote class="latex-quote" style="margin: 1em 2.5em; font-style: italic; color: #333;">${cleanBody}</blockquote>`);
     });
+
+    // --- PROOF (v1.9.108) ---
+    content = content.replace(/\\begin\{proof\}([\s\S]*?)\\end\{proof\}/g, (m, body) => {
+        const cleanBody = parseLatexFormatting(body);
+        // Standard LaTeX proof style: "Proof." in bold, body in normal/italic, QED symbol at right
+        return createPlaceholder(`<div class="latex-proof" style="margin-top: 1em; margin-bottom: 1em;"><strong>Proof.</strong> ${cleanBody} <span class="qed" style="float: right;">&#9633;</span></div>`);
+    });
     content = content.replace(/\\begin\{center\}([\s\S]*?)\\end\{center\}/g, (m, body) =>
         `<div style="text-align: center;">${parseLatexFormatting(body)}</div>`
     );
@@ -608,6 +643,7 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(/\\centering/g, '')
             .replace(/\\caption\{[^}]*\}/g, '')
             .replace(/\\label\{[^}]*\}/g, '')
+            .replace(/\\(small|footnotesize|scriptsize|tiny|large|Large|LARGE|huge|Huge)(?![a-zA-Z])/g, '')
             .trim();
 
         // Wrap in semantic div

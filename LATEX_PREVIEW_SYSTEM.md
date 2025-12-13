@@ -193,37 +193,23 @@ TikZJax rendering can take 500-2000ms (CDN loading + WASM compilation). To impro
 **Native TabularX Support (v1.3.1)**: We natively support `tabularx` by parsing it like a standard `tabular` environment. We intentionally **ignore the width argument** and let the browser handle the layout (auto-width), which is superior for responsive HTML.
 
 
-### 13. The Table Engine (v1.9.36)
-**Goal**: Robust parsing of complex LaTeX tables (tabular, tabularx).
+### 13. The Table Engine (v1.9.125 Strict Mode)
+**Goal**: Robust parsing of complex LaTeX tables (tabular, tabularx) with strict adherence to validity.
 
 **The Pipeline**:
 1.  **Block Extraction**: Recursive brace-matching parser extracts `\begin{tabular}...` blocks.
-2.  **Sanatization (The Hallucination Fix)**:
-    -   **Problem**: AI sometimes outputs double-escaped characters (`\\&`) which the parser sees as `Row Break` (`\\`) + `&`.
-    -   **Fix**: We replace `\\\\&` with `\\&` (Literal Escaped Ampersand) *before* splitting rows. This preserves the cell integrity.
+2.  **No Guessing (Strict Mode)**:
+    -   We **do NOT** implicitly split rows (`Text \hline` -> `Text \hline`).
+    -   We **do NOT** sanitize trailing backslashes.
+    -   **Requirement**: The input MUST be valid LaTeX (`Text \\ \hline`). If not, it renders broken.
 3.  **Row Splitting**:
-    -   We iterate character-by-character (ignoring braces).
-    -   Split on `\\` (assuming it's not inside a brace or followed by `&`).
-4.  **Cell Splitting**:
-    -   Split on `&` (unless escaped `\&`).
-    -   Handle `\multicolumn`.
+    -   Split on `\\` (assuming it's not inside a brace).
+4.  **Border Detection (Correctness)**:
+    -   **Grid**: `\hline` anywhere renders a border.
+    -   **Semantic**: `\midrule`, `\bottomrule` render borders.
+    -   **Partial**: `\cline{2-4}` is parsed and renders `border-bottom` on specific cells.
 5.  **Rendering**: Generate cleaner HTML `<table>`.
-- **Order of Operations**:
-  1. **Standard Tables (`\begin{table}`)**: Must be processed **FIRST**. This allows us to extract the inner `tabular` or `tabularx` content correctly.
-  2. **Standalone Tabulars**: Use the same parser to handle tables not wrapped in a float.
-  3. **Fallback**: Only after the above are attempted do we "nuke" remaining `tabularx`/`longtable` environments into placeholders.
-- **Extraction**: Regex parses standard `tabular` and `tabularx` blocks.
-- **Transformation**:
-  - We use a **Manual Character-Walker (Scorched Earth)** to parse Rows (`\\`) and Cells (`&`).
-  - **Why**: Simple regex (`split('&')`) failed on escaped ampersands (`\&`) and brace-protected groups. The manual walker tracks brace depth and escape characters statefully.
-  - We apply basic text formatting to cell contents.
-- **Output**: We generate a standard HTML `<table>`.
-- **Injection**: `Fully Custom TypeScript Parser` sees a placeholder; we swap it for our HTML table.
-- **Math Safety (v1.5.4)**: Inner math `LATEXPREVIEWMATH` placeholders are recursively resolved via `resolvePlaceholders()` during cell parsing to ensure formulas appear correctly inside table cells.
-- **AI Double-Escape Chain Fix (v1.5.16)**: The AI sometimes generates `\&` (escaped ampersand) in table cells. The JSON escaping pipeline can double this to `\\&`, which the row splitter mistakenly interpreted as a row break (`\\`) followed by a column separator (`&`).
-  - **Root Cause**: `AI → \& → JSON escape → \\& → fixAIJsonEscaping → \\\\& → JSON.parse → \\&` (final string contains backslash-ampersand, but `smartSplitRows` saw `\\` as row break).
-  - **Fix**: `smartSplitRows()` now distinguishes between **Row Breaks** (`\\` followed by whitespace, newline, `[`, or end-of-string) and **Escaped Commands** (`\\X` where X is any character). This is a **structural parser** fix, not a regex bandaid.
-  - **Universal**: Handles ALL double-escaped LaTeX commands (`\\textit`, `\\textbf`, `\\%`, `\\$`, `\\#`) that pass through the AI/JSON chain.
+
 - **Thousand Separator Fix (v1.5.16)**: `{,}` (LaTeX thousand separator, e.g., `105{,}000`) is now converted to `,` in `parseLatexFormatting()`.
 
 ### 5. Bibliography Injection
