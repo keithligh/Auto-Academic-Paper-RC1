@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { useDropzone } from "react-dropzone";
 import { useMutation } from "@tanstack/react-query";
-import { User, ListChecks, Code, ChartLine, Settings2, Upload, FolderOpen, RotateCcw, FileUp, XCircle } from "lucide-react";
+import { User, ListChecks, Code, ChartLine, Settings2, Upload, FolderOpen, RotateCcw, FileUp, XCircle, BookOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { FileCard } from "@/components/FileCard";
@@ -277,6 +277,15 @@ export default function LandingPage() {
                             className="h-12 w-12"
                         >
                             <FolderOpen className="w-7 h-7 text-gray-500" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setLocation("/manual")}
+                            title="User Manual"
+                            className="h-12 w-12"
+                        >
+                            <BookOpen className="w-7 h-7 text-gray-500" />
                         </Button>
                         <Button
                             variant="outline"

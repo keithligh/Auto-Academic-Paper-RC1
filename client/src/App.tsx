@@ -9,6 +9,7 @@ import LandingPage from "@/pages/LandingPage";
 import ProcessingPage from "@/pages/ProcessingPage";
 import ResultPage from "@/pages/ResultPage";
 import ConfigPage from "@/pages/ConfigPage";
+import ManualPage from "@/pages/ManualPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -18,6 +19,7 @@ function Router() {
             <Route path="/config" component={ConfigPage} />
             <Route path="/processing/:id" component={ProcessingPage} />
             <Route path="/results/:id" component={ResultPage} />
+            <Route path="/manual" component={ManualPage} />
             <Route component={NotFound} />
         </Switch>
     );
