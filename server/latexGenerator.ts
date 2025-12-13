@@ -57,8 +57,9 @@ function compileCitations(text: string, references: { key: string }[]): string {
 
     // Step 2: Replace (ref_X) with \cite{ref_X}
     // STRATEGY: "Parse, don't Regex". Match the block, then tokenize the content.
-    // Regex: Matches "(" followed by whitespace, then "ref_", then ANYTHING ([\s\S]) until ")"
-    let compiled = text.replace(/\(\s*(ref_[\s\S]*?)\)/g, (match, content) => {
+    // IMPROVED REGEX (v1.9): Matches ( ref_... ) more loosely to catch AI sloppiness
+    // Matches: "(" + optional space + "ref_" + chars + ")"
+    let compiled = text.replace(/\(\s*(ref_[a-zA-Z0-9_,;\s]+?)\s*\)/gi, (match, content) => {
         // CONTENT PARSER: Split by comma, semicolon, or whitespace
         const tokens = content.split(/[,\s;]+/);
 
@@ -72,8 +73,10 @@ function compileCitations(text: string, references: { key: string }[]): string {
             console.log(`[Compiler] Tokenized citations: "${match}" -> \\cite{${valid.join(',')}}`);
             return `\\cite{${valid.join(',')}}`;
         } else {
-            console.warn(`[Compiler] Invalid citation group (No valid keys): ${match}`);
-            return match; // Keep original text if no valid keys found (don't break user text)
+            // It looked like a ref but had no valid keys? 
+            // Escape it so it doesn't crash LaTeX (the underscore is deadly)
+            console.warn(`[Compiler] Invalid citation group (No valid keys): ${match}. Escaping to safe text.`);
+            return escapeLatex(match);
         }
     });
 
@@ -94,6 +97,7 @@ function compileCitations(text: string, references: { key: string }[]): string {
     compiled = compiled.replace(/\\cite\{([^}]+)\}/g, (match, key) => {
         const keys = key.split(',');
         const allValid = keys.every((k: string) => {
+            // Strip any lingering whitespace
             const cleanK = k.trim();
             return validKeys.has(cleanK);
         });
@@ -101,9 +105,17 @@ function compileCitations(text: string, references: { key: string }[]): string {
         if (allValid) {
             return match;
         } else {
-            console.warn(`[Compiler] Hallucinated citation detected: ${match}`);
+            console.warn(`[Compiler] Hallucinated citation detected: ${match} -> Replacing with [?]`);
             return `[?]`;
         }
+    });
+
+    // Step 5: FINAL SAFETY SWEEP - Catch any ORPHAN (ref_X) that regex missed
+    // If we see "(ref_" followed by numbers, just escape it.
+    // This prevents "Missing $ inserted" errors if the AI wrote "(ref_12)" but our broad regex missed it for some reason.
+    compiled = compiled.replace(/\(ref_(\d+)\)/gi, (match) => {
+        console.warn(`[Compiler] Caught orphan citation marker during safety sweep: ${match}`);
+        return escapeLatex(match);
     });
 
     return compiled;
@@ -180,6 +192,10 @@ ${cjkPreamble}
 \\newtheorem{remark}{Remark}
 \\newtheorem{constraint}{Constraint}
 
+% Paragraph formatting - no indentation, line breaks between paragraphs
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{1em}
+
 ${symbolDefs ? `% Symbol definitions\n${symbolDefs}` : ""}% Title and author
 \\title{${title}}
 \\author{${formatAuthorInfo(authorName, authorAffiliation)}}
@@ -215,6 +231,12 @@ ${abstract}
 
                 // SANITIZATION: Remove redundant \section{...} if the AI hallucinated it at the start
                 secContent = secContent.replace(/^\s*\\section\{[^}]+\}\s*/i, "");
+
+                // SANITIZATION: Remove "SECTION NAME:" / "CONTENT:" hallucinations (AI chat residue)
+                // Example: "SECTION NAME: Introduction\nCONTENT:\nThis paper..."
+                secContent = secContent.replace(/^SECTION NAME:[\s\S]*?\nCONTENT:\s*/i, "");
+                secContent = secContent.replace(/^SECTION TITLE:[\s\S]*?\nCONTENT:\s*/i, "");
+                secContent = secContent.replace(/^CONTENT:\s*/i, "");
 
                 // Add Section Header
                 latex += `\\section{${secName}}\n\n`;
@@ -276,8 +298,13 @@ ${abstract}
                 const refTitle = escapeLatex(ref.title);
                 const venue = escapeLatex(ref.venue);
                 const year = ref.year;
+                // Check if url exists (needs casting if Typescript doesn't see it yet, or strict check)
+                // v1.9.63: URL now starts on a new line for better readability
+                // \\\\  = LaTeX line break (\\)
+                // \\url = LaTeX \url command
+                const url = (ref as any).url ? `\\\\ \\url{${(ref as any).url}}` : "";
 
-                latex += `\\bibitem{${ref.key}} ${author}. \\textit{${refTitle}}. ${venue}, ${year}.\n`;
+                latex += `\\bibitem{${ref.key}} ${author}. \\textit{${refTitle}}. ${venue}, ${year}.${url}\n`;
             }
             latex += `\\end{thebibliography}\n`;
         }

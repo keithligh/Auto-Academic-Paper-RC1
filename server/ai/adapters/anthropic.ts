@@ -35,7 +35,7 @@ export class AnthropicProvider implements AIProvider {
         return "";
     }
 
-    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any): Promise<any> {
+    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void, enableWebSearch?: boolean): Promise<any> {
         // Anthropic is great at following instructions, so we use a strong system prompt
         const enhancedSystemPrompt = `${systemPrompt}\n\nIMPORTANT: You must output ONLY valid JSON. Do not include any explanatory text, markdown formatting, or code blocks. Just the raw JSON object.`;
 

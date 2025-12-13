@@ -18,7 +18,8 @@ export const documentAnalysisSchema = z.object({
     author: z.string(),
     title: z.string(),
     venue: z.string(),
-    year: z.number()
+    year: z.number(),
+    url: z.string().optional()
   })).optional(),
   reviewReport: z.object({
     supported_claims: z.array(z.any()),
@@ -30,49 +31,49 @@ export const documentAnalysisSchema = z.object({
 
 export type DocumentAnalysis = z.infer<typeof documentAnalysisSchema>;
 
-// ===== 5-PHASE RESEARCH PIPELINE SCHEMAS =====
+// ===== 6-PHASE DEEP WORK PIPELINE SCHEMAS =====
 
-// PHASE 1 Output: Draft Document (no citations yet)
-export const draftDocumentSchema = z.object({
-  title: z.string(),
-  abstract: z.string(),
-  sections: z.array(z.object({
-    name: z.string(),
-    content: z.string()  // Plain content WITHOUT citations
-  }))
-  // NO references array in draft
+// Phase 1 Output: Strategic Execution Plan
+export const sectionPlanSchema = z.object({
+  name: z.string(),
+  goal: z.string(), // "Argue X", "Refute Y"
+  required_evidence: z.array(z.string()), // ["Stat on Z", "Theory A"]
+  approximate_words: z.number()
 });
 
-export type DraftDocument = z.infer<typeof draftDocumentSchema>;
+export const executionPlanSchema = z.object({
+  title_idea: z.string(),
+  abstract_goal: z.string(),
+  sections: z.array(sectionPlanSchema),
+  search_queries: z.array(z.string())
+});
 
-// PHASE 2 Output: Claim needing evidence
+export type SectionPlan = z.infer<typeof sectionPlanSchema>;
+export type ExecutionPlan = z.infer<typeof executionPlanSchema>;
+
+// Phase 2 Output: Researched Claim (reused for Phase 4)
 export const claimSchema = z.object({
-  section: z.string(),       // Which section this claim is in
-  sentence: z.string(),      // Exact sentence needing citation
-  context: z.string(),       // Surrounding 1-2 sentences for context
-  reasoning: z.string()      // Why this needs a citation
+  sentence: z.string(),
+  context: z.string(),
+  reasoning: z.string()
 });
 
 export type Claim = z.infer<typeof claimSchema>;
 
-// PHASE 3 Output: Researched claim with citation (or null if not found)
+// Researched Claim with Citation
 export const researchedClaimSchema = claimSchema.extend({
   citation: z.object({
-    key: z.string(),         // e.g., "ref_1", "ref_2"
+    key: z.string(),
     author: z.string(),
     title: z.string(),
     venue: z.string(),
-    year: z.number()
-  }).nullable(),             // null if no evidence found
-  searchQuery: z.string()    // The query used to find this citation
+    year: z.number(),
+    url: z.string().optional()
+  }).nullable(),
+  searchQuery: z.string()
 });
 
 export type ResearchedClaim = z.infer<typeof researchedClaimSchema>;
-
-// PHASE 4 Output: Same as DocumentAnalysis (with citations inserted)
-// Already defined above as documentAnalysisSchema
-
-// ===== END 5-PHASE SCHEMAS =====
 
 
 // AI Enhancement (raw output from AI, no ID or enabled status)
@@ -179,7 +180,6 @@ export const processingSteps = [
 // File type validation
 export const supportedFileTypes = {
   'application/pdf': { ext: '.pdf', label: 'PDF' },
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { ext: '.docx', label: 'DOCX' },
   'text/plain': { ext: '.txt', label: 'TXT' },
 } as const;
 
@@ -223,7 +223,7 @@ export const defaultAIConfig: AIConfig = {
   librarian: {
     provider: "poe",
     apiKey: "",
-    model: "Gemini-3.0-Pro",
+    model: "Gemini25Pro-AAP",
     isVerified: false
   },
   strategist: {

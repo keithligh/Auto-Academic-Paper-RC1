@@ -12,6 +12,7 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { extractTextFromFile, validateFileSize, validateFileType } from "./documentParser";
 import { generateLatex } from "./latexGenerator";
 import { AIService } from "./ai/service";
+import { sanitizeLatexForExport } from "./ai/utils"; // Auto-Academic-Paper-RC1: Export Sanitizer
 import { AIConfig } from "./ai/provider";
 import { maxFileSize, documentAnalysisSchema, type DocumentAnalysis, type Enhancement, type AiResponse, type JobProgress } from "@shared/schema";
 
@@ -190,7 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             provider: "poe",
             apiKey: poeApiKey,
             baseURL: "https://api.poe.com/v1",
-            model: process.env.POE_SEARCH_BOT || "Gemini-2.5-Pro",
+            model: process.env.POE_SEARCH_BOT || "Gemini25Flash-AAP",
             isVerified: true
           },
           strategist: {
@@ -312,6 +313,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching job:", error);
       res.status(500).json({ error: "Failed to fetch job" });
+    }
+  });
+
+  // NEW: Download Optimized for Export (Sanitized)
+  // This separates the "Preview Version" (Database) from the "Compile-Ready Version" (Download)
+  app.get("/api/conversions/:id/export", async (req, res) => {
+    try {
+      const job = await storage.getConversionJob(req.params.id);
+      if (!job) return res.status(404).json({ error: "Job not found" });
+      if (!job.latexContent) return res.status(400).json({ error: "No LaTeX content available" });
+
+      // "Just-In-Time" Sanitization for Export
+      const exportSafeLatex = sanitizeLatexForExport(job.latexContent);
+
+      const filename = job.originalFileName
+        ? job.originalFileName.replace(/\.[^/.]+$/, "") + "_export.tex"
+        : `paper_${job.id}.tex`;
+
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', 'application/x-tex; charset=utf-8');
+      // Use Buffer to prevent BOM from being added
+      res.send(Buffer.from(exportSafeLatex, 'utf-8'));
+
+    } catch (error) {
+      console.error("Error exporting job:", error);
+      res.status(500).json({ error: "Failed to export job" });
     }
   });
 
@@ -599,8 +626,32 @@ async function processDocumentFile(
 
       if (!validation.valid) {
         console.warn('[LaTeX Validation] Errors detected:', validation.errors);
-        validationWarnings = validation.errors;
-        await logJobProgress(jobId, `Validation Errors: ${validation.errors.length} found.`, { phase: "Phase 5: Compilation", step: "Validation Failed", progress: 98, details: "Errors found" });
+
+        // --- AUTO-REPAIR LOOP ---
+        await logJobProgress(jobId, `Validation failed. Attempting auto-repair for ${validation.errors.length} errors...`, { phase: "Phase 5: Compilation", step: "Auto-Repairing", progress: 98 });
+
+        try {
+          const aiService = new AIService(aiConfig, logger);
+          const repairedLatex = await aiService.repairLatex(latex, validation.errors);
+
+          // Re-validate
+          const revalidation = validateLatexSyntax(repairedLatex);
+          if (revalidation.valid) {
+            latex = repairedLatex; // Success!
+            validationWarnings.push("LaTeX was auto-repaired successfully.");
+            await logJobProgress(jobId, "Auto-repair successful. LaTeX is valid.", { phase: "Phase 5: Compilation", step: "Repair Success", progress: 99 });
+          } else {
+            validationWarnings.push(...revalidation.errors);
+            await logJobProgress(jobId, "Auto-repair partially failed. Some errors remain.", { phase: "Phase 5: Compilation", step: "Repair Warning", progress: 99 });
+            // We still save the repaired version as it's likely better than the original
+            latex = repairedLatex;
+          }
+        } catch (repairErr: any) {
+          console.error("Repair failed:", repairErr);
+          validationWarnings.push(`Repair system failed: ${repairErr.message}`);
+        }
+        // ------------------------
+
       } else {
         await logJobProgress(jobId, "LaTeX syntax is valid.", { phase: "Phase 5: Compilation", step: "Validation Passed", progress: 98 });
       }

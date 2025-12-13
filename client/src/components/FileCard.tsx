@@ -12,8 +12,6 @@ interface FileCardProps {
 const getFileIcon = (type: string) => {
   if (type.includes("pdf")) {
     return "📄";
-  } else if (type.includes("word") || type.includes("docx")) {
-    return "📝";
   } else {
     return "📋";
   }
@@ -25,7 +23,7 @@ export function FileCard({ fileName, fileSize, fileType, onRemove }: FileCardPro
       <div className="text-4xl flex-shrink-0">
         {getFileIcon(fileType)}
       </div>
-      
+
       <div className="flex-1 min-w-0">
         <h4 className="text-sm font-medium text-foreground truncate mb-1" data-testid="text-filename">
           {fileName}

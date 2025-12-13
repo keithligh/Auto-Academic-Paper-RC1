@@ -21,11 +21,22 @@ export class GeminiProvider implements AIProvider {
             systemInstruction: systemPrompt
         });
 
-        const result = await model.generateContent(prompt);
-        return result.response.text();
+        const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Gemini request timed out")), 180000)
+        );
+
+        const result = await Promise.race([
+            model.generateContent(prompt),
+            timeoutPromise
+        ]);
+
+        // Handle result safely as it comes from Promise.race logic
+        // Because of Typescript, we cast result to match what generateContent returns or ensure it mimics it.
+        // Actually, generateContent returns a GenerateContentResult.
+        return (result as any).response.text();
     }
 
-    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any): Promise<any> {
+    async jsonCompletion(prompt: string, systemPrompt: string, schema?: any, onProgress?: (text: string) => void, enableWebSearch?: boolean): Promise<any> {
         const model = this.client.getGenerativeModel({
             model: this.config.model,
             systemInstruction: systemPrompt,

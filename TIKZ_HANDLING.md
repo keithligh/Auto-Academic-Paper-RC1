@@ -23,10 +23,10 @@ Not all TikZ code is safe for the browser. Specifically, `pgfplots` (plots based
 -   **Output**: We inject a warning placeholder: `⚠️ Complex diagram (pgfplots) - not supported in browser preview`.
 
 ### Phase 1: The Heist (Extraction)
-Before the main document is processed by our Custom Parser (`latex-to-html.ts`), we steal the TikZ code.
+Before the main document is processed by our Custom Parser (`processor.ts`), we steal the TikZ code.
 
 -   **Manual Parser**: We do NOT use robust regex alone. We use a character-level parser to handle nested brackets `[...]` inside optional arguments (e.g., `label={[0,1]}`).
--   **Proprietary extraction**: See `latex-to-html.ts` (specifically `extractTikzBlocks`) for the loop safety logic.
+-   **Proprietary extraction**: See `tikz-engine.ts` (specifically `processTikz`) for the loop safety logic.
 -   **Placeholder**: We replace the entire block with a safe ID: `LATEXPREVIEWTIKZBLOCK1`.
 
 ### Phase 2: The Detox (Sanitization)
@@ -240,15 +240,18 @@ WIDE > FLAT > node distance > text density > node count > MEDIUM (default)
 > **The Fix**: Restored the critical `extraOpts += \`, x=\${xUnit}cm, y=\${yUnit}cm\`` line.
 > **Lesson**: Exercise extreme care when editing complex functions. Verify before committing.
 
-#### 13. Compact Layout Tuning (v1.6.40)
-> **Problem**: Diagrams with moderate vertical span (5-6 units) were being stretched excessively due to the 12cm height target.
-> **The Fix**: Reduced vertical scaling parameters:
-> - **Target Height**: 12cm → 8cm.
-> - **Y-Clamp Range**: [1.3, 2.2] → [1.0, 1.8].
-> **Reasoning**: A diagram with 5.6 vertical span was getting `y = 12/5.6 = 2.14cm`. Now it gets `y = 8/5.6 = 1.43cm`.
-> **Result**: ~30% reduction in vertical empty space while maintaining readability.
+#### 10. The Continuous Adaptive Scaling (v1.9.83)
+> **Problem**: The "Step Function" clamp (v1.6.25) created an artificial "Cliff".
+> - Span 6 -> `scale=1.3` (Width 7.8cm). Too Small.
+> - Span 8 -> `scale=1.8` (Width 14.4cm). Huge.
+> **The Fix**: We replaced the cliff with a **Continuous Function** targeting a "Sweet Spot" width of **12cm** (75% A4 Width).
+> **Formula**: `targetScale = 12 / Span`.
+> **Clamping**: Bounded between `[1.3, 2.5]` to ensure small diagrams get at least 30% boost, and we don't exceed the max safe scale (2.5x).
+> **Result**:
+> - Span 6 -> `scale=2.0` (Width 12cm). Perfect.
+> - Span 10 -> `scale=1.2` (Width 12cm). Consistent.
 
-#### 6.2 FLAT (Timeline) Layout
+#### 11. Title Gap Restoration (v1.6.38)
 - **Detection**: `aspectRatio >= 3.0` (Inclusive threshold v1.9.19).
 - **Logic**:
   - **Standard**: `xMultiplier = 1.6`, `yMultiplier` adaptive (1.5x - 3.0x). with many nodes had overlapping text labels even after x/y multiplier expansion.
@@ -301,7 +304,16 @@ The TikZ engine was prone to "Blank" renders due to browser limitations. We impl
         2.  `safeTikz.replace(/%.*$/gm, '')` (Nuke comments)
         3.  `safeTikz.replace(/__PCT__/g, '\\%')` (Restore escaped percents)
     *   **Why**: It guarantees that `100\%` is never mistaken for a comment start, without needing advanced regex features.
-2.  **Library Injection**: We inject `\usetikzlibrary{arrows,shapes,calc,positioning,decorations.pathreplacing}`.
+    *   **Why**: It guarantees that `100\%` is never mistaken for a comment start, without needing advanced regex features.
+3.  **Deprecated Syntax Normalization (v1.9.37)**:
+    *   **Problem**: AI models often generate deprecated positioning syntax like `right of=node`. When combined with `node distance`, this is interpreted as center-to-center distance, strictly ignoring node width. This causes massive overlap.
+    *   **Fix**: We apply a pre-render regex replacement:
+        *   `right of=` -> `right=of `
+        *   `left of=` -> `left=of `
+        *   `above of=` -> `above=of `
+        *   `below of=` -> `below=of `
+    *   **Result**: This forces the `positioning` library (which we inject) to use edge-to-edge spacing, respecting node widths and distance settings.
+4.  **Library Injection**: We inject `\usetikzlibrary{arrows,shapes,calc,positioning,decorations.pathreplacing}`.
     *   **Why**: The browser doesn't autoload libraries. Missing `arrows` causes a silent crash.
 3.  **Unsupported Feature Strip**:
     *   **Fonts**: `\sffamily`, `\ttfamily`. (Reason: Missing WASM font metrics).
@@ -311,6 +323,21 @@ The TikZ engine was prone to "Blank" renders due to browser limitations. We impl
 5.  **Small Minimum Height (v1.9.16)**: Reduced `min-height` to `100px`.
     *   **Why**: 200px was too tall for horizontal timeline diagrams, creating massive whitespace gaps.
 
+#### B. Plot Safety Protocol (The "Asymptote" Fix)
+> **Problem**: The "Goldilocks" Vertical Scaling (trying to stretch small diagrams to ~8cm height) is catastrophic for Mathematical Plots.
+> **Scenario**: A user plots `y = 3/x` from `domain=0.3:3`. At x=0.3, y=10. This point is often outside the drawn axes (clipped visually by the author, but present in the bbox).
+> **The Failure**: The Engine sees a small axis (3.5cm) and applies a boost `y=1.8cm` to hit the 8cm target. This boosts the invisible asymptote (y=10) to `18cm`, creating a massive tower of whitespace.
+> **The Distortion**: If we only fixed Y (e.g. `y=1`), but left X expanding (e.g. `x=1.8` for LARGE intent), the plot becomes severely flattened (1.8:1 ratio), turning circles into ellipses and distorting the function shape.
+> **The Fix (v1.9.81 / v1.9.82)**:
+> 1.  **Square Scaling**: We enforce `xUnit = 1.0` and `yUnit = 1.0` to preserve geometric truth (circles stay circular).
+> 2.  **Safety Clip (Local Scope)**: Instead of a global clip (which might cut off axis labels like "Speed S" extending beyond the grid), we wrap **only the plot command** in a local scope with a clip.
+>      ```latex
+>      \begin{scope}
+>      \clip (minX-0.5, minY-0.5) rectangle (maxX+0.5, maxY+0.5);
+>      \draw ... plot ...;
+>      \end{scope}
+>      ```
+>      This surgically trims the asymptotic curve to the visible axes (plus line-width padding) while leaving all labels, arrows, and other diagram elements strictly untouched.
 ### 16. The Double Bracket Protocol (v1.9.16)
 > **Problem**: The TikZ Option Extractor strips outer brackets (`[x=1cm]` -> `x=1cm`). The Merger then adds new options (`x=1.5cm`).
 > **The Bug**: We were injecting the result as `x=1.5cm, x=1cm`. This is **invalid TikZ syntax**. TikZ expects options to be wrapped in square brackets `[...]` or passed as a command argument. Loose text inside the environment is treated as... text? Or just ignored as garbage.
@@ -319,3 +346,52 @@ The TikZ engine was prone to "Blank" renders due to browser limitations. We impl
 > const finalOptions = `[${combined}]`; // MANDATORY
 > ```
 > **Rule**: **Any transformation that unwraps a container must re-wrap it before final injection.**
+>
+> ### 17. The Wrapper Preservation Protocol (v1.9.99)
+> > **Problem**: TikZ diagrams wrapped in `\begin{figure}` were being deleted by the "Flattening" logic (which aggressively stripped float environments).
+> > **The Fix**: We upgraded the flattening logic to be **Non-Destructive**.
+> > - `\begin{figure}` -> `<div class="latex-figure-wrapper">`
+> > - `\caption{...}` -> `<div class="caption">...</div>`
+> > - **Result**: The diagram remains visible, and its caption is rendered correctly below it. We never delete semantic wrappers, only translate them.
+
+### 17. The Vertical Layout Crisis (v1.9.45 - v1.9.48)
+
+A complex saga of scaling issues involving "Hyper Boost", "Modernization", and "Compression".
+
+#### Phase A: Hyper Boost Taming (v1.9.45)
+> **Problem**: The "Goldilocks Protocol" (Section 10) was aggressively boosting `y=` coordinates for Text-Heavy diagrams (`x=2.2cm`) to prevent horizontal explosion. However, it *also* boosted `y` to `1.5cm` by default, causing vertical flowcharts to look like skyscrapers.
+> **The Fix**:
+> 1.  **Exclusion**: If the user (or AI) provides an **Explicit** `node distance`, the Goldilocks Y-Boost is **SKIPPED**. We trust the explicit distance.
+> 2.  **Relaxation**: The `y` default fallback was reduced from `1.5cm` to `1.2cm`.
+
+#### Phase A.5: The Semantic Shift (The "Modernization" Trap)
+> **Problem**: To fix overlapping nodes, we "Modernized" syntax: `below of=node` (Center-to-Center) became `below=of node` (Edge-to-Edge).
+> **Side Effect**: A `node distance=3cm` implies 3cm between *centers* in the old syntax (tight). In the new syntax, it means 3cm between *edges* (huge gaps). This caused diagrams to expand vertically by 2-3x, creating the illusion of a scaling bug.
+
+#### Phase B: The Failed "Modernization Compensation" (v1.9.47)
+> **Attempt**: We tried to detect "Modernization" and surgically halve the `node distance` (e.g., 3cm -> 1.5cm) to restore original density.
+> **Failure**: The regex-based injection was flaky and caused regression risks. It was reverted.
+
+#### Phase C: Global Compression (v1.9.46 - The Final Solution)
+> **The Fix**: Instead of surgical micro-management, we re-introduced a simple **Global Compression** rule for Relative Layouts.
+> **Logic**:
+> - If `verticalSpan == 0` (Relative Positioning) AND `node distance` is Explicit:
+> - **Force `y=0.5cm`**.
+> **Why**: Relative positioning relies on `node distance` for the macro layout. The `y` unit only affects `+(0, y)` shifts (like separate title nodes). Compressing `y` ensures titles don't float away, while the `node distance` (kept at 2.8cm-3cm) handles the main flow.
+
+### 19. The Academic Color Polyfill (v1.9.87)
+
+**Problem**: The minimal TikZJax environment crashes if undefined colors (like `darkgreen`) are used. Furthermore, standard RGB red/green/blue look unprofessional.
+
+**The Solution**: We inject a **"Color Polyfill"** block into every `\begin{tikzpicture}` environment that:
+1.  **Redefines** standard primaries to "Prestige Shades" (`red` -> `Maroon`, `blue` -> `Navy`).
+2.  **Defines** commonly hallucinated colors (`darkgreen`, `orange`, `purple`) to prevent crashes.
+
+```latex
+\definecolor{red}{rgb}{0.6,0,0}      % Maroon
+\definecolor{blue}{rgb}{0,0,0.6}     % Navy Blue
+\definecolor{green}{rgb}{0,0.4,0}    % Forest Green
+\definecolor{darkgreen}{rgb}{0,0.4,0} % Defined!
+```
+
+**Result**: We no longer trust the AI to validly pick colors. We guarantee rigor at the engine level.

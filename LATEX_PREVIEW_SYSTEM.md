@@ -1,14 +1,28 @@
 # Custom LaTeX Preview Architecture ("The Independent Option")
 
-The browser-based preview system uses a **Fully Custom TypeScript Parser** (`latex-to-html.ts`) to render academic documents. We have **abandoned `latex.js` entirely** in favor of a robust, fault-tolerant "SaaS" (Software as a Service) parser chassis that integrates our battle-tested custom rendering engines.
+The browser-based preview system uses a **Fully Custom TypeScript Orchestrator** (`processor.ts`) to render academic documents. We have **abandoned `latex.js` entirely** in favor of a robust, fault-tolerant "SaaS" (Software as a Service) parser chassis that integrates our battle-tested custom rendering engines.
 
 ## The Pivot: Why We Removed `latex.js`
 
 We previously used a "Hybrid" architecture where we tried to sanitize input for `latex.js`. It failed because:
 
-1. **Fragility**: A single unknown macro caused a whitespace-of-death crash.
-2. **Black Box**: We couldn't control how it handled lists or tables (hence the "1Text" bugs).
-3. **Containment Costs**: We spent 90% of our time writing code to *prevent* `latex.js` from seeing code.
+1.  **Fragility**: A single unknown macro caused a whitespace-of-death crash.
+2.  **Black Box**: We couldn't control how it handled lists or tables (hence the "1Text" bugs).
+3.  **Containment Costs**: We spent 90% of our time writing code to *prevent* `latex.js` from seeing code.
+
+## 36. The "Plain Text" URL Protocol (v1.9.50)
+
+**The Decision**: We intentionally disabled clickable links in the bibliography to preserve the "printed paper" aesthetic and prevent "link rot" anxiety during the draft phase.
+
+-   **Mechanism**:
+    -   The `latexGenerator.ts` injects a specific sequence: `\\ \url{http://...}`.
+    -   The `processor.ts` `parseLatexFormatting` function contains a specific regex: `/\url\{([^{}]*)\}/g`.
+    -   **Replacement**: It does NOT create an `<a href="...">`. It creates a `<code>$1</code>`.
+-   **Visual Result**: URLs appear on a **new line** (forced by `\\`) in **monospace font**, strictly as reference data, not navigation tools.
+-   **Why**:
+    -   **Aesthetic**: Keeps the bibliography uniform.
+    -   **Safety**: Prevents users from clicking away from the app.
+    -   **Philosophy**: An academic paper is a static document, not a webpage.
 
 **The Solution:** We built our own "Dumb but Robust" parser.
 
@@ -18,10 +32,10 @@ The transformation of `LatexPreview.tsx` represents the shift from "Monolithic S
 
 | Metric | Old Architecture (v1.5) | New Architecture (v1.9) |
 | :--- | :--- | :--- |
-| **Logic Location** | Internal (React Hooks) | External (Pure TypeScript Pipeline) |
-| **File Size** | ~66 KB (3000+ lines) | ~4 KB (120 lines) |
-| **Philosophy** | "Sanitize for Library" | "Generate HTML Directly" |
-| **Dependencies** | `latex.js`, `dompurify` | `katex` (CSS only), `iframe` |
+| **Logic Location** | Internal (React Hooks) | External (Pure TypeScript Library) |
+| **File Structure** | Monolith (~3000 lines) | Modular `client/src/lib/latex-unifier/` |
+| **Entry Point** | `LatexPreview.tsx` | `processor.ts` -> `processLatex()` |
+| **Dependencies** | `dompurify` | `katex` (CSS only), `iframe` |
 | **Stability** | Fragile (Exceptions Crash UI) | Robust (Try/Catch in Pipeline) |
 
 **The New Role of `LatexPreview.tsx`**:
@@ -35,8 +49,16 @@ The transformation of `LatexPreview.tsx` represents the shift from "Monolithic S
 ### 3. Rendering Engine (The "Zero-Library" Core)
 **Status: PURE HTML + ISOLATED TIKZ**
 
-The system has been purged of the monolithic `latex.js` library for document rendering.
-- **Document Body**: Parsed entirely by our custom regex/heuristic pipeline (`processor.ts`) into pure HTML/CSS.
+The system has been purged of the monolithic `latex.js` library. The `processor.ts` orchestrator delegates to specialized engines:
+
+- **`healer.ts`**: Pre-processing (Markdown stripping, Ghost header exorcism).
+- **`tikz-engine.ts`**: Extracts and isolates TikZ diagrams into `<iframe>` placeholders.
+- **`math-engine.ts`**: Extracts/Renders Math via KaTeX (preserving structure).
+- **`citation-engine.ts`**: Parses `(ref_X)` and generates IEEE-style bibliographies.
+- **`table-engine.ts`**: Manually parses complex tables (rows, cells, multicolumn) without regex.
+- **`processor.ts`**: Handles final text formatting, lists, algorithms, and assembly.
+
+- **Document Body**: Parsed entirely by this regex/heuristic pipeline into pure HTML/CSS.
 - **Math**: Rendered by **KaTeX** (fast, semantic).
 - **TikZ Diagrams**: Rendered by **TikZJax** (WebAssembly `jsTeX`) running in **Isolated Iframes**.
     - *Note*: TikZJax is the ONLY remaining "LaTeX" engine, used exclusively for diagrams.
@@ -77,47 +99,41 @@ Within the Math extraction phase, we must extract in this specific order:
 - **Rendering**: The math string is rendered to HTML string using `katex.renderToString()` with `throwOnError: false` for graceful degradation.
 - **Injection**: After `Fully Custom TypeScript Parser` finishes, we walk the DOM, find the placeholder text, and replace its parent node with the KaTeX HTML.
 
-#### Math Sizing Strategy (Two-Layer System)
+#### Math Sizing Strategy (The Physics-Based Heuristic v2)
+Current Version: v1.9.36
 
-We use a **two-layer scaling system** to ensure math fits within the A4 page width without becoming unreadable:
+We rely on **Physical Constraints** rather than arbitrary guesses to scale math. This ensures readability on A4 paper while preventing layout breakage.
 
-**Layer 1: Pre-Render Heuristic Scaling (v1.6.0)**
+**Layer 1: Pre-Render Heuristic (The "Intelligent Array" System)**
 
-Applied during `createMathBlock()` before KaTeX renders to HTML:
+Applied during `createMathBlock()` before KaTeX renders.
 
-| Math Type                   | Detection                                | Scaling Action                                                 |
-| --------------------------- | ---------------------------------------- | -------------------------------------------------------------- |
-| **Multi-line environments** | Has `\\` line breaks OR `\begin{align*}` | **NO SCALING** (grows vertically, not horizontally)            |
-| **Long single-line**        | `length * 0.4 > 50em`                    | `transform: scale(X)` where `X = max(0.55, 50/estimatedWidth)` |
-| **Normal equations**        | Default                                  | No scaling applied                                             |
+1.  **Target Selection**:
+    *   **Single-Line Equations**: Scaled if they exceed physical width.
+    *   **Arrays/Matrices**: Scaled aggressively because they grow horizontally.
+    *   **EXEMPT**: Multi-line environments (`align`, `gather`, `multline`) are **never scaled** because they grow *vertically*. Scaling them would shrink legible text unnecessarily.
 
-**Layer 2: Post-Render Deterministic Scaling (v1.6.1)**
+2.  **The Array Heuristic (v1.9.36)**:
+    *   Arrays often have short rows and one long row. A simple character count overestimates width.
+    *   **Formula**: `EstimatedWidth = (TotalChars / Rows) * 0.5`.
+    *   **Logic**: This realistic multiplier (0.5) approximates average text density, ensuring we don't over-shrink tables containing standard text.
 
-Applied synchronously after the DOM is built (via `requestAnimationFrame`), using actual rendered dimensions.
+3.  **Physical Bounds**:
+    *   **Threshold**: **39em**. This matches the printable width of an A4 page (210mm - 25mm margins) at 11pt font.
+    *   **Safety Floor**: Scale is clamped at **0.65x**. We never shrink content below this readable threshold.
 
-**Scope**: Applies to **Both** `.katex-display` (Math) and `.table-wrapper` (HTML Tables).
+4.  **Layout Mechanics (The "No-Clip" Fix)**:
+    *   **Wrapper**: `width: max-content`. Prevents the browser from chopping off the right edge before scaling.
+    *   **Overflow**: `overflow: visible`. We trust the scaler to fit the content; hidden overflow caused data loss.
+    *   **Centering**: `margin: 0 auto`. The scaled block automatically centers itself in the available space.
 
-```typescript
-// Synchronous check (No setTimeout races)
-if (el.scrollWidth > el.clientWidth) {
-  // SAFETY BUFFER: Multiply by 0.98 to prevent pixel-perfect clipping
-  const scale = Math.max(0.55, (el.clientWidth / el.scrollWidth) * 0.98);
+**Layer 2: CSS Margin Collapsing (The "Vertical Rhythm" Fix)**
 
-  if (scale < 1) {
-    el.style.transform = `scale(${scale})`;
-    el.style.width = `${(100 / scale)}%`; // Expand physical width
-    el.style.overflowX = 'hidden'; // UX: Hide scrollbar since it fits now
-  }
-}
-```
-
-**Key Design Decisions:**
-
-- **Safety Buffer (98%)**: Exact mathematical fits often get clipped by browser pixel rounding when `overflow: hidden` is applied. The 2% buffer ensures breathing room.
-- **Unified Logic**: We treat large HTML tables exactly like large equations.
-- **Visual vs Physical**: `transform: scale` shrinks the *visual* size, while `width: 1XX%` expands the *layout* size to match.
-- **Scrollbar Elimination**: Once scaled, the scrollbar is redundant and ugly, so we force `overflow-x: hidden`.
-- **The "Ghost Scrollbar" Protocol (v1.9.14)**: We force `overflow: hidden !important` on `.katex-display` via CSS. This prevents sub-pixel rounding errors (common in equation numbering) from triggering "ghost" vertical scrollbars, while the JS scaler handles the gross overflow logic.
+To prevents excessive whitespace (double gaps) around math blocks:
+*   **Strategy**: The auto-scale wrapper uses `display: block` (instead of `inline-block`).
+*   **Effect**: This allows the paragraph's `margin-bottom` (1em) to **collapse** (merge) with the equation's `margin-top` (0.5em).
+*   **Result**: A clean 1em gap instead of a 1.5em additive gap.
+*   **Spacing**: Reduced `.katex-display` global margins to `0.5em` to tighten the document flow.
 
 ### 3. Diagram Rendering (TikZ via Iframe)
 
@@ -126,6 +142,18 @@ TikZ is a Turing-complete vector graphics language. No simple JS library can par
 - **Extraction**: Regex finds `\begin{tikzpicture}` environments.
 - **Placeholder**: Replaced with `LATEXPREVIEWMATH{N}`.
 - **Rendering**: We construct a complete HTML page that loads **TikZJax** and inject it into an `<iframe>`.
+### 7a. Preamble Stripping (The "Anti-Crash" Field)
+**Problem**: The Custom Parser creates "ghost tags" or crashes when it sees incomplete macros in the preamble (e.g. `\usepackage[sort&compress]{natbib}` -> `&` crashes regex).
+**Universal Fix**: We aggressively strip **all** preamble commands before parsing.
+-   **Regex**: `\\usepackage(\[.*?\])?\{.*?\}` and `\\documentclass...`
+-   **Why Universal**: It deletes the entire category of "Package Imports". Since the browser mocks all styles via CSS, we never need *any* package import. Removing them prevents 100% of package-related syntax crashes.
+
+### 7b. Text Sanitization (The "Typography" Layer)
+**Problem**: LaTeX uses math logic in text (e.g., `{,}` to prevent spacing), which renders literally in HTML (`100{,}000`).
+**Universal Fix**: We implement a global replacement layer for typography.
+-   **Separators**: `{,}` -> `,` and `{:} -> :`
+-   **Structure**: Runs **after** Math Extraction but **before** HTML generation.
+-   **Why Universal**: It targets the *syntax pattern* `{char}`, not specific numbers. It handles `100{,}000`, `200{,}000`, and `1{,}234` equally.
 - **Environment Wrapping**: We explicitly wrap the extracted TikZ code in `\begin{tikzpicture} ... \end{tikzpicture}` inside the iframe script tag.
 - **Responsive SVG Layout (v1.4.0)**: CSS-driven `max-width: 100%` ensures perfect fit on A4 pages without manual scaling hacks.
 - **Centering**: Iframes are wrapped in flexbox containers for horizontal centering.
@@ -165,6 +193,21 @@ TikZJax rendering can take 500-2000ms (CDN loading + WASM compilation). To impro
 **Native TabularX Support (v1.3.1)**: We natively support `tabularx` by parsing it like a standard `tabular` environment. We intentionally **ignore the width argument** and let the browser handle the layout (auto-width), which is superior for responsive HTML.
 
 
+### 13. The Table Engine (v1.9.36)
+**Goal**: Robust parsing of complex LaTeX tables (tabular, tabularx).
+
+**The Pipeline**:
+1.  **Block Extraction**: Recursive brace-matching parser extracts `\begin{tabular}...` blocks.
+2.  **Sanatization (The Hallucination Fix)**:
+    -   **Problem**: AI sometimes outputs double-escaped characters (`\\&`) which the parser sees as `Row Break` (`\\`) + `&`.
+    -   **Fix**: We replace `\\\\&` with `\\&` (Literal Escaped Ampersand) *before* splitting rows. This preserves the cell integrity.
+3.  **Row Splitting**:
+    -   We iterate character-by-character (ignoring braces).
+    -   Split on `\\` (assuming it's not inside a brace or followed by `&`).
+4.  **Cell Splitting**:
+    -   Split on `&` (unless escaped `\&`).
+    -   Handle `\multicolumn`.
+5.  **Rendering**: Generate cleaner HTML `<table>`.
 - **Order of Operations**:
   1. **Standard Tables (`\begin{table}`)**: Must be processed **FIRST**. This allows us to extract the inner `tabular` or `tabularx` content correctly.
   2. **Standalone Tabulars**: Use the same parser to handle tables not wrapped in a float.
@@ -193,14 +236,24 @@ We manually extract the bibliography environment to ensure citations are rendere
 - **Rendering**: Generates a clean HTML `<div class="bibliography">` with an ordered list (`<ol>`).
 - **IEEE Formatting**: Citations are numbered `[1]`, `[2]`, matching the inline citation processor.
 
-### 6b. Verbatim & Code Blocks (The "Raw" Zone)
+### 6b. Code Blocks (The Universal "Enclosure")
+**Supported Environments**: `verbatim`, `lstlisting`
 
-**Extraction**: Regex finds `\begin{verbatim}` blocks.
+**The Universal Styling**:
+We map both "dumb" (`verbatim`) and "smart" (`lstlisting`) code blocks to a single, unified visual style that matches the Algorithm blocks.
 
-- **Transformation**:
-  - **HTML Escaping**: We strictly escape special characters (`<` -> `&lt;`) to prevent XSS and rendering glitches.
-  - **Styling**: We wrap the content in a `<pre class="latex-verbatim">` block.
-- **Output**: A monospaced code block that preserves whitespace exactly as typed.
+-   **Extraction**:
+    -   Regex: `\\begin\{(verbatim|lstlisting)\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{\1\}`.
+    -   **Universal Catch**: The `(?:\[[^\]]*\])?` pattern intentionally matches *but ignores* any options (e.g., `[language=Python, caption=My Code]`). This ensures the parser doesn't choke on valid LaTeX properties.
+-   **Transformation**:
+    -   **HTML Escaping**: strictly escaped (`<` -> `&lt;`) to prevent XSS.
+    -   **Container**: Wrapped in `<pre class="latex-verbatim">`.
+-   **CSS / Visuals**:
+    -   **Background**: `#f9f9f9` (Light Grey) for distinct enclosure.
+    -   **Border**: 1px solid `#ddd` (Subtle boundary).
+    -   **Font**: Courier New.
+    -   **Whitespace**: `white-space: pre` preserves all indentation exactly as typed.
+-   **Output**: A clean, enclosed box that looks identical regardless of the input method.
 
 ### 6c. Algorithm Environment (The "Parsed" Code Zone - v1.9.15)
 
@@ -246,12 +299,34 @@ To ensure consistent rendering in **manually parsed blocks** (Tables, Algorithms
      - `\/` -> `/` (Converts escaped slash to forward slash)
      - `~` -> `&nbsp;` (Non-breaking space)
 
-### 8b. The Universal Text Formatter (v1.9.27)
+### 8a. Section Header Processing (v1.9.69)
+
+**Problem**: `\section{}`, `\subsection{}`, `\subsubsection{}` were NOT being processed.
+
+**Fix**: Added handlers: `\section{}` → `<h2>`, `\subsection{}` → `<h3>`, `\subsubsection{}` → `<h4>`, `\paragraph{}` → `<strong>`.
+
+**Fallback**: `\sub+section{}` → `<h4>` handles AI-hallucinated deep levels like `\subsubssubsection`.
+
+### 8aa. Comprehensive Command Support (v1.9.68)
+
+50+ commands added: Math (`\leq`, `\geq`, `\pm`, `\infty`), Logic (`\forall`, `\exists`), Greek letters (`\alpha` through `\omega`), Arrows (`\uparrow`, `\downarrow`), Spacing (`\quad`, `\qquad`).
+
+**Special**: `\$` → `$` for financial notation.
+
+### 8ab. Algorithm Package Dual-Support (v1.9.68)
+
+Both `algorithmic` (uppercase: `\STATE`) and `algpseudocode` (mixed: `\State`) packages now supported via case-insensitive regexes.
+
+### 8b. The Universal Text Formatter (v1.9.37)
 Previously, only manually parsing blocks (Tables, Algorithms) received nice formatting (bold, italic, symbols). Standard text paragraphs were just getting wrapped in `<p>` tags, leaving `\textbf{}` raw.
 
 **The Fix:** We implemented a **Universal Paragraph Map** at the end of `processor.ts`.
-1.  Split content by double-newline (`\n\n`) into paragraphs.
-2.  Iterate through each paragraph:
+
+1.  **Paragraph Splitting (The `\par` Fix)**:
+    -   First, we convert all LaTeX `\par` commands to double-newlines (`\n\n`) via `html.replace(/\\par(?![a-zA-Z])/g, '\n\n')`.
+    -   This guarantees that `\par` creates a physical break that the splitter can detect.
+2.  **Universal Split**: Split content by double-newline (`\n\n`) into paragraphs.
+3.  **Iterate**:
     -   If it's a Header (`<h2>`) or Placeholder (`LATEXPREVIEW...`), leave it alone.
     -   Otherwise, run `parseLatexFormatting(text)` on it.
     -   Wrap in `<p>`.
@@ -297,9 +372,13 @@ To handle arbitrarily nested lists (e.g., `itemize` inside `enumerate`) and opti
 1. **Manual Parsing**: We do **not** use regex to find list boundaries. We iterate through the string character-by-character, using a **Balanced Brace Counter** to correctly parse complex optional arguments (e.g., `\begin{enumerate}[label=\textbf{\arabic*.}]`).
 2. **Leaf-First Recursion**: The parser identifies the "innermost" list (a leaf node that contains no other list start tags) and processes it first. It replaces the list with a safe placeholder (`__LIST_BLOCK_N__`) before processing parent lists. This guarantees infinite nesting support without regex stack overflow or "greedy match" errors.
 3. **Pipeline Ordering**: To prevent incorrect parsing, **Verbatim/Code extraction happens BEFORE List parsing**. This ensures `\item` commands inside code blocks are ignored by the list parser.
-4. **Math Safety**: Content is passed through `resolvePlaceholders()` to restore math *before* HTML generation.
-5. **Manual Formatting**: We manually parse formatting macros (`\emph`, `\textbf`, `\textsc`) within list items, including support for nested braces (e.g., `\textbf{\textit{text}}`).
-6.  Final HTML lists are wrapped in `createPlaceholder()` 
+4. **Recursion-Aware Item Extraction (v1.9.78)**: The `listContent` loop tracks `nestedListDepth` to ensure that nested `\begin...\end` blocks are captured entirely within the parent item. This prevents premature truncation of nested lists.
+5. **Inline Recursion (Depth > 0)**:
+   - **Top Level (Depth 0)**: List is wrapped in `createPlaceholder` to protect it from downstream regex (like Math).
+   - **Nested Levels (Depth > 0)**: Lists are returned as **Raw HTML** (`<ol>...</ol>`) without placeholders. This allows the parent list to wrap the entire nested structure in its own placeholder, maintaining atomic integrity.
+6. **Math Safety**: Content is passed through `resolvePlaceholders()` to restore math *before* HTML generation.
+7. **Manual Formatting**: We manually parse formatting macros (`\emph`, `\textbf`, `\textsc`) within list items.
+8. **Manual Parsing Risks (v1.9.79)**: Manual parsers are fragile. Hardcoded skips (e.g., `i += 15`) led to bugs where valid content was swallowed. Future implementations should use dynamic length checks (e.g., `i += tag.length`). 
 
 ---
 
@@ -318,7 +397,29 @@ Regex is insufficient for nested braces in LaTeX. To handle `\parbox`, we implem
 - **Heuristic**: It converts LaTeX lengths like `0.5\textwidth` directly to CSS `width: 50%`.
 
 
+
+### 14. Safety Sweep (v1.9.89)
+**Purpose**: To prevent "Total Preview Breakdown" when the AI generates truncated or malformed LaTeX (e.g. missing `\end{algorithm}`).
+**Mechanism**:
+- A final pass regex `(\\begin\{[^}]+\}(?:(?!\\section|...|<h[1-6]|&lt;h[1-6])[\\s\\S])*?)(?=\\section|...|<h|&lt;h|\\end|$)` scans for residual environments.
+- **Constraint**: It stops if it encounters a Section header (`\section`), a converted HTML header (`<h3>`), or an **escaped HTML header** (`&lt;h3&gt;`).
+- It wraps the fragment in `<pre class="latex-error-block">` containers.
+- **Result**: Broken blocks are contained locally; valuable subsequent content remains formatted and visible.
+
 ### Vertical Rhythm Strategy (The "Structural Owl")
+
+... (Content omitted for brevity) ...
+
+## 13. Uniform Sanitization Policy (v1.9.86)
+
+**Background**: Historically, we only sanitized "Section" content because we assumed short fields like "Abstract" or "Title" were safe.
+
+**The Breach**: The Abstract generation step (Phase 3) bypassed sanitization. When the AI model (Gemini-3-Pro) outputted chain-of-thought traces (`> Thinking...`), these artifacts leaked directly into the final document.
+
+**The Fix**:
+1.  **Universal Sanitization**: Every string outputted by the AI (Titls, Abstracts, Captions) passes through `sanitizeLatexOutput`.
+2.  **Hardened Regex**: The sanitizer now aggressively strips blockquotes (`> ...`) and chatty headers (`Thinking Process:`), protecting the document from "AI Monologue" leaks.
+
 
 We use a specific CSS selector strategy to manage vertical rhythm without complex calculations.
 
@@ -403,13 +504,21 @@ HTML escaping is destructive to LaTeX math (e.g., `x < y` becomes `x &lt; y`, wh
 
 This section documents the **CSS Architecture** and **Layout Engine** that powers the visual preview.
 
-## 15. The CSS Trinity (File Architecture)
+## 7. The Rendering Pipeline (Architecture v5)
 
-The styling is strictly separated into three layers, located in `client/src/styles/`:
+**The Old World**: We used `latex.js`. It was fragile, crashed on macros, and couldn't handle complex documents.
+**The New World**: We use a **Custom Regex Parser** (Hybrid Architecture).
 
-### 1. `latex-article.css` (The Skin)
+### Core Philosophy
+1.  **Sanitization First**: We strip everything the browser doesn't understand (Preamble, Comments).
+2.  **Encapsulation**: We hide complex Math and TikZ in safe placeholders.
+3.  **Direct HTML Injection**: We use standard DOM operations (`innerHTML`) to inject the processed content.
+4.  **No external runtime**: The "Engine" is just `LatexPreview.tsx` + `processor.ts`.
 
-This file is the **User-Facing** style controller. It turns a `<div>` into a "Paper".
+### Why this works
+-   **Zero Crashes**: Regex replacements cannot "crash" the way a compiled parser does.
+-   **Full Control**: If a specific environment (like `algorithm`) breaks, we just add a specific handler for it.
+-   **Speed**: No heavy library to load. Instant render. It turns a `<div>` into a "Paper".
 
 - **The Container**: `.latex-preview`
   - **Dimensions**: Hardcoded to `width: 210mm` (A4 ISO standard) and `min-height: 297mm`.
@@ -508,7 +617,17 @@ The `parseLatexFormatting` function used for Tables and Parboxes uses **non-recu
   - `\textbf{Bold}` -> **Bold** (Works)
   - `\textbf{Bold \textit{Italic}}` -> Fails (breaks on the inner brace). The user sees the raw LaTeX commands.
 
-### 4. Silent Markdown Stripping
+### 6. Plot Safety Protocol (v1.9.82)
+
+Mathematical plots are uniquely fragile.
+- **The Problem**: A function like `y=1/x` has asymptotes that shoot to infinity. The TikZ engine's layout algorithms (Fill Width, Adaptive Y) would stretch these invisible lines to fill the screen, creating massive whitespace.
+- **The Protocol**:
+  1.  **Detection**: If `\plot` is found.
+  2.  **Square Scaling**: We enforce `x=1, y=1` to prevent geometric distortion (ellipses).
+  3.  **Local Clipping**: We calculate the bounding box of the axes and wrap the `plot` command in a `\begin{scope}` with a precision `\clip`. This trims the asymptote without cutting off labels.
+  
+### 7. Silent Markdown Stripping
+
 
 Users often paste AI output that includes markdown code fences.
 
@@ -552,7 +671,7 @@ Certain commands are actively removed to prevent errors or clutter:
 
 - **File System Access**: `\input{...}` and `\include{...}` are removed because the browser cannot access the server's file system.
 - **Metadata Lists**: `\tableofcontents`, `\listoffigures`, `\listoftables` are removed as we cannot generate them dynamically without a second pass.
-- **Figure Wrappers**: `\begin{figure}` environments are "flattened" (tags removed, content kept) because floating layout logic is handled by CSS, not LaTeX.
+- **Figure Wrappers**: `\begin{figure}` environments are **Non-Destructively Flattened** (v1.9.99). We convert them to `<div class="latex-figure-wrapper">` and preserve inner `\caption{...}` as `<div class="caption">`. This ensures floating content (like TikZ) retains its context and label.
 - **Captions/Labels**: `\caption`, `\label`, and `\ref` are currently stripped or replaced with `[?]` placeholders to prevent undefined reference errors.
 
 ### Fatal Error Handling
@@ -582,10 +701,12 @@ We parse the original `node distance` (defaulting to 2.0cm if missing, or 1.8cm 
 
 | Intent      | Goal              | Action                                                               |
 | ----------- | ----------------- | -------------------------------------------------------------------- |
+| Intent      | Goal              | Action                                                               |
+| ----------- | ----------------- | -------------------------------------------------------------------- |
 | **WIDE**    | **Fit to A4**     | Dynamic `scale=(14/span × 0.9)`, `transform shape`                   |
 | **FLAT**    | **Balance Ratio** | Multiplier: `y × (ratio/2)`, `x × 1.5`, strip old x/y                |
 | **COMPACT** | **Fit to A4**     | `scale=0.75` (if dense), `transform shape`, `node distance=1.5cm`    |
-| **LARGE**   | **Readability**   | `scale=1.0` (or 0.85), `node distance=5cm` (Boosted), `align=center` |
+| **LARGE**   | **Readability**   | **Continuous Scale**: `target=12/span` (12cm width). Clamped [1.3, 2.5] |
 | **MEDIUM**  | Balance           | **Smart Scale**: `1.0` (Fits A4) or `0.8/0.9` + Dist (2.5cm)         |
 
 - `node distance` (in cm) controls `below of=`, `right of=` positioning → independent of coordinate scaling
@@ -796,3 +917,120 @@ To prevent "Blank Diagrams" (silent crashes), the TikZ engine now performs aggre
 ### 24.4 Table Robustness
 -   **Ampersand Glitch**: Specific regex patches exist for known AI typos like `Built-in & Comprehensive` (unescaped `&`).
 -   **Width**: Tables are forced to `width: 100%` via CSS to prevent aggressive text wrapping in narrow columns.
+
+## 30. Universal Prompt Hardening (v1.9.37)
+
+**The Philosophy**: You cannot fix every AI hallucination with regex. At some point, you must fix the *source*.
+
+### 1. The "No Labels" Contract
+- **Problem**: AI models, when asked for specific sections, often hallucinate labels like `SECTION NAME: Introduction` or `CONTENT: ...` inside the JSON content field.
+- **Old Fix**: Endlessly chasing these patterns with regex (`/^SECTION NAME:/`, `/^Title:/`).
+- **New Fix (The Contract)**: We updated the System Prompt (Phase 3 & 5) to explicitly forbid labels:
+  > `"content": "Raw LaTeX Only. Starts directly with text/commands. NO LABELS."`
+- **Universality**: This prevents the issue for *all* future document types, reducing the load on the sanitization layer.
+
+### 2. The "Table Stability" Protocol
+- **Problem**: The AI often writes `Policy analysis & public sentiment` inside a table cell.
+- **The Crash**: `&` is a special column separator in LaTeX. If unescaped, it creates an extra column, causing the table parser to overflow and break the layout (10 columns instead of 4).
+- **The Fix (Prompt Level)**: We added a critical validation rule to the Prompt:
+  > `ESCAPE SPECIAL CHARACTERS: You MUST escape & (as \&) and % (as \%) in text content.`
+- **Result**: The AI now generates `Policy analysis \& public sentiment`, which parses correctly as text within a single cell.
+
+### 3. The "Ghost Content" Safety Net
+- **Layer 1 (Prompt)**: The primary defense (as above).
+- **Layer 2 (Code)**: We retain the regex strippers in `latexGenerator.ts` as a fallback safety net.
+  - `content.replace(/^SECTION NAME:.*?\n/i, '')`
+  - `content.replace(/^CONTENT:\s*/i, '')`
+- **Layer 3 (Rendering)**: We updated `LatexPreview.tsx` to handle `\par` commands (often leaked by AI) by converting them to double-newlines (`\n\n`), ensuring they are processed as proper paragraphs rather than rendered as raw text.
+
+### 31. The Universal Text Pass (v1.9.39)
+**Problem**: After removing `latex.js`, "standard" LaTeX text (like `\&`, `\textbf`, `\par`) was falling through as raw string content because the new modular engines only targeted specific blocks (TikZ, Math, etc.).
+**Solution**: A global `parseLatexFormatting()` pass is now applied to the *entire* document content at the very end of the `processor.ts` pipeline.
+**Scope**:
+- **Unescaping**: Handles `\&` -> `&`, `\%` -> `%`, `\$` -> `$`, `\{` -> `{`.
+- **Typogaphy**: Converts `--` to en-dash, `---` to em-dash, ` `` ` to quotes.
+- **Double-Escape Handling**: critical for AI output, `\\&` is converted to `&` (prioritized over single escape).
+### 32. TikZ Arrow Sanitization (v1.9.44)
+**Problem**: The AI frequently writes Arrows like `\rightarrow` or `\Rightarrow` inside TikZ node labels *without* math mode (e.g., `Node A \rightarrow Node B`). This causes a `! Missing $ inserted` crash in TikZJax.
+**Solution**: We automatically wrap known arrow commands in `\ensuremath{...}` within `tikz-engine.ts`.
+-   `\rightarrow` -> `\ensuremath{\rightarrow}`
+-   `\leftarrow` -> `\ensuremath{\leftarrow}`
+-   `\Rightarrow` -> `\ensuremath{\Rightarrow}`
+-   `\Leftarrow` -> `\ensuremath{\Leftarrow}`
+-   `\leftrightarrow` -> `\ensuremath{\leftrightarrow}`
+-   `\Leftrightarrow` -> `\ensuremath{\Leftrightarrow}`
+**Mechanism**: `\ensuremath` checks `\ifmmode`. If true (already in math), it does nothing. If false (text mode), it wraps the content in `$ ... $`. This makes the fix robust regardless of context.
+
+### 33. The Grayscale Mandate (v1.9.48)
+**Problem**: AI generated diagrams often included colors (`red!60`, `blue`) which violated academic printing standards (Black & White).
+**Solution**: Updated System Prompts (Thinker & Rewriter) to explicitly ban color and mandate grayscale or patterns (`dotted`, `dashed`, `thick`).
+**Universality**: Applies to ALL future content generation requests.
+
+### 34. Universal List Argument Stripping (v1.9.48)
+**Problem**: `itemize` and `description` environments with optional arguments (e.g., `\begin{itemize}[noitemsep]`) leaked the argument as literal text because the parser only skipped the environment name.
+**Solution**: Implemented a recursive bracket-skipping loop in `processor.ts` (List Engine) for all list types.
+**Universality**: Handles ANY valid LaTeX optional argument structure, including nested brackets (e.g., `[label={[a]}]`), ensuring no configuration text ever leaks into the render.
+
+### 35. Forced Table Cell Alignment (v1.9.48)
+**Problem**: Lists inside tables inherited the global `text-align: justify`, causing awkward gaps in narrow table columns.
+**Solution**: Enforced `text-align: left !important` via CSS selector `.latex-preview td *`.
+**Universality**: Applies to ALL content (lists, paragraphs, divs) inside ANY table cell, overriding all conflicting global styles.
+
+### 37. Bibliography URL Line Break (v1.9.63)
+**Change**: Bibliography URLs now appear on a new line for improved readability.
+- **Before**: `Author. Title. Venue, 2024. URL: https://...`
+- **After**: `Author. Title. Venue, 2024.` (new line) `\url{https://...}`
+- **Implementation**: Added `\\\\` (LaTeX line break) before `\url{}` in `latexGenerator.ts`.
+
+### 38. The "Self-Destructing Escaping" Fix (v1.9.65)
+**Problem**: HTML header tags (`<h2>`, `<h3>`) rendered as literal text (`&lt;h2&gt;Introduction&lt;/h2&gt;`).
+**Root Cause**: `parseLatexFormatting()` escaped `<` and `>` to HTML entities, but it also GENERATES those very tags!
+**The Paradox**: A function that creates `<strong>`, `<em>`, `<h2>` was destroying its own output by escaping angle brackets.
+**Solution**: Removed `<>` escaping from `parseLatexFormatting()`. HTML escaping should happen at INPUT (untrusted data boundary), not OUTPUT (processed data exit).
+**Universal Impact**: Fixed rendering of ALL HTML tags: `<h2>`, `<h3>`, `<h4>`, `<strong>`, `<em>`, `<code>`, `<br/>`, etc.
+
+### 39. Algorithm Environment Caption Handling (v1.9.65)
+**Problem**: `Algorithm. (H) \caption{Title}` appeared as literal text instead of a properly formatted header.
+**Root Cause 1**: The `[H]` option is a LaTeX **position specifier** (like `[htbp]` for floats), NOT a title. The parser was treating it as title text.
+**Root Cause 2**: `\caption{...}` inside the algorithm body was passed through unprocessed.
+**Solution**: Special handling for `algorithm` environment in `processor.ts`:
+1. Ignore `[H]` (or any position specifier like `[t]`, `[b]`)
+2. Extract `\caption{...}` from body and use it as the title
+3. Strip `\caption{}` and `\label{}` from the body before rendering
+
+### 40. Nested Placeholder Resolution (v1.9.65)
+**Problem**: `LATEXPREVIEWMATH99` appearing as literal text inside algorithm blocks.
+**Root Cause**: When `processMath()` extracts math to placeholders, and then `processAlgorithms()` wraps the body (containing those placeholders) into ANOTHER placeholder, the math placeholders become "nested". The final restoration only resolved top-level placeholders.
+**Solution**: Added recursive placeholder resolution in `LatexPreview.tsx`:
+```typescript
+while (hasUnresolved && resolveCount < maxResolves) {
+    for (const key in blocks) {
+        blocks[key] = blocks[key].replace(/(LATEXPREVIEW[A-Z]+[0-9]+)/g, (match) => {
+            return blocks[match] || match;
+        });
+    }
+}
+```
+This ensures placeholders within placeholder HTML content are fully resolved before DOM injection.
+
+### 41. Markdown Header Stripping (v1.9.64)
+**Problem**: AI sometimes outputs Markdown headers (`# ABSTRACT`, `## Section`) inside LaTeX content.
+**Root Cause**: LLMs occasionally mix Markdown and LaTeX syntax, especially for section headers.
+**Solution**: Added stripping of Markdown headers in `parseLatexFormatting()`:
+```typescript
+.replace(/^#{1,6}\s+.*$/gm, '')
+```
+**Prompt Fix**: Added `NO MARKDOWN HEADERS` to abstract prompt and `PURE LATEX ONLY` rule to Phase 3.
+
+### 42. Multirow Table Support with Rowspan Tracking (v1.9.65)
+**Problem 1**: `\multirow{4}{*}{\textbf{Academic}}` rendered as literal text.
+**Root Cause**: Simple regex couldn't handle nested braces like `\textbf{}` inside `\multirow{}`.
+**Solution**: Implemented brace-counting parser that tracks depth to correctly extract the content argument.
+
+**Problem 2**: Tables with `\multirow` had misaligned columns - the last column shifted right.
+**Root Cause**: In HTML tables, when a cell has `rowspan="4"`, subsequent rows should have fewer cells (they skip that column). But we were generating empty `<td></td>` for the "phantom cell" that starts rows 2-4 in LaTeX.
+**The HTML Rule**: A `rowspan="N"` cell occupies its column for N rows. Rows 2-N must NOT have a cell in that position.
+**Solution**: Implemented `activeRowspans: Map<column, remainingRows>` to track which columns have active rowspans. On each row:
+1. Decrement all active rowspan counters
+2. If first cell is empty AND column 0 has active rowspan → skip the phantom cell
+**Result**: Correct column alignment for all multirow tables.

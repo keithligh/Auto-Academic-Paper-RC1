@@ -1,10 +1,459 @@
-<!-- GOSPEL RULE: NEVER USE replace_file_content. ALWAYS USE multi_replace_file_content or write_to_file. -->
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.9.100] - 2025-12-13 (Configuration Fixes)
+### Fixed
+- **Librarian Bot Name Mismatch**: Fixed a typo in `ConfigPage.tsx` and `poe.ts` where the custom bot was defined as `Gemini25Flash-APP` (Client) but rejected by the whitelist or server as invalid. Corrected to `Gemini25Flash-AAP` across the stack.
+- **Documentation**: Comprehensively updated `LATEX_PREVIEW_SYSTEM.md` and `TIKZ_HANDLING.md` with recent architectural decisions (Non-Destructive Flattening, Wrapper Preservation).
+
+## [1.9.99] - 2025-12-13 (Non-Destructive Flattening)
+### Fixed
+- **Missing Figures / Captions**: Identified that legacy "Flattening" logic (intended to inline figures) was **destructive**, aggressively deleting `\caption{...}` and `\begin{figure}` wrappers. This caused diagrams to lose their context and titles.
+- **Fix**: Upgraded flattening logic to be **Structured & Non-Destructive**. It now converts `figure`/`table`/`algorithm` wrappers into semantic HTML `<div>` blocks and correctly renders captions instead of deleting them.
+- **Scoped List Support**: (v1.9.98) Restored rendering of lists inside algorithms.
+- **Whitespace Synchronization**: (v1.9.97) Fixed Red Box triggers.
+- **Custom Macros**: Added support for `\where:` -> `Where:` (often hallucinated by AI in equation context).
+- **Healer Verification**: Confirmed `healer.ts` correctly strips literal `\n` sequences and Markdown fences (` ```latex `) that confuse the parser.
+
+## [1.9.95] - 2025-12-13 (Symbol Corruption Fix)
+### Fixed
+- **Critical Font Corruption**: Fixed a severe bug in `parseLatexFormatting` where unprotected math symbol replacements (e.g., `\cap` -> `∩`, `\subset` -> `⊂`) corrupted matching LaTeX commands (e.g., `\caption` -> `∩tion`). Added `(?![a-zA-Z])` lookaheads to all unsafe replacements to ensure they only match whole words/symbols.
+
+## [1.9.94] - 2025-12-13 (Safety Sweep Escaped HTML)
+### Fixed
+- **Pipeline Order Conflict (Final)**: Updated Safety Sweep `(?!...)` and `(?=...)` conditions to handle **ESCAPED HTML headers** (`&lt;h[1-6]`). The text formatter runs before the sweep and escapes brackets, so checking for `<h3>` was insufficient.
+- **Terminator Logic**: Added a positive lookahead `(?=...)` to the regex terminator. This ensures that the sweep successfully *matches* and *wraps* the broken block when it hits a header, instead of failing the match and leaving the code raw.
+
+## [1.9.92] - 2025-12-13 (Safety Sweep HTML Awareness)
+### Fixed
+- **Pipeline Order Conflict**: Updated Safety Sweep lookahead to detect **HTML headers** (`<h[1-6]`) in addition to LaTeX headers. Because `processHeaders` runs *before* the Safety Sweep, sections are already converted to `<h3>`, etc., causing the previous regex (checking for `\section`) to miss them and swallow the content.
+
+## [1.9.91] - 2025-12-13 (Crash Fixes & Logging)
+### Fixed
+- **Engine Crash**: Added "Color Aliases" (`Navy --> navy`, `Maroon --> maroon`) to `tikz-engine.ts` to prevent `jsTeX` crashes caused by capitalized color names.
+- **Debug Logs**: Added verbose logging to `LatexPreview` and `processor.ts` to capture failing content and safety triggers.
+
+## [1.9.90] - 2025-12-13 (Safety Sweep Refinement)
+### Fixed
+- **Runaway Error Blocks**: Refined the "Safety Sweep" regex to include a negative lookahead `(?!\\section|\\subsection)`. This ensures that even if a block is unclosed, the error container captures *only* the block and stops at the next section header, preventing the "Red Box" from swallowing the rest of the document.
+- **Regex Compatibility**: Replaced ES2018 `s` flag with `[\s\S]` for broader browser support.
+
+## [1.9.89] - 2025-12-13 (Robust Preview Parsing)
+### Fixed
+- **Total Preview Breakdown**: Implemented "Safety Sweep" in `processor.ts` to detect and wrap malformed LaTeX blocks (like truncated Algorithms) in error containers, preventing them from breaking the entire preview rendering.
+- **Robust Headers**: Updated Section/Subsection regexes to use recursive nested brace matching, ensuring headers are parsed correctly even in complex or slightly malformed documents.
+
+## [1.9.88] - 2025-12-13 (Markdown Thinking Cleanup)
+### Fixed
+- **Persistent Artifacts**: Hardened `sanitizeLatexOutput` to remove Markdown-style `*Thinking...*` and `*Thinking Process...*` artifacts that evaded previous filters.
+
+## [1.9.89] - 2025-12-13 (Robust Preview Parsing)
+### Fixed
+- **Total Preview Breakdown**: Implemented "Safety Sweep" in `processor.ts` to detect and wrap malformed LaTeX blocks (like truncated Algorithms) in error containers, preventing them from breaking the entire preview rendering.
+- **Robust Headers**: Updated Section/Subsection regexes to use recursive nested brace matching, ensuring headers are parsed correctly even in complex or slightly malformed documents.
+
+## [1.9.88] - 2025-12-13 (Markdown Thinking Cleanup)
+### Fixed
+- **Persistent Artifacts**: Hardened `sanitizeLatexOutput` to remove Markdown-style `*Thinking...*` and `*Thinking Process...*` artifacts that evaded previous filters.
+
+## [1.9.87] - 2025-12-13 (Academic Color Palette)
+### Fixed
+- **Undefined TikZ Colors**: Fixed `Package pgfkeys Error` caused by AI using `darkgreen`, which is undefined in TikZJax.
+- **Aesthetic Enforcement**: Implemented "Color Polyfill" that automatically redefines primary colors to professional shades:
+  - `red` -> **Maroon**
+  - `blue` -> **Navy Blue**
+  - `green` -> **Forest Green**
+  - `darkgreen` -> **Defined** (rgb 0, 0.4, 0)
+
+## [1.9.86] - 2025-12-13 (Reasoning Artifact Cleanup)
+### Fixed
+- **Reasoning Leaks**: Patched `sanitizeLatexOutput` to aggressively strip "Thinking" blockquotes (`> Thinking...`) and "Thinking Process:" headers that were leaking into the final Abstract.
+- **Scope**: Applied sanitization specifically to the Abstract generation phase (previously raw output).
+
+## [1.9.85] - 2025-12-13 (Tiered Librarian Limits)
+### Added
+- **Tiered Search Query Limits**:
+  - **Minimal Enhancement**: Capped at **5 queries** (Speed/Cost efficiency).
+  - **Standard Enhancement**: Capped at **10 queries** (Balanced research).
+  - **Advanced Enhancement**: Capped at **20 queries** (Deep dive, strictly enforced).
+  - **Why**: Prevents "analysis paralysis" and ensures resource usage scales proportionally with user intent. Previously, "Advanced" was effectively unlimited, leading to massive context usage without proportional quality gain.
+
+## [1.9.84] - 2025-12-13 (Unified Status Logging)
+### Changed
+- **SSOT Log Format**: Unified all backend service logs to a single, consistent format:
+  - **Format**: `[Phase] Content... (N chars)`
+  - **Optimization**: Truncated dynamic section names to 60 characters to fit standard terminal rows while preserving key information.
+  - **Scope**: Applied to Strategist, Thinker, Reviewer, Rewriter, and Editor phases.
+  - **Benefit**: "One Row Per Update" - Eliminates terminal wrapping and scroll fatigue while maintaining visibility into the "heartbeat" of the generation process.
+
+## [1.9.83] - 2025-12-13 (TikZ Continuous Scaling)
+### Fixed
+- **TikZ Scale Clamping**: Replaced the "Step Function" clamp (which created a sizing "Cliff" between span 6 and 8) with a **Continuous Adaptive Scaling** logic. Now targets a diagram width of ~12cm (75% A4), ensuring predictable and consistent sizing for diagrams of all intrinsic widths.
+
+## [1.9.82] - 2025-12-13 (TikZ Local Clip)
+### Fixed
+- **TikZ Auto-Clip Refined**: The previous "Global Clip" (v1.9.81) occasionally cut off axis labels that extended beyond the grid. The new **Local Scope Clip** surgically wraps only the `\draw ... plot ...` command in a clipping scope. This trims asymptotic curves to the axis bounding box while guaranteeing that labels and arrows remain fully visible.
+
+## [1.9.81] - 2025-12-13 (TikZ Auto-Clip)
+### Fixed
+- **TikZ Unbounded Plots**: Implemented **Auto-Clipping** for diagrams with plots. Mathematical functions (like $1/x$) often shoot to infinity outside the drawn axes. The Engine now calculates the "Explicit Bounding Box" of the axes/nodes and injects a `\clip` command (+1 unit padding) to physically cut off these "Off the Chart" lines, preserving the visual layout.
+- **TikZ Plot Distortion**: Enforced strictly square scaling (`x=1, y=1`) prevents ellipses and distortion.
+
+## [1.9.80] - 2025-12-13 (TikZ Scope & Plot Fix)
+### Fixed
+- **TikZ Scope Shifts**: The Intent Engine now accounts for `xshift` and `yshift` in `scope` environments. Previously, shifted scopes were treated as overlapping, causing wide diagrams to be misclassified as small/compact.
+- **TikZ Plot Safety**: Implemented a strict **1:1 Aspect Ratio Enforcement** (`x=1, y=1`) when `plot` commands are detected. This prevents "Vertical Blowout" on asymptotic functions (like $1/x$) and eliminates geometric distortion (squashed circles) caused by mismatched X/Y scaling.
+
+## [1.9.79] - 2025-12-13 (Quote Environment Support)
+### Added
+- **Quote Environment**:
+  - **Feature**: Added support for `\begin{quote} ... \end{quote}`.
+  - **Visuals**: Renders as an indented <blockquote> with italic styling and inner formatting (bold, etc.) support.
+  - **Bug Fix**: Removed a duplicate index increment in `enumerate` logic that was swallowing content after lists.
+
+## [1.9.78] - 2025-12-13 (Nested List & Algorithm Fix)
+### Fixed
+- **Nested Lists in Algorithms (The "Empty List" Bug)**:
+  - **Symptom**: `\begin{enumerate}` nested inside `\begin{algorithm}` (or invalidly inside `\item`) resulted in empty list items and literal `\end{enumerate}` text.
+  - **Root Cause**: The manual `processLists` parser had a "flat" extraction loop. When it encountered a nested `\item`, it thought the parent item had ended, truncating the content passed to the recursive parser.
+  - **Fix 1 (Extraction)**: Rewrote the `itemContent` loop to track `nestedListDepth`. It now ignores `\item` tags inside nested environments (`enumerate`, `itemize`, `description`), ensuring the full parent item is captured.
+  - **Fix 2 (Recursion)**: Changed `processLists` to output **Inline HTML** instead of placeholders when `depth > 0`. This prevents nested placeholders, which simplified the resolution logic and avoided race conditions.
+  - **Impact**: Complex nested algorithms (e.g., SGCV) now render perfectly with full indentation and numbering.
+
+## [1.9.79] - 2025-12-13 (Quote Environment Support)
+### Added
+- **Quote Environment**:
+  - **Feature**: Added support for `\begin{quote} ... \end{quote}`.
+  - **Visuals**: Renders as an indented <blockquote> with italic styling and inner formatting (bold, etc.) support.
+  - **Bug Fix**: Removed a duplicate index increment in `enumerate` logic that was swallowing content after lists.
+
+## [1.9.77] - 2025-12-13 (Paragraph Formatting Fix)
+### Changed
+- **Paragraph Spacing Instead of Indentation**:
+  - **Problem**: LaTeX export used traditional first-line indentation instead of line breaks between paragraphs.
+  - **User Request**: Wanted paragraphs separated by line breaks, no indentation.
+  - **Solution**: Added `\setlength{\parindent}{0pt}` and `\setlength{\parskip}{1em}` to LaTeX preamble in `latexGenerator.ts`.
+  - **Preview Compatibility**: Already compatible - CSS uses `text-indent: 0` and `margin-bottom: 1em`.
+
+## [1.9.76] - 2025-12-13 (BOM Prevention in LaTeX Export)
+### Fixed
+- **"Undefined control sequence \documentclass" Error**:
+  - **Symptom**: pdflatex failed on line 1 with "Undefined control sequence" on `\documentclass`.
+  - **Root Cause**: Express `res.send(string)` was adding UTF-8 BOM (Byte Order Mark: `EF BB BF`) to the file.
+  - **Why BOM Breaks LaTeX**: LaTeX parsers expect the file to start with `\` (backslash), not `EF BB BF`.
+  - **Solution**: Changed `server/routes.ts` export endpoint from `res.send(exportSafeLatex)` to `res.send(Buffer.from(exportSafeLatex, 'utf-8'))`.
+  - **Result**: Binary-safe output without BOM, LaTeX compiles successfully.
+
+## [1.9.75] - 2025-12-13 (Text Mode Algorithm Fix)
+### Fixed
+- **"Missing $ inserted" in Algorithm Blocks**:
+  - **Symptom**: Line 790: `\text{Integrity}(A, C) \geq $\theta$` → "Missing $ inserted" error.
+  - **Root Cause**: AI was wrapping algorithm keywords in `\text{}` (a math-mode command), but algorithm environments are already in text mode.
+  - **Why It Fails**: `\text{}` requires math mode (`$...$`), creating a mode conflict.
+  - **Solution**: Added regex replacements to `sanitizeLatexForExport` in `server/ai/utils.ts`:
+    - Remove `\text{if}`, `\text{then}`, `\text{else}`, etc.
+    - Strip `\text{}` from identifiers: `\text{Integrity}` → `Integrity`
+  - **Reasoning**: Algorithm blocks are prose-like, so text doesn't need special wrapping.
+
+## [1.9.74] - 2025-12-13 (Algorithm Command Normalization)
+### Fixed
+- **"Undefined control sequence \REQUIRE" Error**:
+  - **Symptom**: Line 616: `\REQUIRE` → "Undefined control sequence" error.
+  - **Root Cause**: AI was outputting uppercase algorithm commands (`\REQUIRE`, `\STATE`) but the `algpseudocode` package uses mixed-case (`\Require`, `\State`).
+  - **Why Mixed-Case**: `algpseudocode` is the modern standard; `algorithmic` (uppercase) is legacy.
+  - **Solution**: Added automatic normalization to `sanitizeLatexForExport` in `server/ai/utils.ts`:
+    - `\REQUIRE` → `\Require`, `\ENSURE` → `\Ensure`, `\STATE` → `\State`
+    - Plus all other uppercase variants (`\IF`, `\FOR`, `\WHILE`, etc.)
+  - **Design Decision**: Normalize at export time (not generation) to preserve preview compatibility.
+
+## [1.9.73] - 2025-12-13 (Strategist Anti-Fabrication Hardening)
+### Changed
+- **User Prompt Constraint Against Fabrication**:
+  - **Problem**: "Empirical Validation: Hong Kong Deployments" section appeared despite system prompt forbidding fabrication.
+  - **Root Cause**: System prompts are often deprioritized by LLMs; User prompts have higher attention.
+  - **Solution**: Added `CRITICAL CONSTRAINT` to Phase 1 Strategist **User Prompt** in `server/ai/service.ts`:
+    > "Do NOT plan 'Empirical Validation' or 'Case Studies' unless the Input Text explicitly contains raw data/metrics. If the input is theoretical, your plan MUST be theoretical."
+  - **Reasoning - Dual Defense**: System prompt sets the rules, User prompt enforces them at "instruction level".
+  - **LLM Behavior**: User prompts are interpreted as "current task requirements" and override general tendencies.
+
+## [1.9.72] - 2025-12-13 (Error Logging Improvement)
+### Fixed
+- **Generic "AI response was not valid JSON" Error**:
+  - **Problem**: User saw generic error but couldn't debug root cause.
+  - **Root Cause**: OpenRouter adapter caught `extractJson` errors and swallowed the details:
+    ```typescript
+    catch (e: any) {
+        throw new Error("AI response was not valid JSON"); // Lost e.message!
+    }
+    ```
+  - **Solution**: Changed to `throw new Error(\`AI response was not valid JSON: ${e.message || String(e)}\`);`
+  - **Result**: Revealed actual error (e.g., "402 Payment Required - insufficient credits") enabling faster diagnosis.
+  - **Dev Principle**: Always propagate inner exceptions; generic errors hide debugging information.
+
+## [1.9.71] - 2025-12-13 (JSON Parser Hardening)
+### Fixed
+- **"Unexpected non-whitespace character after JSON" Errors**:
+  - **Symptom**: Phase 2 (Librarian) failing with `Failed to parse JSON: Unexpected non-whitespace character after JSON at position 7`.
+  - **Root Cause**: `extractJson` in `server/ai/utils.ts` was accepting **JSON primitives** (e.g., `0`, `"Error"`, `true`) when AI output text like:
+    - `0 papers found` → Parsed `0` (valid JSON number), then crashed on "papers".
+    - `"Error": The model failed...` → Parsed `"Error"` (valid JSON string), then crashed on `:`.
+  - **Why Primitives Are Dangerous**: All pipeline phases expect structured Object/Array responses. Accepting primitives allowed text responses to be misidentified as "valid JSON".
+  - **Solution**: Added strict enforcement in `extractJson`:
+    ```typescript
+    if (start === -1) {
+        throw new Error(`No JSON object or array found (expected { or [). First 50 chars: "${clean.substring(0, 50)}..."`);
+    }
+    ```
+  - **Impact**: Now rejects responses without `{` or `[`, surfaces actual AI failures with context.
+  - **Design Decision**: All AI agents MUST return Objects/Arrays per schema; primitives indicate hallucination or formatting failure.
+
+## [1.9.70] - 2025-12-12 (Absolute Anti-Fabrication Rule)
+### Changed
+- **Phase 1 & 3 Anti-Fabrication Rules Strengthened**:
+  - **Problem**: AI was planning sections like "Empirical Validation" and fabricating experiments to fill them.
+  - **Root Cause**: Phase 1 (Strategist) planned sections requiring data that didn't exist in source.
+  - **Solution - Two-Layer Defense**:
+    1. **Phase 1**: Added `ABSOLUTE PRINCIPLE - NO FABRICATION EVER` with 4 sub-rules preventing planning of fabrication-prone sections.
+    2. **Phase 3 Rule 7**: Made absolute: "ZERO TOLERANCE. Never invent experiments, statistics, sample sizes, p-values, case studies, user quotes, anecdotes, or stories."
+  - **Key Principle**: "If source has data → Use EXACTLY AS-IS. No embellishment. No hallucination."
+
+## [1.9.69] - 2025-12-12 (Section Headers & Bibliography Fix)
+### Fixed
+- **Section Headers Not Rendering** (Critical Missing Feature):
+  - **Symptom**: `\subsection{Title}` appeared as literal text.
+  - **Root Cause**: `\section`, `\subsection`, `\subsubsection` handlers were COMPLETELY MISSING from `parseLatexFormatting()`.
+  - **Fix**: Added handlers: `\section{}` → `<h2>`, `\subsection{}` → `<h3>`, `\subsubsection{}` → `<h4>`, `\paragraph{}` → `<strong>`.
+
+- **AI-Hallucinated Section Depths**:
+  - **Symptom**: `\subsubssubsection{Title}` (invalid LaTeX) appearing as text.
+  - **Root Cause**: AI invented non-existent section commands.
+  - **Fix**: Added fallback `\sub+section{}` → `<h4>` to gracefully handle any depth.
+  - **Prompt Fix**: Added Rule 8 to Phase 3: "VALID SECTIONING ONLY."
+
+- **Bibliography URL Escaping Bug**:
+  - **Symptom**: `\https://...` appearing with backslash in bibliography.
+  - **Root Cause**: JavaScript escaping error - `\\\\url` produced `\\url` (line break + `url`) instead of `\url`.
+  - **Fix**: Changed to `\\url` which correctly produces `\url{}` command.
+
+- **Duplicate "ABSTRACT" Text**:
+  - **Symptom**: "Abstract" header followed by "ABSTRACT The content..."
+  - **Root Cause**: AI sometimes outputs "ABSTRACT" as first word inside abstract environment.
+  - **Fix**: Strip leading `ABSTRACT` word from abstract body since header is generated automatically.
+
+## [1.9.68] - 2025-12-12 (Common LaTeX Commands Overhaul)
+### Added
+- **50+ Common LaTeX Commands**: Research-based addition of frequently-used commands that were missing:
+  - **Math Symbols**: `\leq`, `\geq`, `\neq`, `\pm`, `\cdot`, `\ldots`, `\dots`, `\cdots`, `\infty`
+  - **Logic**: `\therefore`, `\because`, `\forall`, `\exists`
+  - **Set Theory**: `\subset`, `\supset`, `\cup`, `\cap`, `\in`, `\notin`
+  - **Greek Letters**: `\alpha` through `\omega`, plus `\Delta`, `\Sigma`, `\Omega`
+  - **Arrows**: `\uparrow`, `\downarrow`, `\updownarrow`
+  - **Spacing**: `\hspace{}`, `\vspace{}`
+  - **Layout**: `\clearpage`, `\newpage`, `\noindent`, `\centering`, `\raggedright`, `\raggedleft`, `\par`
+
+- **Dollar Sign Escaping**: Added `\$` → `$` for financial notation like `\$68,000`.
+
+- **Algorithm Package Dual Support**:
+  - **Problem**: Preview only handled `algorithmic` package (uppercase: `\STATE`), not `algpseudocode` (mixed case: `\State`).
+  - **Fix**: Made all algorithm regexes case-insensitive and added: `\State`, `\Statex`, `\If`, `\EndIf`, `\For`, `\EndFor`, `\While`, `\EndWhile`, `\Return`, `\Require`, `\Ensure`, `\Comment`.
+
+## [1.9.67] - 2025-12-12 (LaTeX Spacing Commands)
+### Fixed
+- **`\quad` and `\qquad` Not Rendering**:
+  - **Symptom**: `\quad` appearing as literal text in algorithm blocks.
+  - **Root Cause**: These spacing commands were not handled in `parseLatexFormatting()`.
+  - **Fix**: Added `\quad` → `&emsp;` (1em) and `\qquad` → `&emsp;&emsp;` (2em).
+  - **Universality**: These are the only two "quad" spacing commands in LaTeX.
+
+
+## [1.9.66] - 2025-12-12 (Anti-Fabrication Prompt Rule)
+### Changed
+- **Phase 3 Critical Rule 7**: Added anti-fabrication constraint to prevent AI from inventing fake research:
+  - **Rule**: `NO FABRICATED RESEARCH. Never invent experiments, statistics, sample sizes, p-values, or case studies.`
+  - **Problem**: AI was generating fake experiments ("We conducted a study with n=45..."), fabricated statistics, and invented case studies.
+  - **Root Cause**: Prompt said "AGGRESSIVELY ENHANCE" without explicit negative constraints. AI interpreted "enhance" as permission to invent.
+  - **Solution**: Explicit negative constraint preserves theoretical writing while blocking fabrication.
+  - **Reasoning**: Lesson 75 - "Positive Instructions are Dangerous." LLMs need explicit forbiddens, not just encouragements.
+
+## [1.9.65] - 2025-12-12 (LaTeX Preview Engine Overhaul)
+### Fixed
+- **HTML Angle Bracket Escaping** (The "Headers Not Rendering" Bug):
+  - **Symptom**: `<h2>Introduction</h2>` rendered as literal text instead of a header.
+  - **Root Cause**: `parseLatexFormatting()` escaped `<` and `>` to `&lt;` and `&gt;`, destroying our own generated HTML.
+  - **Fix**: Removed `<>` escaping from `parseLatexFormatting()`. The function GENERATES HTML, so escaping its output is self-defeating.
+  - **Universal Impact**: Fixed all HTML tags (`<h2>`, `<h3>`, `<strong>`, `<em>`, `<code>`, etc.).
+
+- **Algorithm Environment Parsing**:
+  - **Symptom**: `Algorithm. (H) \caption{Title}` appeared as literal text.
+  - **Root Cause**: `[H]` is a position specifier, not a title. `\caption{}` inside body was not extracted.
+  - **Fix**: Special handling for `algorithm` environment - ignores `[H]`, extracts `\caption{}` as title, strips both from body.
+
+- **Nested Placeholder Resolution**:
+  - **Symptom**: `LATEXPREVIEWMATH99` appearing inside algorithm blocks instead of rendered math.
+  - **Root Cause**: Placeholders inside other placeholders were never resolved (algorithm wrapped body before math was restored).
+  - **Fix**: Added recursive placeholder resolution in `LatexPreview.tsx` - resolves placeholders inside block values before final injection.
+
+- **Multirow Table Support** (The "Column Shift" Bug):
+  - **Symptom**: `\multirow{4}{*}{\textbf{Academic}}` rendered as literal text, last column misaligned.
+  - **Root Cause 1**: Simple regex couldn't handle nested braces like `\textbf{}` inside `\multirow{}`.
+  - **Root Cause 2**: No rowspan state tracking - rows after multirow had phantom empty cells.
+  - **Fix**: Implemented brace-counting parser + `activeRowspans` Map to track which columns have active rowspans. Subsequent rows skip empty cells covered by rowspans.
+  - **Lesson**: "Parse, don't Regex" for nested LaTeX structures.
+
+## [1.9.64] - 2025-12-12 (Markdown Header Stripping)
+### Fixed
+- **AI Markdown Hallucinations**:
+  - **Symptom**: `# ABSTRACT` appearing as literal text in preview.
+  - **Root Cause**: AI sometimes outputs Markdown headers (`# Title`, `## Section`) inside LaTeX content.
+  - **Fix**: Added stripping of Markdown headers in `parseLatexFormatting()`: `.replace(/^#{1,6}\s+.*$/gm, '')`.
+  - **Prompt Fix**: Added `NO MARKDOWN HEADERS` to abstract prompt and `PURE LATEX ONLY` rule to Phase 3.
+
+## [1.9.63] - 2025-12-12 (Bibliography URL Formatting)
+### Changed
+- **Bibliography URL Line Break**:
+  - **Before**: `Author. Title. Venue, 2024. URL: https://...`
+  - **After**: `Author. Title. Venue, 2024.` (new line) `\url{https://...}`
+  - **Reasoning**: Improves readability in academic papers where URLs can be long.
+
+## [1.9.62] - 2025-12-12 (Phase 4 Web Search Integration)
+### Changed
+- **Peer Reviewer Web Search**: The Phase 4 Peer Reviewer now actively uses web search for fact-checking claims.
+  - **Prompt Upgrade**: Updated system prompt to explicitly instruct the model to "USE WEB SEARCH to verify claims against current literature."
+  - **Capabilities**: The Peer Reviewer now verifies claims via live web search, checks novelty against recent publications, and cites URLs/paper titles when possible.
+  - **Architecture**: Phase 4 uses `this.librarian` (already implemented), which is now connected to search-capable custom bots.
+  - **Reasoning**: A "Peer Reviewer" should not just review existing references but actively fact-check claims against the current state of the field.
+
+
+## [1.9.61] - 2025-12-12 (JSON Parser Hardening for Flash Models)
+### Fixed
+- **Unwrapped JSON Properties (The "Flash Model" Bug)**:
+  - **Symptom**: `Gemini25Flash-APP` outputs `"found": false` instead of `{ "found": false }`, causing `Failed to parse JSON: Unexpected non-whitespace character after JSON at position 7`.
+  - **Root Cause**: Flash models sometimes ignore JSON object wrapper instructions, outputting bare key-value pairs.
+  - **Fix**: Enhanced `extractJson()` in `server/ai/utils.ts` to detect this pattern and auto-wrap in `{}`:
+    ```typescript
+    if (/^\s*"[^"]+"\s*:/.test(clean)) {
+        return JSON.parse(`{${clean}}`);
+    }
+    ```
+  - **Reasoning**: This is a pragmatic "bandaid" for unpredictable LLM behavior. The proper fix is using smarter models, but defensive parsing is standard practice in production LLM applications.
+
+## [1.9.60] - 2025-12-12 (Custom Poe Bots for Librarian)
+### Changed
+- **Custom Bot Integration**:
+  - **Librarian**: Now uses custom Poe bots instead of vanilla Gemini models.
+  - **Available Bots**:
+    - `Gemini25Pro-AAP`: High-reasoning, web search-capable (Recommended for research).
+    - `Gemini25Flash-APP`: Faster, cheaper, but less reliable JSON formatting.
+  - **UI Update**: `ConfigPage.tsx` now shows "Gemini 2.5 Pro (Custom Bot)" and "Gemini 2.5 Flash (Custom Bot)" in the Librarian dropdown.
+  - **Default**: Set to `Gemini25Pro-AAP` in `schema.ts` and `routes.ts` fallback.
+  - **Reasoning**: Custom bots have web search pre-configured, eliminating reliance on the flaky `parameters.web_search` injection.
+
+### Fixed
+- **Bot Name Typo**: Fixed `Gemini25Flash-AAP` → `Gemini25Flash-APP` (the actual bot name on Poe).
+
+
+### Added
+- **System Hardening (Robustness)**:
+    - **Timeouts**: Increased global AI timeout to **3 minutes** (180s) to prevent premature termination of deep research tasks.
+    - **Retries**: Implemented **3x Retry Logic** (`p-retry`) for all critical AI calls (Search, Content Generation), protecting against transient API failures.
+    - **Progress**: Added **Granular Streaming Feedback** (Word Counts) to give users real-time visibility into the drafting process.
+
+### Changed
+- **URL Handling (The "Plain Text" Protocol)**:
+    - **Extraction**: The Librarian (Phase 2) now explicitly extracts Source URLs.
+    - **Rendering**: URLs appear **ONLY** in the Bibliography (`\begin{thebibliography}`).
+    - **Format**: URLs are rendered as **Plain Text** (Monospace `<code>`), strictly on a **New Line** (`\\ \url{...}`). Clickable links are intentionally disabled to preserve academic neutrality and prevented visual pollution.
+- **Resource Limits (Standard vs Advanced)**:
+    - **Search Queries**: Limited to 15 (Standard) or 50 (Advanced).
+    - **Enhancements**: Limited to 20 (Standard) or Unlimited (Advanced).
+    - **Reasoning**: Prevents token explosions on lower tiers while allowing deep research for power users.
+
+## [1.9.55] - 2025-12-11 (UX & Terminology Polish)
+### Fixed
+- **Streaming Feedback (Complexity Reduction)**:
+    - **Problem**: Users felt "loops" were infinite because status messages were too long and technical.
+    - **Fix**: Shortened status messages (`[Drafting] Section (~500 w)...`) and made the count visible.
+    - **Scope**: Expanded to Phase 4 (Deep Review) and Phase 6 (Editor).
+- **Terminology Polish (Professionalization)**:
+    - **Change**: Replaced specific internal terms with academic equivalents.
+        - "Surgical Patching" -> **"Evidence Integration"**
+        - "Generating patches" -> **"Synthesizing revisions"**
+    - **Reasoning**: The "Editor" persona requires professional, academic language, not software dev slang.
+
+## [1.9.49] - 2025-12-11 (Surgical Editing Prompts)
+### Changed
+- **Phase 5 (The Rewriter) - Surgical Protocol**:
+    - **Problem**: The Rewriter was acting as a "Global Optimizer", condensing and rewriting unflagged sentences in the name of "academic rigor", leading to data loss and aggressive shortening.
+    - **Fix**: Implemented "Surgical Editing Protocol" in System and User prompts.
+    - **Logic**: Explicitly defines `WHAT TO MODIFY` (Supported Claims, Unverified Claims, Critique) vs `WHAT TO PRESERVE` (Everything else).
+    - **Impact**: The AI now acts as a precise copyeditor, touching only the specific sentences identified by the Peer Reviewer.
+
+## [1.9.48] - 2025-12-10 (Grayscale Mandate)
+### Changed
+- **AI Prompts (Phase 3 & 5)**: Explicitly banned use of colors (`\color`, `\textcolor`, `fill=red!60`) in Diagrams and Text.
+    - **Instruction**: "Academic papers are printed in black & white. Use grayscale (black!10, gray!50), patterns (dotted, dashed), or thick lines for contrast."
+    - **Reasoning**: Ensures generated PDFs are print-ready and follow academic standards.
+
+### Fixed
+- **List Artifacts**: Fixed `itemize` and `description` environments leaking optional arguments (e.g., `[noitemsep]`) into the rendered text.
+- **Table Cell Alignment**: Enforced `text-align: left !important` for all table cell content (including lists), overriding global justification rules to prevent weird spacing in narrow columns.
+
+## [1.9.46] - 2025-12-10 (Vertical Compression for Modernized Layouts)
+### Fixed
+- **TikZ Y-Scaling (Compression)**:
+    - **Problem**: "Hyper Boost Taming" (v1.9.45) fixed the override but left vertical spacing too large (3cm edge-to-edge due to `below=of` modernizer vs `below of` center-to-center intent).
+    - **Fix**: Reintroduced `y=0.5` compression for relative layouts even if explicit `node distance` is present. This counteracts the expansion caused by "Edge-to-Edge" modernization.
+    - **Result**: Vertical flowcharts are now tightly packed (approx 1.5cm net gap for 3cm user input), matching the visual expectations of "Center-to-Center" layouts.
+
+## [1.9.45] - 2025-12-10 (Hyper Boost Taming)
+### Fixed
+- **TikZ Y-Scaling (Hyper Boost Taming)**:
+    - **Problem**: Vertical flowcharts with explicit `node distance` (e.g., 3cm) were being aggressively overridden to 8.4cm or squashed with `y=0.5`.
+    - **Fix**: Relaxed override threshold from 8.4cm to 2.8cm (respecting 3cm inputs) and fixed `yUnit` logic to preserve user's unit vector (1.0) instead of squashing (0.5) when explicit distance is present.
+    - **Result**: Diagrams respect user's vertical spacing while still optimizing density for unlabeled/messy inputs.
+
+## [1.9.44] - 2025-12-10 (Context-Aware Stabilization)
+### Fixed
+- **TikZ Arrow Sanitization**:
+    - **Problem**: AI generates arrows (`\rightarrow`) in text-mode TikZ nodes, causing `! Missing $ inserted` crashes.
+    - **Fix**: Implemented auto-wrapping of arrows in `\ensuremath{...}` within `tikz-engine.ts`.
+    - **Result**: Arrows render correctly in both text and math modes.
+- **Table \n Stripping**:
+    - **Problem**: AI leaks literal `\n` sequences into tables (e.g., `\\\n\hline`), breaking rendering.
+    - **Fix**: Added heuristic in `healer.ts` to strip these sequences.
+- **Prompt Hardening ($ Escape)**: Added `\\$` rule to AI prompts to prevent invalid pricing tables.
+- **Macro Preservation**: `processor.ts` now extracts preamble macros to support simple math variables.
+
+## [1.9.37] - 2025-12-10 (Stabilization & Prompt Hardening)
+### Fixed
+- **TikZ Syntax (Deprecated Syntax Normalization)**:
+    - **Problem**: AI models generate deprecated `right of=` syntax, which ignores node widths and causes overlaps.
+    - **Fix**: Implemented Regex Normalizer in `tikz-engine.ts` to convert `right of=` -> `right=of ` (modern syntax) before rendering.
+    - **Result**: Diagrams respect node widths and spacing correctly.
+- **Universal Prompt Hardening**:
+    - **Problem**: "Ghost Content" (labels like `SECTION NAME:`) and Table Crashes (unescaped `&`) were persisting despite regex fixes.
+    - **Fix**: Updated System Prompts (Phase 3 & 5) with strict contracts: "NO LABELS" and "ESCAPE SPECIAL CHARACTERS".
+    - **Impact**: Solves the root cause of hallucinated labels and table layout breaks.
+- **Paragraph Rendering**:
+    - **Problem**: `\par` commands rendered as raw text.
+    - **Fix**: Pre-converted `\par` to `\n\n` in `LatexPreview.tsx`, enabling correct paragraph splitting.
+
+## [1.9.30] - 2025-12-10 (The "Safe Modular Extraction" Refactor)
+### Refactored
+- **Monolith Decomposition**: Split `LatexPreview.tsx` (3000+ lines) into the `latex-unifier` library.
+    - **`processor.ts`**: Main orchestrator.
+    - **`healer.ts`**: Pre-processing and sanitation.
+    - **`tikz-engine.ts`**: TikZ isolation and rendering.
+    - **`math-engine.ts`**: Math extraction and KaTeX rendering.
+    - **`citation-engine.ts`**: Bibliography and citation handling.
+    - **`table-engine.ts`**: Complex table parsing.
+- **Methodology**: Applied "Safe Extraction" (Copy-Paste -> Verify -> Integrate) to ensure zero regressions.
+- **Verification**: Added `processor.test.ts` to verify lists/algorithms, complementing the existing engine test suite.
+- **Impact**: `LatexPreview.tsx` reduced to <150 lines, focused purely on React lifecycle and DOM injection.
 
 ## [1.9.28] - 2025-12-10 (Documentation: The 60KB -> 4KB Refactor)
 ### Added
@@ -52,7 +501,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.9.26] - 2025-12-10 (Global Robustness)
 ### Fixed
 - **Global Table Fix ("Nuclear Option")**:
-  - **Issue**: Previous table fix was only in `latex-to-html.ts` (HTML parser), but the system often runs `jsTeX` (PDF engine).
+  - **Issue**: Previous table fix was only in the HTML parser, but the system often runs `jsTeX` (PDF engine).
   - **Fix**: Moved the `\\&` -> `\&` replacement to `sanitizeLatexForBrowser` in `LatexPreview.tsx`. It now runs **globally** before *any* parser (HTML or PDF) sees the code.
   - **Result**: Tables with escaped ampersands work everywhere.
 - **TikZ Leaks**:
@@ -73,7 +522,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Fix**: Explicitly **stripped** the `font=...` option from the user's input string before injecting `font=\Large`.
   - **Update**: Upgraded to `\Large` (Capital L) to better survive the 0.45x browser scaling.
 
-## [1.9.17] - 2025-12-10 (The Server Stability Patch)
+## [1.9.36] - 2025-12-10 (The Math Layout Finalization)
+### Fixed
+-   **Universal Math Scaling (The "Array" Fix)**:
+    -   **Problem**: Wide `array` tables were being clipped or shrunk to unreadable sizes.
+    -   **Fix**: Implemented **Intelligent Array Scaling v2**.
+        -   **Detection**: Now actively targets `\begin{array}` blocks.
+        -   **Heuristic**: `(TotalChars / Rows) * 0.5`. This realistically estimates row width for text-heavy tables.
+        -   **Bounds**: Threshold increased to **39em** (Full A4 Width). Scale floor set to **0.65x**.
+    -   **Result**: Tables are "Fit-to-Page" without becoming microscopic.
+-   **Math Spacing (The "Margin Collapse" Fix)**:
+    -   **Problem**: Excessive whitespace above/below equations.
+    -   **Fix 1**: Reduced global CSS margins (1.5em -> 0.5em) and padding.
+    -   **Fix 2**: Switched auto-scale wrapper to `display: block`. This restores **CSS Margin Collapsing**, merging the paragraph's bottom margin with the equation's top margin (1em + 0.5em -> 1em) instead of stacking them (1.5em).
+-   **Clipping**:
+    -   **Fix**: Switched from `overflow: hidden` to `visible` + `width: max-content` on the wrapper. This ensures the browser calculates the layout based on the full unscaled width, preventing cut-off columns.
+-   **Universal Code Styling (The "Enclosure" Fix)**:
+    -   **Problem**: Code blocks (`lstlisting`) looked raw and didn't match the Algorithm styling.
+    -   **Fix**: Implemented **Unified Code Blocks**.
+        -   Mapped `\begin{lstlisting}` (and `verbatim`) to the `.latex-verbatim` class.
+        -   Added CSS to `.latex-verbatim` to match Algorithm blocks (Gray background, border).
+        -   **Universal Parser**: `(?:\[[^\]]*\])?` regex handles arbitrary options (e.g., `[language=Python]`), ensuring robust extraction for any code block.
+-   **Preamble Stripper (The "Anti-Crash" Fix)**:
+    -   **Problem**: `\usepackage[...sort&compress...]` caused the regex parser to choke on the `&` character, resulting in a blank render.
+    -   **Fix**: Implemented aggressive stripping of `\documentclass` and `\usepackage` in `processor.ts`. This prevents 100% of Preamble-related crashes.
+-   **Typography Sanitization (The "Thousand Separator" Fix)**:
+    -   **Problem**: `105{,}000` rendered literally because HTML doesn't understand LaTeX grouping braces.
+    -   **Fix**: Added global replacement layer `/{,}/g` -> `,` in `LatexPreview.tsx` (Global Scope). Handles all occurrences in valid text.
+-   **Table Engine (Hallucination Sanitizer)**:
+    -   **Problem**: AI output `Sentiment (Fear \\& Greed)` (Double Escape) caused the table parser to see `\\` (Row Break) followed by `&`. This broke the table layout.
+    -   **Fix**: Added a pre-sanitizer in `table-engine.ts` that reverts `\\\\&` to `\\&` inside the table body before splitting rows. This preserves row integrity against bad escapes.
+-   **TikZ Engine (Percent Stripping Fix)**:
+    -   **Problem**: `100\%` in TikZ nodes was being truncated by the comment stripper `/.replace(/%.*$/gm, '')/`, causing "Undefined control sequence" errors.
+    -   **Fix**: Implemented the "Token Replacement Strategy" (documented in v1.9.25 but missing from code). Protected `\%` as tokens before stripping comments.
+-   **Ghost Content Exorcism**:
+    -   **Problem**: AI was leaking "SECTION NAME:" and "CONTENT:" labels into the final LaTeX, and `\par` commands were rendering as raw text.
+    -   **Fix 1 (Sanitization)**: Added regex strippers in `latexGenerator.ts` to remove prompt residue.
+    -   **Fix 2 (Rendering)**: Updated `LatexPreview.tsx` to convert `\par` to `\n\n` (double newline), allowing the paragraph splitter to correctly wrap text in `<p>` tags.
+    -   **Fix 3 (Deep Logic - Universal)**: Hardened AI Prompts in `service.ts` (Phase 3 & 5) with "ESCAPE SPECIAL CHARACTERS" and "NO LABELS" rules, preventing the root cause of ghost content and table crashes (unescaped `&`).
 ### Fixed
 - **Dev Server Instability ("Exit 1")**:
   - **Symptom**: The backend server would crash (`exit 1`) whenever a frontend syntax error (e.g., in CSS or TSX) occurred.
@@ -208,7 +694,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Architecture Change
 - **Removed `latex.js` Dependency**: Completely removed the fragile `latex.js` library.
   - **Reasoning**: It was the single point of failure (crashes on unknown macros, no tabularx support, no TikZ support, difficult error handling). The "Containment" strategy was costing more effort than a replacement.
-- **Implemented Custom Parser (`latex-to-html.ts`)**: Built a robust, fault-tolerant TypeScript parser.
+- **Implemented Custom Parser (`processor.ts`)**: Built a robust, fault-tolerant TypeScript parser.
   - **Philosophy**: "Show Something." Never crash. If a command is unknown, strip it or show a placeholder, but render the rest of the document.
 - **Future Development Plan**: Archived the "Iterative Long-Form Generation" strategy (The Architect/Mason/Artist pipeline) to `docs/future_development_plan.md`.
   - **Reasoning**: Feature deferred, but the detailed architectural planning (including "Full Context Propagation" findings) is valuable and preserved.

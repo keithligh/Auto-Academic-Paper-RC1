@@ -1,42 +1,38 @@
-
 /**
- * latex-unifier/citation-engine.ts
- * "The Librarian"
+ * Citation Engine for LaTeX Preview
  * 
- * Responsibility: Unified Citation Handling. 
- * PRESERVES:
- * - Robust Tokenizer: Splitting (ref_1, ref_2) correctly.
- * - IEEE Grouping: [1], [2] -> [1]–[2].
- * - Deduplication: Ensuring single processing pass.
+ * EXTRACTED FROM: LatexPreview.tsx
+ * SCOPE: IEEE Citation parsing, grouping, and Bibliography generation.
  */
 
 export interface CitationResult {
-    processedContent: string;
+    sanitized: string;
     bibliographyHtml: string | null;
-    hasBibliography: boolean;
 }
 
-export function processCitations(content: string, parseFormatting: (t: string) => string): CitationResult {
+export function processCitations(latex: string): CitationResult {
+    let content = latex;
     const citationMap = new Map<string, number>();
     let nextCitationId = 1;
     const references: string[] = [];
-    let processed = content;
 
-    // --- HELPER: IEEE FORMATTER ---
+    // Helper: IEEE Style Grouping
     const formatCitations = (keys: string): string => {
-        const keyList = keys.split(/[,\s;]+/).map((k: string) => k.trim()).filter(k => k);
+        const keyList = keys.split(',').map((k: string) => k.trim());
         const ids: number[] = [];
 
         keyList.forEach((key: string) => {
+            // Normalize: remove escaped underscores
             const normalizedKey = key.replace(/\\_/g, '_');
 
-            // Register if new
             if (!citationMap.has(normalizedKey)) {
-                // Respect explicit ref numbers (ref_5 -> [5])
+                // FIX (v1.9.5): Respect explicit ref numbers (e.g. ref_5 -> [5])
                 const match = normalizedKey.match(/^ref_(\d+)$/i);
                 let id = nextCitationId;
+
                 if (match) {
                     id = parseInt(match[1], 10);
+                    // Update nextCitationId to avoid collisions if we're jumping ahead
                     if (id >= nextCitationId) nextCitationId = id + 1;
                 } else {
                     nextCitationId++;
@@ -48,110 +44,74 @@ export function processCitations(content: string, parseFormatting: (t: string) =
             ids.push(citationMap.get(normalizedKey)!);
         });
 
-        // IEEE Style Grouping
+        // Sort ids for grouping
         ids.sort((a, b) => a - b);
-        // Deduplicate
-        const uniqueIds = Array.from(new Set(ids));
 
         const ranges: string[] = [];
-        if (uniqueIds.length === 0) return '';
+        if (ids.length === 0) return '';
 
-        let start = uniqueIds[0];
-        let end = uniqueIds[0];
+        let start = ids[0];
+        let end = ids[0];
 
-        for (let i = 1; i < uniqueIds.length; i++) {
-            if (uniqueIds[i] === end + 1) {
-                end = uniqueIds[i];
+        for (let i = 1; i < ids.length; i++) {
+            if (ids[i] === end + 1) {
+                end = ids[i];
             } else {
                 ranges.push(start === end ? `[${start}]` : `[${start}]–[${end}]`);
-                start = uniqueIds[i];
-                end = uniqueIds[i];
+                start = ids[i];
+                end = ids[i];
             }
         }
         ranges.push(start === end ? `[${start}]` : `[${start}]–[${end}]`);
-
         return ranges.join(', ');
     };
 
-    // --- REPLACEMENTS (The Robust Strategy) ---
+    // 1. Handle \cite{ref_1,ref_2,...}
+    content = content.replace(/\\cite\{([^}]+)\}/g, (match, keys) => formatCitations(keys));
 
-    // 1. Standard \cite{ref_1, ref_2}
-    processed = processed.replace(/\\cite\{([^}]+)\}/g, (match, keys) => formatCitations(keys));
-
-    // 2. Consecutive Parentheses (ref_1)(ref_2)
-    processed = processed.replace(/(\(ref_?\d+\))+/gi, (match) => {
+    // 2. Handle consecutive (ref_x)(ref_y) -> combine
+    content = content.replace(/(\(ref_?\d+\))+/gi, (match) => {
         const allRefs = match.match(/ref_?\d+/gi);
-        if (allRefs) return formatCitations(allRefs.join(','));
+        if (allRefs) {
+            return formatCitations(allRefs.join(','));
+        }
         return match;
     });
 
-    // 3. Comma/Space separated inside parentheses (ref_1, ref_2) or (ref_1 ref_2)
-    processed = processed.replace(/\(\s*((?:ref\\?_?\d+)(?:[,\s;]+ref\\?_?\d+)*)\s*\)/gi, (match, content) => {
-        return formatCitations(content);
+    // 2b. Handle comma-separated list inside parentheses: (ref_1, ref_5)
+    content = content.replace(/\(\s*((?:ref\\?_?\d+)(?:\s*,\s*ref\\?_?\d+)*)\s*\)/gi, (match, inner) => {
+        return formatCitations(inner);
     });
 
-    // 4. Single references (ref_1) with potential spaces
-    processed = processed.replace(/\(\s*ref\\?_?(\d+)\s*\)/gi, (match, num) => formatCitations(`ref_${num}`));
+    // 4. Handle single (ref_x) or (ref\_x)
+    content = content.replace(/\(\s*ref\\?_?(\d+)\s*\)/gi, (match, num) => formatCitations(`ref_${num}`));
 
-    // 5. Explicit \ref{ref_X} halluncinations
-    processed = processed.replace(/\\ref\{ref_(\d+)\}/gi, (match, num) => formatCitations(`ref_${num}`));
+    // 4b. Handle direct \ref{ref_X} hallucinations
+    content = content.replace(/\\ref\{ref_(\d+)\}/gi, (match, num) => formatCitations(`ref_${num}`));
 
+    // Generate Bibliography HTML if references exist
+    let bibliographyHtml: string | null = null;
+    const hasManualBibliography = /\\begin\{thebibliography\}/.test(latex); // Simple check
 
-    // --- BIBLIOGRAPHY EXTRACTION ---
-    let hasBibliography = false;
-    let bibliographyHtml = null;
+    if (references.length > 0 && !hasManualBibliography) {
+        let bibItemsHtml = '<ul style="list-style: none; padding: 0;">';
+        references.forEach((refKey, index) => {
+            // We re-derive the ID if needed, but since 'references' pushes in order of discovery (mostly),
+            // we might want the ACTUAL ID from the map to be perfectly safe?
+            // Actually, references array order matches the discovery order (1, 2, 3...) ONLY if no explicit ref_5 jumps.
+            // Let's use the citationMap id for the label.
+            const id = citationMap.get(refKey);
+            bibItemsHtml += `<li style="margin-bottom: 0.5em;"> [${id}] <span style="margin-left: 0.5em;"> ${refKey.replace(/_/g, ' ')}</span></li> `;
+        });
+        bibItemsHtml += '</ul>';
 
-    // We strip the manual environment and rebuild it dynamically
-    processed = processed.replace(/\\begin\{thebibliography\}([\s\S]*?)\\end\{thebibliography\}/g, (m, body) => {
-        // We ignore the user's bibliography content if we are auto-generating, 
-        // OR we parse theirs?
-        // LatexPreview.tsx lines 1450+ implies we build references from usage, 
-        // BUT lines 1321 (sanitizeLatex) implies we parse existing bib items.
-        // "SSOT": The preview logic (line 1435) builds `references` array but doesn't seem to USE it to render HTML?
-        // Wait, line 1321 (processBibliography) in sanitizeLatex parses `\bibitem`.
-
-        // CONFLICT RESOLUTION: "The User's Source is Truth". 
-        // If they provided a bibliography, we render that. 
-        // If they cited things that aren't in it... we rely on the `[?]` behavior?
-        // Actually, the new plan says "Unified".
-
-        // Let's stick to parsing the `\bibitem` entries provided by AI/User.
-        hasBibliography = true;
-
-        const items: string[] = [];
-        const bibitemRegex = /\\bibitem\{([^}]+)\}([\s\S]*?)(?=\\bibitem\{|$)/g;
-        let match;
-
-        // We re-number based on citation map if possible? 
-        // No, that changes the source order. 
-        // Standard LaTeX: Bibliography defines order.
-        // We will just parse it visually.
-
-        // ISSUE: If we use `formatCitations`, we assigned dynamic IDs. 
-        // If the bibliography exists, we should probably map those IDs to these items.
-        // But `LatexPreview.tsx` was doing DOUBLE logic.
-
-        // STRATEGY: Render the provided bibliography as-is, numbered sequentially 1..N.
-        let refNum = 1;
-        while ((match = bibitemRegex.exec(body)) !== null) {
-            // const key = match[1]; // We could use this to reverse-lookup
-            let content = match[2].trim();
-            content = parseFormatting(content);
-            items.push(`<li style="margin-bottom: 0.8em; text-indent: -2em; padding-left: 2em;"> [${refNum}] ${content}</li> `);
-            refNum++;
-        }
-
-        const bibHtml = `
-    <div class="bibliography" style="margin-top: 3em; border-top: 1px solid #ccc; padding-top: 1em;">
+        bibliographyHtml = `
+      <div class="bibliography" style="margin-top: 4em; border-top: 1px solid #ccc; padding-top: 1em;">
         <h2>References</h2>
-        <ol style="list-style: none; padding: 0; margin: 0;">
-          ${items.join('\n')}
-        </ol>
+        ${bibItemsHtml}
       </div>
     `;
-        bibliographyHtml = bibHtml;
-        return ''; // Remove from body, we return it separately
-    });
+    }
 
-    return { processedContent: processed, bibliographyHtml, hasBibliography };
+    return { sanitized: content, bibliographyHtml };
 }
