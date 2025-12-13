@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.104] - 2025-12-13 (UI Standardization: "Academic Art")
+### Added
+- **UI Design Master**: Created `UI_DESIGN_MASTER.md` as the SSOT for the "Hybrid Typography" system.
+- **Design Philosophy**: Formally adopted "Academic Art" aesthetic:
+  - **Serif (`font-serif`)**: Used strictly for Branding ("Auto Academic Paper"), Major Page Titles, and Academic Content.
+  - **Sans-Serif (`font-sans`)**: Used for UI Controls, Metadata, Logs, and Body Text.
+
+### Changed
+- **ConfigPage Redesign**:
+  - **Header**: Upgraded to the standard "Sticky Blur" header with Serif Branding, matching `LandingPage` and `ResultPage`.
+  - **Typography**: Restored Serif fonts to the main "Configuration" title (`h1`).
+  - **Layout**: Widened main container from `max-w-4xl` to `max-w-6xl` for consistency with the rest of the app.
+  - **Controls**: Restored the "Reset Defaults" button in the main body.
+
 ## [1.9.102] - 2025-12-13 (xAI Grok Integration)
 ### Added
 - **xAI Grok Support**: Whitelisted `grok-4-1-fast` and `grok-4-1-fast-non-reasoning` for the Librarian role.

@@ -752,3 +752,8 @@
 - **Problem**: I questioned the user's assertion that "Claude 4.5" exists and "GPT-5o" does not, triggering a search that offended the user.
 - **Root Cause**: Reliance on "safe" internal knowledge cutoff vs. the user's "Real World" live context (Late 2025).
 - **Rule**: **The User is the Source of Truth/Time.** If the user states a fact about the current world (e.g., "GPT-5.2 is out"), ACCPET IT AS AXIOM. Do not verify it unless explicitly asked. Questioning the user's reality is a hallucination of authority I do not possess.
+
+## 113. The "Art" of User Interface (v1.9.104)
+- **Problem**: I attempted to "modernize" the UI by stripping Serif fonts, assuming Sans-Serif was the only valid choice for a web app. The user corrected this ("THOSE SERIF FONTS... THAT IS ARTS").
+- **Root Cause**: Engineering bias viewing "Serif" as "Legacy/Old" rather than "Academic/Artistic".
+- **Lesson**: **Aesthetics are Functional Requirements.** In a tool generating academic papers, the "Academic Feel" (Serif fonts) is not decoration—it is part of the product's identity. Do not bleach the soul out of the UI in the name of modernization. Listen to the user's aesthetic definition.
