@@ -125,13 +125,13 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(/\\url\{([^{}]*)\}/g, '<code>$1</code>')
             .replace(/\\footnote\{([^{}]*)\}/g, ' ($1)')
             // Section headers (v1.9.69) - Convert to HTML headers
-            .replace(/\\section\*?\{([^{}]*)\}/g, '<h2>$1</h2>')
-            .replace(/\\subsection\*?\{([^{}]*)\}/g, '<h3>$1</h3>')
-            .replace(/\\subsubsection\*?\{([^{}]*)\}/g, '<h4>$1</h4>')
-            .replace(/\\paragraph\*?\{([^{}]*)\}/g, '<strong>$1</strong> ')
-            .replace(/\\subparagraph\*?\{([^{}]*)\}/g, '<strong>$1</strong> ')
+            .replace(/\\section\*?\s*\{([^{}]*)\}/g, '<h2>$1</h2>')
+            .replace(/\\subsection\*?\s*\{([^{}]*)\}/g, '<h3>$1</h3>')
+            .replace(/\\subsubsection\*?\s*\{([^{}]*)\}/g, '<h4>$1</h4>')
+            .replace(/\\paragraph\*?\s*\{([^{}]*)\}/g, '<strong>$1</strong> ')
+            .replace(/\\subparagraph\*?\s*\{([^{}]*)\}/g, '<strong>$1</strong> ')
             // Fallback: AI-hallucinated deep sections (e.g., \subsubssubsection) → normalize to h4
-            .replace(/\\sub+section\*?\{([^{}]*)\}/g, '<h4>$1</h4>')
+            .replace(/\\sub+section\*?\s*\{([^{}]*)\}/g, '<h4>$1</h4>')
             .replace(new RegExp(`\\\\textbf\\{${nested}\\}`, 'g'), '<strong>$1</strong>')
             .replace(new RegExp(`\\\\textit\\{${nested}\\}`, 'g'), '<em>$1</em>')
             .replace(new RegExp(`\\\\emph\\{${nested}\\}`, 'g'), '<em>$1</em>')
@@ -178,12 +178,13 @@ export function processLatex(latex: string): SanitizeResult {
             .replace(/\\circ(?![a-zA-Z])/g, '°')
             .replace(/\\therefore/g, '∴')
             .replace(/\\because/g, '∵')
+            .replace(/\\where:?/g, '<strong>Where:</strong>')
             .replace(/\\forall/g, '∀')
             .replace(/\\exists/g, '∃')
-            .replace(/\\subset/g, '⊂')
-            .replace(/\\supset/g, '⊃')
-            .replace(/\\cup/g, '∪')
-            .replace(/\\cap/g, '∩')
+            .replace(/\\subset(?![a-zA-Z])/g, '⊂')
+            .replace(/\\supset(?![a-zA-Z])/g, '⊃')
+            .replace(/\\cup(?![a-zA-Z])/g, '∪')
+            .replace(/\\cap(?![a-zA-Z])/g, '∩')
             .replace(/\\in(?![a-zA-Z])/g, '∈')
             .replace(/\\notin/g, '∉')
             // Greek letters (text mode - v1.9.68)
@@ -298,6 +299,30 @@ export function processLatex(latex: string): SanitizeResult {
                 } else {
                     output += `<ol class="latex-enumerate">\n${processedList} \n</ol> `;
                 }
+            } else if (/^\\begin\s*\{algorithm\}/.test(txt.slice(i, i + 30))) {
+                // v1.9.97 Protect Algorithm blocks from List Processing!
+                // Iterate until \end{algorithm}
+                let algoStart = i;
+                const match = txt.slice(i, i + 30).match(/^\\begin\s*\{algorithm\}/);
+                if (match) i += match[0].length;
+                else i += 16; // Fallback
+
+                let algoDepth = 1;
+                while (i < txt.length && algoDepth > 0) {
+                    // Check for nested algorithm start
+                    if (/^\\begin\s*\{algorithm\}/.test(txt.slice(i, i + 30))) algoDepth++;
+                    // Check for algorithm end
+                    if (/^\\end\s*\{algorithm\}/.test(txt.slice(i, i + 30))) algoDepth--;
+
+                    if (algoDepth === 0) {
+                        const endMatch = txt.slice(i, i + 30).match(/^\\end\s*\{algorithm\}/);
+                        if (endMatch) i += endMatch[0].length;
+                        else i += 14;
+                        break;
+                    }
+                    i++;
+                }
+                output += txt.substring(algoStart, i);
             } else if (txt.startsWith('\\begin{itemize}', i)) {
                 i += 15;
                 // Handle options [noitemsep]
@@ -518,7 +543,8 @@ export function processLatex(latex: string): SanitizeResult {
     envs.forEach(env => {
         // v1.9.65: Algorithm has special handling - [H] is position, \caption{} is title
         if (env === "algorithm") {
-            const algoRegex = /\\begin\{algorithm\}(?:\[[^\]]*\])?([\s\S]*?)\\end\{algorithm\}/g;
+            // FIX (v1.9.97): Relax regex to handle \begin {algorithm} (space support)
+            const algoRegex = /\\begin\s*\{algorithm\}(?:\[[^\]]*\])?([\s\S]*?)\\end\s*\{algorithm\}/g;
             content = content.replace(algoRegex, (match, body) => {
                 // Extract caption as title
                 let title = '';
@@ -530,10 +556,16 @@ export function processLatex(latex: string): SanitizeResult {
                 const titleHtml = title ? `<strong>${title}</strong>` : '';
                 // Remove label too
                 body = body.replace(/\\label\{[^}]*\}/g, '');
+
+                // FIX (v1.9.98): Invoke List Processor LOCALLY since we skipped it globally
+                // This handles \begin{enumerate} inside algorithms
+                body = processLists(body);
+
                 return createPlaceholder(`<div class="algorithm"><strong>Algorithm.</strong> ${titleHtml}<div class="algorithm-body">${parseLatexFormatting(body)}</div></div>`);
             });
         } else {
-            const robustRegex = new RegExp(`\\\\begin\\{${env}\\}(?:\\[(.*?)\\])?([\\s\\S]*?)\\\\end\\{${env}\\}`, 'g');
+            // FIX (v1.9.97): Relax regex to handle \begin {env} (space support)
+            const robustRegex = new RegExp(`\\\\begin\\s*\\{${env}\\}(?:\\[(.*?)\\])?([\\s\\S]*?)\\\\end\\s*\\{${env}\\}`, 'g');
             content = content.replace(robustRegex, (match, title, body) => {
                 const titleHtml = title ? `<strong>(${title})</strong> ` : '';
                 return createPlaceholder(`<div class="${env}"><strong>${env.charAt(0).toUpperCase() + env.slice(1)}.</strong> ${titleHtml}${parseLatexFormatting(body)}</div>`);
@@ -558,16 +590,31 @@ export function processLatex(latex: string): SanitizeResult {
         `<div style="text-align: center;">${parseLatexFormatting(body)}</div>`
     );
 
-    // --- FIGURE/TABLE/ALGORITHM FLATTENING ---
+    // --- FIGURE/TABLE/ALGORITHM FLATTENING (Non-Destructive v1.9.99) ---
+    // Restore: Specific Ampersand Fix for User Table
     content = content.replace(/Built-in\s+&\s+Comprehensive/g, 'Built-in \\& Comprehensive');
-    content = content.replace(/\\begin\{(figure|table|algorithm)\}(\[[^\]]*\])?([\s\S]*?)\\end\{\1\}/g, (m, env, opt, body) => {
+
+    // FIX: Relax regex (\s*) and PRESERVE structure/captions instead of deleting them.
+    content = content.replace(/\\begin\s*\{(figure|table|algorithm)\}(?:\[[^\]]*\])?([\s\S]*?)\\end\s*\{\1\}/g, (m, env, body) => {
+        // Extract caption
+        let titleHtml = '';
+        const captionMatch = body.match(/\\caption\{([^}]*)\}/);
+        if (captionMatch) {
+            titleHtml = `<div class="caption"><strong>${env.charAt(0).toUpperCase() + env.slice(1)}:</strong> ${parseLatexFormatting(captionMatch[1])}</div>`;
+        }
+
+        // Clean body (Remove commands but keep content)
         let cleaned = body
             .replace(/\\centering/g, '')
             .replace(/\\caption\{[^}]*\}/g, '')
             .replace(/\\label\{[^}]*\}/g, '')
-            // Cleanup Residue
             .trim();
-        return cleaned;
+
+        // Wrap in semantic div
+        return `<div class="latex-${env}-wrapper" style="text-align: center; margin: 1em 0;">
+            ${cleaned}
+            ${titleHtml}
+        </div>`;
     });
 
 
@@ -598,6 +645,9 @@ export function processLatex(latex: string): SanitizeResult {
     content = content.replace(/\\listoftables/g, '');
     content = content.replace(/\\input\{[^}]*\}/g, '');
     content = content.replace(/\\include\{[^}]*\}/g, '');
+    content = content.replace(/\\maketitle/g, ''); // Handled by metadata extraction + header injection
+    content = content.replace(/\\begin\{CJK\*\}\{[^}]*\}\{[^}]*\}/g, ''); // Strip CJK wrapper start
+    content = content.replace(/\\end\{CJK\*\}/g, ''); // Strip CJK wrapper end
     content = content.replace(/\\newpage/g, '');
     content = content.replace(/\\clearpage/g, '');
     content = content.replace(/\\pagebreak/g, '');
@@ -703,12 +753,14 @@ export function processLatex(latex: string): SanitizeResult {
         return createPlaceholder(bibHtml);
     });
 
-    // --- SECTION HEADERS ---
-    // Now safe to use direct HTML since parseLatexFormatting no longer escapes < and >
-    content = content.replace(/\\section\*?\s*\{([\s\S]*?)\}/g, '<h2>$1</h2>');
-    content = content.replace(/\\subsection\*?\s*\{([\s\S]*?)\}/g, '<h3>$1</h3>');
-    content = content.replace(/\\subsubsection\*?\s*\{([\s\S]*?)\}/g, '<h4>$1</h4>');
-    content = content.replace(/\\paragraph\*?\s*\{([\s\S]*?)\}/g, '<strong>$1</strong> ');
+    // --- SECTION HEADERS (Robust) ---
+    // Use nested brace matching for headers to avoid over-consumption
+    // Support up to 2 levels of nesting: { ... { ... } ... }
+    const nestedBraces = '([^{}]*(?:\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\}[^{}]*)*)';
+    content = content.replace(new RegExp(`\\\\section\\*?\\s*\\{${nestedBraces}\\}`, 'g'), '<h2>$1</h2>');
+    content = content.replace(new RegExp(`\\\\subsection\\*?\\s*\\{${nestedBraces}\\}`, 'g'), '<h3>$1</h3>');
+    content = content.replace(new RegExp(`\\\\subsubsection\\*?\\s*\\{${nestedBraces}\\}`, 'g'), '<h4>$1</h4>');
+    content = content.replace(new RegExp(`\\\\paragraph\\*?\\s*\\{${nestedBraces}\\}`, 'g'), '<strong>$1</strong> ');
 
     // --- PARAGRAPH & TEXT FORMATTING ---
     // 1. Handle explicit paragraph breaks
@@ -719,6 +771,20 @@ export function processLatex(latex: string): SanitizeResult {
 
     // 3. Apply Text Formatting (Bold, Italic, Unescape)
     content = parseLatexFormatting(content);
+
+    // 3.5. SAFETY SWEEP: Residual Environment Cleanup
+    // If any \begin{...} remains (malformed/unclosed), wrap it in <pre> to prevent raw text dump
+    // FIX (v1.9.90): Add negative lookahead to STOP consumption if a new Section/Subsection starts.
+    // Compatibility: Use [\s\S] instead of dotAll
+    // FIX (v1.9.92): Also look for CONVERTED HTML headers (<h3>, etc.) since processHeaders runs first.
+    // FIX (v1.9.93): Also look for ESCAPED HTML headers (&lt;h3&gt;) since parseLatexFormatting runs before this.
+    // FIX (v1.9.94): Allow match to succeed if it hits a Header (Terminate early), not just End Tag/EOF.
+    // FIX (v1.9.96): Relax Whitespace for Headers and End Tags (\end {algorithm})
+    content = content.replace(/(\\begin\s*\{[^}]+\}(?:(?!\\section|\\subsection|\\subsubsection|<h[1-6]|&lt;h[1-6])[\s\S])*?)(?=\\section|\\subsection|\\subsubsection|<h[1-6]|&lt;h[1-6]|\\end\s*\{[^}]+\}|$)/g, (m) => {
+        console.warn(`[SafetySweep] Caught residual block (${m.length} chars). Starts with: ${m.substring(0, 50)}...`);
+        // Create a placeholder for the raw code block
+        return createPlaceholder(`<pre class="latex-error-block" style="background:#fff0f0; border:1px solid #faa; padding:10px; overflow:auto;">${m.replace(/</g, '&lt;')}</pre>`);
+    });
 
     // 4. Paragraph Wrapping (The "Universal Paragraph Map")
     // Split by double newlines and wrap non-block content in <p>

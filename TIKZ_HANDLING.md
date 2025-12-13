@@ -346,6 +346,13 @@ The TikZ engine was prone to "Blank" renders due to browser limitations. We impl
 > const finalOptions = `[${combined}]`; // MANDATORY
 > ```
 > **Rule**: **Any transformation that unwraps a container must re-wrap it before final injection.**
+>
+> ### 17. The Wrapper Preservation Protocol (v1.9.99)
+> > **Problem**: TikZ diagrams wrapped in `\begin{figure}` were being deleted by the "Flattening" logic (which aggressively stripped float environments).
+> > **The Fix**: We upgraded the flattening logic to be **Non-Destructive**.
+> > - `\begin{figure}` -> `<div class="latex-figure-wrapper">`
+> > - `\caption{...}` -> `<div class="caption">...</div>`
+> > - **Result**: The diagram remains visible, and its caption is rendered correctly below it. We never delete semantic wrappers, only translate them.
 
 ### 17. The Vertical Layout Crisis (v1.9.45 - v1.9.48)
 
@@ -371,3 +378,20 @@ A complex saga of scaling issues involving "Hyper Boost", "Modernization", and "
 > - If `verticalSpan == 0` (Relative Positioning) AND `node distance` is Explicit:
 > - **Force `y=0.5cm`**.
 > **Why**: Relative positioning relies on `node distance` for the macro layout. The `y` unit only affects `+(0, y)` shifts (like separate title nodes). Compressing `y` ensures titles don't float away, while the `node distance` (kept at 2.8cm-3cm) handles the main flow.
+
+### 19. The Academic Color Polyfill (v1.9.87)
+
+**Problem**: The minimal TikZJax environment crashes if undefined colors (like `darkgreen`) are used. Furthermore, standard RGB red/green/blue look unprofessional.
+
+**The Solution**: We inject a **"Color Polyfill"** block into every `\begin{tikzpicture}` environment that:
+1.  **Redefines** standard primaries to "Prestige Shades" (`red` -> `Maroon`, `blue` -> `Navy`).
+2.  **Defines** commonly hallucinated colors (`darkgreen`, `orange`, `purple`) to prevent crashes.
+
+```latex
+\definecolor{red}{rgb}{0.6,0,0}      % Maroon
+\definecolor{blue}{rgb}{0,0,0.6}     % Navy Blue
+\definecolor{green}{rgb}{0,0.4,0}    % Forest Green
+\definecolor{darkgreen}{rgb}{0,0.4,0} % Defined!
+```
+
+**Result**: We no longer trust the AI to validly pick colors. We guarantee rigor at the engine level.

@@ -161,7 +161,7 @@ function ProviderSection({ title, description, role, isExpanded, onToggle, showW
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="Gemini25Pro-AAP" className="text-lg py-3">Gemini 2.5 Pro (Custom Bot)</SelectItem>
-                                                <SelectItem value="Gemini25Flash-APP" className="text-lg py-3">Gemini 2.5 Flash (Custom Bot)</SelectItem>
+                                                <SelectItem value="Gemini25Flash-AAP" className="text-lg py-3">Gemini 2.5 Flash (Custom Bot)</SelectItem>
                                             </SelectContent>
                                         </Select>
                                     ) : (

@@ -13,7 +13,9 @@ const poeSearchModels = [
     "Gemini-1.5-Flash",
     "Gemini-Pro-1.5",
     "GPT-4o",
-    "Claude-3.5-Sonnet" // Added for testing
+    "Claude-3.5-Sonnet", // Added for testing
+    "Gemini25Pro-AAP",
+    "Gemini25Flash-AAP"
 ];
 
 function validateModel(model: string) {

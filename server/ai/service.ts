@@ -469,7 +469,7 @@ TITLE: ${ctx.plan.title_idea}
 PAPER TYPE: ${ctx.paperType}
 NO CITATIONS. NO MARKDOWN HEADERS.`;
         const abstractResult = await this.writer.completion(abstractPrompt, "You are an academic abstract writer.");
-        ctx.draft.abstract = abstractResult;
+        ctx.draft.abstract = sanitizeLatexOutput(abstractResult);
 
 
         // 2. Deep Sectional Loop
@@ -533,8 +533,9 @@ CRITICAL RULES:
 4. AGGRESSIVELY ENHANCE. If the source text is simple, ELEVATE IT using these tools.
 5. NO CITATION MARKERS like (ref_X).
 6. PURE LATEX ONLY. No Markdown (# Headers, **bold**).
-7. ABSOLUTE NO FABRICATION. ZERO TOLERANCE. Never invent experiments, statistics, sample sizes, p-values, case studies, user quotes, anecdotes, or stories. If the source has data, use it EXACTLY AS-IS - no embellishment, no modification, no "improved" numbers. If you need empirical claims and source has no data, use theoretical arguments only. Violation of this rule makes the paper INVALID.
-8. VALID SECTIONING ONLY. Only use \\section{}, \\subsection{}, \\subsubsection{}, \\paragraph{}. NO deeper levels like \\subsubssubsection (not real LaTeX).
+7. ACADEMIC COLOR PALETTE. Use color sparingly. Prefer explicit 'Navy', 'Maroon', 'ForestGreen' over primary colors. AVOID 'Yellow' (low contrast).
+8. ABSOLUTE NO FABRICATION. ZERO TOLERANCE. Never invent experiments, statistics, sample sizes, p-values, case studies, user quotes, anecdotes, or stories. If the source has data, use it EXACTLY AS-IS - no embellishment, no modification, no "improved" numbers. If you need empirical claims and source has no data, use theoretical arguments only. Violation of this rule makes the paper INVALID.
+9. VALID SECTIONING ONLY. Only use \\section{}, \\subsection{}, \\subsubsection{}, \\paragraph{}. NO deeper levels like \\subsubssubsection (not real LaTeX).
 
 OUTPUT FORMAT (JSON):
 {

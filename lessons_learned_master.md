@@ -691,3 +691,42 @@
 ## 102. The Unlimited Resource Trap (v1.9.85)
 - **Problem**: "Advanced" mode was treated as "Unlimited Queries", leading the Strategist to generate 50+ queries. This didn't improve quality; it just diluted the context window with marginal results.
 - **Lesson**: **Luxury needs Boundaries.** Even "Advanced" users benefit from curation. A strict cap of 20 high-quality queries yields better synthesis than 50 mediocre ones. "More" is not essentially "Better" in RAG systems; "Relevant" is better.
+
+## 103. The Leak in the Abstract (v1.9.86)
+- **Problem**: The generated Abstract contained "Listening to..." and "Thinking..." artifacts (`> ...`) because it bypassed the standard `sanitizeLatexOutput` pipeline used for sections.
+- **Lesson**: **Uniform Sanitization is non-negotiable.** Even "safe" short-form content can contain chain-of-thought debris. Apply the same rigorous cleaning pipeline to *every* AI output string, regardless of its source or length.
+
+## 104. The Color of Rigor (v1.9.87)
+- **Problem**: The AI hallucinated `darkgreen` (undefined in TikZJax), crashing the preview. Primary colors (`red`, `blue`) also looked amateurish.
+- **Solution**: Injected a "Color Polyfill" into `tikz-engine.ts` that redefines standard colors to academic shades (Red->Maroon) and defines missing ones (`darkgreen`), ensuring stability and aesthetic rigor.
+
+## 105. The Unclosed Tag (v1.9.89)
+- **Problem**: A "Total Breakdown" of the preview occurred where raw LaTeX code (headers, algorithms) was displayed instead of rendered HTML.
+- **Root Cause**: The regex parsers in `processor.ts` used strict matching (expecting valid `\end{...}` tags). When the AI generated truncated content (missing end tag), the regex failed to match, leaving the content as raw text.
+- **Solution**: Implemented a "Safety Sweep" that runs after all processors. It detects any remaining `\begin{...}` content and wraps it in a `<pre class="latex-error-block">` container. This ensures that even broken code is contained and doesn't disrupt the flow of the document.
+- **Lesson**: **Fail Gracefully, Don't Fail Open.** In parsing pipelines, if a specific parser fails, the fallback shouldn't be "dump raw text mixed with content". It should be "encapsulate and warn".
+
+- **Insight**: Asking the AI to "be professional" is flaky. **Enforcing** professionalism via the engine is robust.
+- **Solution**: **The Palette Polyfill**. We implicitly redefined standard colors (`red`, `blue`) to "Prestige Shades" (`Maroon`, `Navy`) inside the engine. This fixes the crash (by defining `darkgreen`) and guarantees a pro look without trusting the AI to follow style guides.
+
+## 106. The Unsafe Replacement (v1.9.95)
+- **Problem**: A `parseLatexFormatting` text cleanup rule intended to convert `\cap` to `∩` lacked word boundaries. It matched the prefix of `\caption`, corrupting it to `∩tion`. This caused the Algorithm regex to fail (mismatched body) and the Safety Sweep to swallow subsequent headers (caused by destabilized text parsing).
+- **Lesson**: **Regex Replacements are Surgical Implants.** Never use global replacements for short strings (like `\in`, `\cap`, `\cup`) without strict lookaheads (`(?![a-zA-Z])`) or word boundaries. A 3-letter match is statistically guaranteed to collide with unintended targets in a large corpus.
+
+## 107. The Protection Paradox (v1.9.97)
+- **Problem**: A "Safety Sweep" intended to catch broken code caused the code to break.
+- **Scenario**: The Normalizer regex used `\begin{algorithm}` (strict), but the Safety Sweep used `\begin\s*{algorithm}` (lax).
+- **Mechanism**: The Normalizer failed to clean up a block with extra spaces. The Safety Sweep then saw it as "unprocessed" and wrapped it in a Red Error Box, deleting the content.
+- **Lesson**: **Validators must use the SAME regex as Parsers.** If the cop (Validator) is stricter than the cleaner (Parser), the cop will arrest the trash usage left behind. Synchronize your regexes across the entire pipeline.
+
+## 108. The Algorithm Nested List Failure (v1.9.98)
+- **Problem**: Lists inside Algorithms (`\begin{enumerate}`) were not rendering (raw text).
+- **Root Cause**: The global `processLists` function explicitly *skipped* algorithm blocks to prevent corruption (Lesson 21). This meant lists *inside* those blocks were never processed.
+- **Fix**: Implemented **Scoped List Processing**. Inside the Algorithm Handler, we explicitly invoke `processLists(body)` *before* wrapping it in the algorithm container.
+- **Lesson**: **Exclusion implies Responsibility.** If you exclude a block from the global pipeline (to protect it), you become responsible for running local pipelines inside it. You cannot just "skip and forget".
+
+## 109. Destructive Flattening (v1.9.99)
+- **Problem**: TikZ diagrams were disappearing purely because they were wrapped in `\begin{figure}`.
+- **Mechanism**: The "Flattening" logic (intended to inline floating figures) was **Destructive**: `text.replace(/\\begin\{figure\}.*?$/gm, '')`. It deleted the wrapper AND the caption, often corrupting the content inside.
+- **Fix**: Switched to **Non-Destructive Flattening**. Replaced `\begin{figure}` with `<div class="latex-figure-wrapper">`.
+- **Lesson**: **Never Delete Wrappers.** Convert them to semantic HTML (divs), but keep the structure. Deleting wrappers often deletes the context (captions, labels) that gives the content meaning.

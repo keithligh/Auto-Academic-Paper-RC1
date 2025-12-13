@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.100] - 2025-12-13 (Configuration Fixes)
+### Fixed
+- **Librarian Bot Name Mismatch**: Fixed a typo in `ConfigPage.tsx` and `poe.ts` where the custom bot was defined as `Gemini25Flash-APP` (Client) but rejected by the whitelist or server as invalid. Corrected to `Gemini25Flash-AAP` across the stack.
+- **Documentation**: Comprehensively updated `LATEX_PREVIEW_SYSTEM.md` and `TIKZ_HANDLING.md` with recent architectural decisions (Non-Destructive Flattening, Wrapper Preservation).
+
+## [1.9.99] - 2025-12-13 (Non-Destructive Flattening)
+### Fixed
+- **Missing Figures / Captions**: Identified that legacy "Flattening" logic (intended to inline figures) was **destructive**, aggressively deleting `\caption{...}` and `\begin{figure}` wrappers. This caused diagrams to lose their context and titles.
+- **Fix**: Upgraded flattening logic to be **Structured & Non-Destructive**. It now converts `figure`/`table`/`algorithm` wrappers into semantic HTML `<div>` blocks and correctly renders captions instead of deleting them.
+- **Scoped List Support**: (v1.9.98) Restored rendering of lists inside algorithms.
+- **Whitespace Synchronization**: (v1.9.97) Fixed Red Box triggers.
+- **Custom Macros**: Added support for `\where:` -> `Where:` (often hallucinated by AI in equation context).
+- **Healer Verification**: Confirmed `healer.ts` correctly strips literal `\n` sequences and Markdown fences (` ```latex `) that confuse the parser.
+
+## [1.9.95] - 2025-12-13 (Symbol Corruption Fix)
+### Fixed
+- **Critical Font Corruption**: Fixed a severe bug in `parseLatexFormatting` where unprotected math symbol replacements (e.g., `\cap` -> `∩`, `\subset` -> `⊂`) corrupted matching LaTeX commands (e.g., `\caption` -> `∩tion`). Added `(?![a-zA-Z])` lookaheads to all unsafe replacements to ensure they only match whole words/symbols.
+
+## [1.9.94] - 2025-12-13 (Safety Sweep Escaped HTML)
+### Fixed
+- **Pipeline Order Conflict (Final)**: Updated Safety Sweep `(?!...)` and `(?=...)` conditions to handle **ESCAPED HTML headers** (`&lt;h[1-6]`). The text formatter runs before the sweep and escapes brackets, so checking for `<h3>` was insufficient.
+- **Terminator Logic**: Added a positive lookahead `(?=...)` to the regex terminator. This ensures that the sweep successfully *matches* and *wraps* the broken block when it hits a header, instead of failing the match and leaving the code raw.
+
+## [1.9.92] - 2025-12-13 (Safety Sweep HTML Awareness)
+### Fixed
+- **Pipeline Order Conflict**: Updated Safety Sweep lookahead to detect **HTML headers** (`<h[1-6]`) in addition to LaTeX headers. Because `processHeaders` runs *before* the Safety Sweep, sections are already converted to `<h3>`, etc., causing the previous regex (checking for `\section`) to miss them and swallow the content.
+
+## [1.9.91] - 2025-12-13 (Crash Fixes & Logging)
+### Fixed
+- **Engine Crash**: Added "Color Aliases" (`Navy --> navy`, `Maroon --> maroon`) to `tikz-engine.ts` to prevent `jsTeX` crashes caused by capitalized color names.
+- **Debug Logs**: Added verbose logging to `LatexPreview` and `processor.ts` to capture failing content and safety triggers.
+
+## [1.9.90] - 2025-12-13 (Safety Sweep Refinement)
+### Fixed
+- **Runaway Error Blocks**: Refined the "Safety Sweep" regex to include a negative lookahead `(?!\\section|\\subsection)`. This ensures that even if a block is unclosed, the error container captures *only* the block and stops at the next section header, preventing the "Red Box" from swallowing the rest of the document.
+- **Regex Compatibility**: Replaced ES2018 `s` flag with `[\s\S]` for broader browser support.
+
+## [1.9.89] - 2025-12-13 (Robust Preview Parsing)
+### Fixed
+- **Total Preview Breakdown**: Implemented "Safety Sweep" in `processor.ts` to detect and wrap malformed LaTeX blocks (like truncated Algorithms) in error containers, preventing them from breaking the entire preview rendering.
+- **Robust Headers**: Updated Section/Subsection regexes to use recursive nested brace matching, ensuring headers are parsed correctly even in complex or slightly malformed documents.
+
+## [1.9.88] - 2025-12-13 (Markdown Thinking Cleanup)
+### Fixed
+- **Persistent Artifacts**: Hardened `sanitizeLatexOutput` to remove Markdown-style `*Thinking...*` and `*Thinking Process...*` artifacts that evaded previous filters.
+
+## [1.9.89] - 2025-12-13 (Robust Preview Parsing)
+### Fixed
+- **Total Preview Breakdown**: Implemented "Safety Sweep" in `processor.ts` to detect and wrap malformed LaTeX blocks (like truncated Algorithms) in error containers, preventing them from breaking the entire preview rendering.
+- **Robust Headers**: Updated Section/Subsection regexes to use recursive nested brace matching, ensuring headers are parsed correctly even in complex or slightly malformed documents.
+
+## [1.9.88] - 2025-12-13 (Markdown Thinking Cleanup)
+### Fixed
+- **Persistent Artifacts**: Hardened `sanitizeLatexOutput` to remove Markdown-style `*Thinking...*` and `*Thinking Process...*` artifacts that evaded previous filters.
+
+## [1.9.87] - 2025-12-13 (Academic Color Palette)
+### Fixed
+- **Undefined TikZ Colors**: Fixed `Package pgfkeys Error` caused by AI using `darkgreen`, which is undefined in TikZJax.
+- **Aesthetic Enforcement**: Implemented "Color Polyfill" that automatically redefines primary colors to professional shades:
+  - `red` -> **Maroon**
+  - `blue` -> **Navy Blue**
+  - `green` -> **Forest Green**
+  - `darkgreen` -> **Defined** (rgb 0, 0.4, 0)
+
+## [1.9.86] - 2025-12-13 (Reasoning Artifact Cleanup)
+### Fixed
+- **Reasoning Leaks**: Patched `sanitizeLatexOutput` to aggressively strip "Thinking" blockquotes (`> Thinking...`) and "Thinking Process:" headers that were leaking into the final Abstract.
+- **Scope**: Applied sanitization specifically to the Abstract generation phase (previously raw output).
+
 ## [1.9.85] - 2025-12-13 (Tiered Librarian Limits)
 ### Added
 - **Tiered Search Query Limits**:

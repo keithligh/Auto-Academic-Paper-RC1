@@ -4,12 +4,16 @@ import { conversionJobs } from "./shared/schema";
 import { desc } from "drizzle-orm";
 import fs from "fs";
 
+import { eq } from "drizzle-orm"; // Import eq
+
 async function checkLatestJob() {
     try {
-        const jobs = await db.select().from(conversionJobs).orderBy(desc(conversionJobs.createdAt)).limit(1);
+        const targetId = 'b5afe864-851c-42e7-a1d0-92a605e88c8b';
+        console.log(`Querying for Job ID: ${targetId}`);
+        const jobs = await db.select().from(conversionJobs).where(eq(conversionJobs.id, targetId));
 
         if (jobs.length === 0) {
-            console.log("No jobs found.");
+            console.log("Job not found.");
             return;
         }
 

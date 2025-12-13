@@ -66,10 +66,16 @@ export function sanitizeLatexOutput(text: string): string {
 
     // 1. STRIP REASONING ARTIFACTS
     // Models often output "Thinking Algorithm: ... " or "Reasoning: ..." blockquote style.
-    // We strip lines starting with "> " if they look like reasoning.
-    clean = clean.replace(/^> .*$/gm, ""); // Remove blockquote lines
+    // We strip lines starting with "> " (Markdown blockquote) if they look like reasoning.
+    clean = clean.replace(/^>.*(\r?\n|$)/gm, ""); // Remove blockquote lines (empty or text)
     clean = clean.replace(/^Thinking Process:[\s\S]*?(\n\n|$)/gim, ""); // Remove "Thinking Process:" blocks
+
+    // AUTO-ACADEMIC-PAPER-RC1 (v1.9.88): Strip Markdown-style thinking
+    clean = clean.replace(/^\*Thinking\.*\*\s*(\r?\n|$)/gim, ""); // Remove "*Thinking...*" lines
+    clean = clean.replace(/^\*Thinking\s+Process\.*\*\s*(\r?\n|$)/gim, ""); // Remove "*Thinking Process...*"
+
     clean = clean.replace(/^Here is the content:[\s\S]*?(\n\n|$)/gim, ""); // Remove meta-commentary
+    clean = clean.replace(/^Sure, here is the section.*$/gim, ""); // Remove chatty intros
     clean = clean.replace(/<think>[\s\S]*?<\/think>/gi, ""); // Remove XML-style thought tags (common in some fine-tunes)
 
     // 2. CONVERT MARKDOWN TO LATEX

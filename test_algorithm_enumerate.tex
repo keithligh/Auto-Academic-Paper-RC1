@@ -1,0 +1,28 @@
+\documentclass{article}
+\usepackage{algorithm}
+\begin{document}
+
+\begin{algorithm}
+\caption{SGCV workflow (conceptual)}
+\label{alg:sgcv}
+\begin{enumerate}
+\item \textbf{Input:} user request $x$; tools/resources $\mathcal{R}$; iteration budget $B$.
+\item \textbf{Specify:} construct specification $S=(\text{intent},\text{audience},\text{constraints},\mathcal{C},\text{grounding plan})$.
+\item \textbf{Generate (outline-first):}
+\begin{enumerate}
+\item produce outline $o \leftarrow G_{\text{outline}}(x,S)$;
+\item produce draft $y \leftarrow G_{\text{draft}}(x,S,o)$.
+\end{enumerate}
+\item \textbf{For} $t=1$ to $B$ \textbf{do}
+\begin{enumerate}
+\item \textbf{Critique:} issues $\Delta \leftarrow \kappa(y;S)$ (rubric check + adversarial questions).
+\item \textbf{If} $\Delta=\emptyset$ \textbf{then} break.
+\item \textbf{Verify:} report $v \leftarrow \nu(y;\mathcal{R},S)$; mark unverified claims.
+\item \textbf{Edit minimally:} $y \leftarrow \text{ApplyEdits}(y,\Delta,v)$.
+\item \textbf{Re-check criteria:} if any $c\in\mathcal{C}$ fails, continue; else break.
+\end{enumerate}
+\item \textbf{Output:} final text $y$ with critique/verification artifacts (as allowed by constraints).
+\end{enumerate}
+\end{algorithm}
+
+\end{document}

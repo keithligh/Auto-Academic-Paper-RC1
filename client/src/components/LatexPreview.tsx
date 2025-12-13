@@ -68,6 +68,8 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
     try {
       // 1. Sanitize and Extract (Trojan Horse)
       const { sanitized, blocks, bibliographyHtml, hasBibliography } = processLatex(latexContent);
+      console.log("[LatexPreview] Sanitized Output Length:", sanitized.length);
+      // console.log("[LatexPreview] Sanitized Content Preview:", sanitized.substring(0, 500)); 
 
       // 2. Custom Parser (Replacements) - REPLACES latex.js
       let html = sanitized;
@@ -225,6 +227,10 @@ export function LatexPreview({ latexContent, className = "" }: LatexPreviewProps
 
     } catch (err: any) {
       console.error("Preview Render Error:", err);
+      // Log the full failing content for debugging
+      console.log("--- FAILING LATEX CONTENT ---");
+      console.log(latexContent);
+      console.log("--- END FAILING CONTENT ---");
       setError(err.message || 'Unknown error');
     }
   }, [latexContent]);

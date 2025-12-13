@@ -397,7 +397,29 @@ Regex is insufficient for nested braces in LaTeX. To handle `\parbox`, we implem
 - **Heuristic**: It converts LaTeX lengths like `0.5\textwidth` directly to CSS `width: 50%`.
 
 
+
+### 14. Safety Sweep (v1.9.89)
+**Purpose**: To prevent "Total Preview Breakdown" when the AI generates truncated or malformed LaTeX (e.g. missing `\end{algorithm}`).
+**Mechanism**:
+- A final pass regex `(\\begin\{[^}]+\}(?:(?!\\section|...|<h[1-6]|&lt;h[1-6])[\\s\\S])*?)(?=\\section|...|<h|&lt;h|\\end|$)` scans for residual environments.
+- **Constraint**: It stops if it encounters a Section header (`\section`), a converted HTML header (`<h3>`), or an **escaped HTML header** (`&lt;h3&gt;`).
+- It wraps the fragment in `<pre class="latex-error-block">` containers.
+- **Result**: Broken blocks are contained locally; valuable subsequent content remains formatted and visible.
+
 ### Vertical Rhythm Strategy (The "Structural Owl")
+
+... (Content omitted for brevity) ...
+
+## 13. Uniform Sanitization Policy (v1.9.86)
+
+**Background**: Historically, we only sanitized "Section" content because we assumed short fields like "Abstract" or "Title" were safe.
+
+**The Breach**: The Abstract generation step (Phase 3) bypassed sanitization. When the AI model (Gemini-3-Pro) outputted chain-of-thought traces (`> Thinking...`), these artifacts leaked directly into the final document.
+
+**The Fix**:
+1.  **Universal Sanitization**: Every string outputted by the AI (Titls, Abstracts, Captions) passes through `sanitizeLatexOutput`.
+2.  **Hardened Regex**: The sanitizer now aggressively strips blockquotes (`> ...`) and chatty headers (`Thinking Process:`), protecting the document from "AI Monologue" leaks.
+
 
 We use a specific CSS selector strategy to manage vertical rhythm without complex calculations.
 
@@ -649,7 +671,7 @@ Certain commands are actively removed to prevent errors or clutter:
 
 - **File System Access**: `\input{...}` and `\include{...}` are removed because the browser cannot access the server's file system.
 - **Metadata Lists**: `\tableofcontents`, `\listoffigures`, `\listoftables` are removed as we cannot generate them dynamically without a second pass.
-- **Figure Wrappers**: `\begin{figure}` environments are "flattened" (tags removed, content kept) because floating layout logic is handled by CSS, not LaTeX.
+- **Figure Wrappers**: `\begin{figure}` environments are **Non-Destructively Flattened** (v1.9.99). We convert them to `<div class="latex-figure-wrapper">` and preserve inner `\caption{...}` as `<div class="caption">`. This ensures floating content (like TikZ) retains its context and label.
 - **Captions/Labels**: `\caption`, `\label`, and `\ref` are currently stripped or replaced with `[?]` placeholders to prevent undefined reference errors.
 
 ### Fatal Error Handling

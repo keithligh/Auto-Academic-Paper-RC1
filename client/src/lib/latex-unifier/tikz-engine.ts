@@ -24,8 +24,39 @@ export function processTikz(latex: string): TikzResult {
             return `\n\n${id}\n\n`;
         }
 
+        // --- ACADEMIC COLOR PALETTE POLYFILL (v1.9.87) ---
+        // 1. Fixes crashes (undefined 'darkgreen')
+        // 2. Enforces professional aesthetics (replaces bright RGB primaries with "Prestige" shades)
+        const colorPolyfill = `
+\\definecolor{red}{rgb}{0.6,0,0}      % Maroon
+\\definecolor{blue}{rgb}{0,0,0.6}     % Navy Blue
+\\definecolor{green}{rgb}{0,0.4,0}    % Forest Green
+\\definecolor{darkgreen}{rgb}{0,0.4,0} % Fix for commonly hallucinated color
+\\definecolor{navy}{rgb}{0,0,0.5}
+\\definecolor{purple}{rgb}{0.5,0,0.5}
+\\definecolor{orange}{rgb}{0.8,0.4,0}
+
+% --- Aliases for Capitalized Names (Common Confusion) ---
+\\definecolor{Navy}{rgb}{0,0,0.5}
+\\definecolor{NavyBlue}{rgb}{0,0,0.5}
+\\definecolor{Maroon}{rgb}{0.6,0,0}
+\\definecolor{ForestGreen}{rgb}{0,0.4,0}
+\\definecolor{Teal}{rgb}{0,0.5,0.5}
+\\definecolor{DarkGreen}{rgb}{0,0.4,0}
+`;
+
+        // Inject right after \begin{tikzpicture}[options] or at the start if bare
+        // We simply prepend it to the code body because TikZ environments usually allow definitions at the start
+        let processedCode = tikzCode;
+        if (processedCode.includes('\\begin{tikzpicture}')) {
+            processedCode = processedCode.replace(/(\\begin\{tikzpicture\}(?:\[.*?\])?)/, `$1\n${colorPolyfill}`);
+        } else {
+            // Fallback for bare code fragments (unlikely but safe)
+            processedCode = colorPolyfill + processedCode;
+        }
+
         // SANITIZATION: TikZJax (btoa) crashes on Unicode. Force ASCII.
-        let safeTikz = tikzCode.replace(/[^\x00-\x7F]/g, '');
+        let safeTikz = processedCode.replace(/[^\x00-\x7F]/g, '');
 
         // Robust Fix for Fonts inside Nodes
         safeTikz = safeTikz
